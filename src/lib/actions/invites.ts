@@ -52,6 +52,48 @@ export async function createInvite(formData: FormData) {
   redirect(`/settings/invites?created=1&emailed=${result.sent ? 1 : 0}`);
 }
 
+export async function resendInvite(formData: FormData) {
+  const membership = await getMembership();
+  if (!membership || membership.role !== "owner") redirect("/dashboard");
+
+  const supabase = await createClient();
+  const { data: old } = await supabase
+    .from("invites")
+    .select("id, email, role, accepted_at, revoked_at, expires_at")
+    .eq("id", String(formData.get("invite_id")))
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!old) redirect("/settings/invites?error=Invite+not+found");
+
+  // retire the old one if it is still pending
+  if (!old.accepted_at && !old.revoked_at && new Date(old.expires_at) > new Date()) {
+    await supabase
+      .from("invites")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", old.id);
+  }
+
+  const { data, error } = await supabase
+    .from("invites")
+    .insert({ household_id: membership.household_id, email: old.email, role: old.role })
+    .select("token")
+    .single();
+  if (error || !data)
+    redirect(`/settings/invites?error=${encodeURIComponent(error?.message ?? "Could not create invite")}`);
+
+  const inviteUrl = `${await baseUrl()}/invite/${data.token}`;
+  const result = await sendInviteEmail({
+    to: old.email,
+    householdName: membership.household.name,
+    inviterName: membership.display_name ?? "A family member",
+    role: old.role,
+    inviteUrl,
+  });
+
+  revalidatePath("/settings/invites");
+  redirect(`/settings/invites?created=1&emailed=${result.sent ? 1 : 0}`);
+}
+
 export async function revokeInvite(formData: FormData) {
   const membership = await getMembership();
   if (!membership || membership.role !== "owner") redirect("/dashboard");

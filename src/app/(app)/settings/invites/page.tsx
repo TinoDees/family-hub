@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { createInvite, revokeInvite } from "@/lib/actions/invites";
+import { createInvite, revokeInvite, resendInvite } from "@/lib/actions/invites";
 import { inputCls, buttonCls } from "@/components/auth-card";
 import { CopyButton } from "@/components/copy-button";
 
@@ -115,17 +115,27 @@ export default async function InvitesPage({
                     {new Date(inv.expires_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    {status === "pending" && (
-                      <div className="inline-flex items-center gap-2">
+                    <div className="inline-flex items-center gap-2">
+                      {status === "pending" && (
                         <CopyButton path={`/invite/${inv.token}`} label="Copy link" />
+                      )}
+                      {status !== "accepted" && (
+                        <form action={resendInvite}>
+                          <input type="hidden" name="invite_id" value={inv.id} />
+                          <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
+                            {status === "pending" ? "New link" : "Resend"}
+                          </button>
+                        </form>
+                      )}
+                      {status === "pending" && (
                         <form action={revokeInvite}>
                           <input type="hidden" name="invite_id" value={inv.id} />
                           <button className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50">
                             Revoke
                           </button>
                         </form>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
