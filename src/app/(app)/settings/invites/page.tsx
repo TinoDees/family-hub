@@ -1,27 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { createInvite, revokeInvite, resendInvite } from "@/lib/actions/invites";
+import { createInvite, deleteInvite, resendInvite } from "@/lib/actions/invites";
 import { inputCls, buttonCls } from "@/components/auth-card";
 import { CopyButton } from "@/components/copy-button";
-
-function inviteStatus(i: {
-  revoked_at: string | null;
-  accepted_at: string | null;
-  expires_at: string;
-}) {
-  if (i.revoked_at) return "revoked";
-  if (i.accepted_at) return "accepted";
-  if (new Date(i.expires_at) < new Date()) return "expired";
-  return "pending";
-}
-
-const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-sky-100 text-sky-700",
-  accepted: "bg-emerald-100 text-emerald-700",
-  expired: "bg-stone-100 text-stone-500",
-  revoked: "bg-red-100 text-red-600",
-};
 
 export default async function InvitesPage({
   searchParams,
@@ -35,9 +17,18 @@ export default async function InvitesPage({
   const supabase = await createClient();
   const { data: invites } = await supabase
     .from("invites")
-    .select("id, email, role, token, created_at, expires_at, accepted_at, revoked_at")
+    .select("id, email, role, token, created_at, expires_at")
     .eq("household_id", membership.household_id)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
     .order("created_at", { ascending: false });
+
+  const pending = (invites ?? []).filter(
+    (i) => new Date(i.expires_at) > new Date()
+  );
+  const expired = (invites ?? []).filter(
+    (i) => new Date(i.expires_at) <= new Date()
+  );
 
   return (
     <div className="space-y-6">
@@ -46,10 +37,9 @@ export default async function InvitesPage({
       )}
       {created && (
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          Invite created.{" "}
           {emailed === "1"
-            ? "An email is on its way."
-            : "Email sending isn't configured yet — copy the link below and send it yourself (WhatsApp, SMS, anything)."}
+            ? "Invite sent — an email is on its way."
+            : "Invite created — copy the link and send it via WhatsApp, SMS or however you like."}
         </p>
       )}
 
@@ -76,73 +66,92 @@ export default async function InvitesPage({
         <button className={`${buttonCls} w-auto px-6`}>Invite</button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 bg-stone-900 text-left text-white">
-              <th className="px-4 py-2.5 font-medium">Email</th>
-              <th className="px-4 py-2.5 font-medium">Role</th>
-              <th className="px-4 py-2.5 font-medium">Status</th>
-              <th className="px-4 py-2.5 font-medium">Expires</th>
-              <th className="px-4 py-2.5 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(invites ?? []).length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-stone-400">
-                  No invites yet.
-                </td>
-              </tr>
-            )}
-            {(invites ?? []).map((inv, i) => {
-              const status = inviteStatus(inv);
-              return (
-                <tr
-                  key={inv.id}
-                  className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}
-                >
-                  <td className="px-4 py-2.5 font-medium">{inv.email}</td>
-                  <td className="px-4 py-2.5 capitalize">{inv.role}</td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs capitalize ${STATUS_STYLE[status]}`}
-                    >
-                      {status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-stone-500">
-                    {new Date(inv.expires_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      {status === "pending" && (
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-stone-700">Waiting to join</h3>
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+          {pending.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-stone-400">
+              No open invites. Everyone who accepted is under Members.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-900 text-left text-white">
+                  <th className="px-4 py-2.5 font-medium">Email</th>
+                  <th className="px-4 py-2.5 font-medium">Role</th>
+                  <th className="px-4 py-2.5 font-medium">Expires</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((inv, i) => (
+                  <tr
+                    key={inv.id}
+                    className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}
+                  >
+                    <td className="px-4 py-2.5 font-medium">{inv.email}</td>
+                    <td className="px-4 py-2.5 capitalize">{inv.role}</td>
+                    <td className="px-4 py-2.5 text-stone-500">
+                      {new Date(inv.expires_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="inline-flex items-center gap-2">
                         <CopyButton path={`/invite/${inv.token}`} label="Copy link" />
-                      )}
-                      {status !== "accepted" && (
                         <form action={resendInvite}>
                           <input type="hidden" name="invite_id" value={inv.id} />
                           <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
-                            {status === "pending" ? "New link" : "Resend"}
+                            New link
                           </button>
                         </form>
-                      )}
-                      {status === "pending" && (
-                        <form action={revokeInvite}>
+                        <form action={deleteInvite}>
                           <input type="hidden" name="invite_id" value={inv.id} />
                           <button className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50">
-                            Revoke
+                            Cancel
                           </button>
                         </form>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
+
+      {expired.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-stone-400">Expired</h3>
+          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <table className="w-full text-sm">
+              <tbody>
+                {expired.map((inv) => (
+                  <tr key={inv.id} className="border-b border-stone-100 text-stone-400">
+                    <td className="px-4 py-2.5">{inv.email}</td>
+                    <td className="px-4 py-2.5 capitalize">{inv.role}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <form action={resendInvite}>
+                          <input type="hidden" name="invite_id" value={inv.id} />
+                          <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100">
+                            Resend
+                          </button>
+                        </form>
+                        <form action={deleteInvite}>
+                          <input type="hidden" name="invite_id" value={inv.id} />
+                          <button className="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium text-stone-400 hover:bg-stone-100">
+                            Remove
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

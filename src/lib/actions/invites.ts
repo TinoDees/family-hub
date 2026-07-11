@@ -25,6 +25,14 @@ export async function createInvite(formData: FormData) {
   if (!email) redirect("/settings/invites?error=Please+enter+an+email");
 
   const supabase = await createClient();
+  // one live invite per email — replace any previous unaccepted invite
+  await supabase
+    .from("invites")
+    .delete()
+    .eq("household_id", membership.household_id)
+    .eq("email", email)
+    .is("accepted_at", null);
+
   const { data, error } = await supabase
     .from("invites")
     .insert({
@@ -65,13 +73,13 @@ export async function resendInvite(formData: FormData) {
     .maybeSingle();
   if (!old) redirect("/settings/invites?error=Invite+not+found");
 
-  // retire the old one if it is still pending
-  if (!old.accepted_at && !old.revoked_at && new Date(old.expires_at) > new Date()) {
-    await supabase
-      .from("invites")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", old.id);
-  }
+  // one live invite per email — remove all previous unaccepted invites
+  await supabase
+    .from("invites")
+    .delete()
+    .eq("household_id", membership.household_id)
+    .eq("email", old.email)
+    .is("accepted_at", null);
 
   const { data, error } = await supabase
     .from("invites")
@@ -94,14 +102,14 @@ export async function resendInvite(formData: FormData) {
   redirect(`/settings/invites?created=1&emailed=${result.sent ? 1 : 0}`);
 }
 
-export async function revokeInvite(formData: FormData) {
+export async function deleteInvite(formData: FormData) {
   const membership = await getMembership();
   if (!membership || membership.role !== "owner") redirect("/dashboard");
 
   const supabase = await createClient();
   await supabase
     .from("invites")
-    .update({ revoked_at: new Date().toISOString() })
+    .delete()
     .eq("id", String(formData.get("invite_id")))
     .eq("household_id", membership.household_id);
 
