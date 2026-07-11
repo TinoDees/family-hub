@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { modulesForRole } from "@/lib/modules";
+import { getPermissions, visibleModules } from "@/lib/permissions";
 import { signOut } from "@/lib/actions/auth";
 import { Sidebar } from "@/components/sidebar";
 
@@ -19,11 +19,20 @@ export default async function AppLayout({
   const membership = await getMembership();
   if (!membership) redirect("/onboarding");
 
-  const modules = modulesForRole(membership.role);
+  const perms = await getPermissions(
+    membership.household_id,
+    user.id,
+    membership.role
+  );
+  const modules = visibleModules(perms).map((p) => p.module);
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar modules={modules} householdName={membership.household.name} />
+      <Sidebar
+        modules={modules}
+        householdName={membership.household.name}
+        isOwner={membership.role === "owner"}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b border-stone-200 bg-white px-6 py-3">
           <span className="text-sm text-stone-500">

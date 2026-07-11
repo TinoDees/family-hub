@@ -1,19 +1,25 @@
 /**
  * Module registry — single source of truth for nav, dashboard grid,
- * and placeholder pages. Add/remove modules here, nowhere else.
+ * placeholder pages AND permission defaults. Add/remove modules here only.
+ *
+ * Access model (Tracey-style, family-sized):
+ *   effective access = per-member override row in module_permissions
+ *                      ?? the member's role default below.
  */
 export type MemberRole = "owner" | "adult" | "child";
+export type Access = "none" | "view" | "edit";
+
+export const ACCESS_RANK: Record<Access, number> = { none: 0, view: 1, edit: 2 };
 
 export type ModuleDef = {
   slug: string;
   name: string;
   icon: string;
   description: string;
-  /** Minimum role that can see this module in the nav. */
-  minRole: MemberRole;
-  /** Planned features shown on the placeholder page. */
   planned: string[];
   status: "placeholder" | "live";
+  /** Default access per role; overridable per member in Settings. */
+  defaults: Record<MemberRole, Access>;
 };
 
 export const MODULES: ModuleDef[] = [
@@ -22,89 +28,83 @@ export const MODULES: ModuleDef[] = [
     name: "Finance",
     icon: "💰",
     description: "Budgets, transactions and bills — multi-currency with AUD base.",
-    minRole: "adult",
     planned: ["Budgets per category", "Transaction ledger", "Bill reminders", "Multi-currency (AUD base)"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "none" },
   },
   {
     slug: "recipes",
     name: "Recipes",
     icon: "🍳",
     description: "Recipe cards for the household cookbook.",
-    minRole: "child",
     planned: ["Recipe cards with photos", "Ingredients & steps", "Tags and search"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
     slug: "meals",
     name: "Meal Planner",
     icon: "📅",
     description: "Weekly Mon–Sun meal planner that feeds the shopping list.",
-    minRole: "child",
     planned: ["Mon–Sun weekly grid", "Drag recipes onto days", "Auto-generate shopping list"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
     slug: "shopping",
     name: "Shopping Lists",
     icon: "🛒",
     description: "Shared lists that sync live across everyone's devices.",
-    minRole: "child",
     planned: ["Realtime sync (Supabase Realtime)", "Check-off with who/when", "From meal plan or manual"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "edit" },
   },
   {
     slug: "holidays",
     name: "Holiday Planner",
     icon: "✈️",
     description: "Trips, day-by-day itineraries and trip expenses.",
-    minRole: "child",
     planned: ["Trips with dates & destination", "Itinerary per day", "Trip expense tracking"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
     slug: "photos",
     name: "Photo Album",
     icon: "📷",
     description: "Albums linked to trips, or standalone.",
-    minRole: "child",
     planned: ["Albums (trip-linked or standalone)", "Upload & captions", "Supabase Storage"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "edit" },
   },
   {
     slug: "parental",
     name: "Parental Controls",
     icon: "🛡️",
     description: "Per-child permissions, screen time and approval queue.",
-    minRole: "adult",
     planned: ["Per-child module permissions", "Screen-time windows", "Approval queue for requests"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "none" },
   },
   {
     slug: "chores",
     name: "Chores & Allowance",
     icon: "🧹",
     description: "Assignable chores with reward amounts and an allowance ledger.",
-    minRole: "child",
     planned: ["Assignable chores + schedule", "Reward amounts", "Allowance ledger per child"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
     slug: "voice",
     name: "Voice",
     icon: "🎤",
     description: "Talk to the hub — Whisper STT, Claude intent parsing, actions.",
-    minRole: "child",
     planned: ["Whisper speech-to-text", "Claude API intent parsing", "Action handlers per module"],
     status: "placeholder",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
   },
 ];
-
-const roleRank: Record<MemberRole, number> = { child: 0, adult: 1, owner: 2 };
-
-export function modulesForRole(role: MemberRole): ModuleDef[] {
-  return MODULES.filter((m) => roleRank[role] >= roleRank[m.minRole]);
-}
 
 export function getModule(slug: string): ModuleDef | undefined {
   return MODULES.find((m) => m.slug === slug);

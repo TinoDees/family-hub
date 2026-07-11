@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
-import { getModule, modulesForRole } from "@/lib/modules";
+import { createClient } from "@/lib/supabase/server";
+import { getModule } from "@/lib/modules";
 import { getMembership } from "@/lib/household";
+import { getPermissions, accessFor } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +17,33 @@ export default async function ModulePage({
 
   const membership = await getMembership();
   if (!membership) redirect("/onboarding");
-  if (!modulesForRole(membership.role).some((m) => m.slug === mod.slug)) {
-    redirect("/dashboard");
-  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const perms = await getPermissions(
+    membership.household_id,
+    user!.id,
+    membership.role
+  );
+  const access = accessFor(perms, mod.slug);
+  if (access === "none") redirect("/dashboard");
 
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-center gap-3">
         <span className="text-3xl">{mod.icon}</span>
         <div>
-          <h1 className="text-2xl font-semibold">{mod.name}</h1>
+          <h1 className="text-2xl font-semibold">
+            {mod.name}
+            {access === "view" && (
+              <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-normal text-sky-700">
+                view only
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-stone-500">{mod.description}</p>
         </div>
       </div>

@@ -7,9 +7,11 @@ import type { ModuleDef } from "@/lib/modules";
 export function Sidebar({
   modules,
   householdName,
+  isOwner,
 }: {
   modules: ModuleDef[];
   householdName: string;
+  isOwner: boolean;
 }) {
   const pathname = usePathname();
 
@@ -44,6 +46,13 @@ export function Sidebar({
           </Link>
         ))}
       </nav>
+      {isOwner && (
+        <div className="border-t border-stone-200 p-3">
+          <Link href="/settings" className={linkCls(pathname.startsWith("/settings"))}>
+            <span>⚙️</span> Settings
+          </Link>
+        </div>
+      )}
     </aside>
   );
 }

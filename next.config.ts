@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Pin the project root — a stray package-lock.json in C:\Users\Tino.Dees\dev
-  // otherwise makes Next.js guess the wrong workspace root.
+  // Pin the project root so a stray lockfile in a parent folder
+  // doesn't make Next.js guess the wrong workspace root.
   turbopack: {
     root: __dirname,
   },
