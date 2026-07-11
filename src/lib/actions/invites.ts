@@ -67,6 +67,53 @@ export async function revokeInvite(formData: FormData) {
   redirect("/settings/invites");
 }
 
+/**
+ * Tracey-style onboarding: the invite link doubles as account setup.
+ * Creates the account with the invited email + chosen password, signs in,
+ * and joins the household — one step, no separate signup form.
+ */
+export async function acceptInviteNewUser(formData: FormData) {
+  const token = String(formData.get("token") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  const fail = (msg: string) =>
+    redirect(`/invite/${token}?error=${encodeURIComponent(msg)}`);
+
+  if (!name) fail("Please enter your name");
+  if (password.length < 8) fail("Password must be at least 8 characters");
+  if (password !== confirm) fail("Passwords do not match");
+
+  const supabase = await createClient();
+  const { data: inviteRows } = await supabase.rpc("get_invite_by_token", {
+    p_token: token,
+  });
+  const invite = inviteRows?.[0];
+  if (!invite || invite.status !== "pending")
+    fail("This invite is no longer valid");
+
+  const { data, error: signUpError } = await supabase.auth.signUp({
+    email: invite.email,
+    password,
+    options: { data: { display_name: name } },
+  });
+  if (signUpError) {
+    if (/already registered/i.test(signUpError.message))
+      fail("An account with this email already exists — use 'I already have an account' below");
+    fail(signUpError.message);
+  }
+  if (!data.session) fail("Could not sign you in — please try again");
+
+  const { error: acceptError } = await supabase.rpc("accept_invite", {
+    p_token: token,
+  });
+  if (acceptError) fail(acceptError.message);
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
+}
+
 export async function acceptInvite(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   const supabase = await createClient();

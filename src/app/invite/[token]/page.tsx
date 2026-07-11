@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { acceptInvite } from "@/lib/actions/invites";
-import { AuthCard, buttonCls } from "@/components/auth-card";
+import { getMembership } from "@/lib/household";
+import { acceptInvite, acceptInviteNewUser } from "@/lib/actions/invites";
+import { AuthCard, buttonCls, inputCls } from "@/components/auth-card";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,20 @@ export default async function InvitePage({
   }
 
   if (invite.status !== "pending") {
+    // Already a member (e.g. re-opening a used invite link)? Just go in.
+    const membership = await getMembership();
+    if (membership) {
+      return (
+        <AuthCard
+          title={`Welcome to ${membership.household.name}`}
+          message="You're already a member — no invite needed."
+        >
+          <Link href="/dashboard" className={`${buttonCls} block text-center`}>
+            Go to Family Hub
+          </Link>
+        </AuthCard>
+      );
+    }
     const reasons: Record<string, string> = {
       accepted: "This invite has already been used.",
       revoked: "This invite has been revoked.",
@@ -38,7 +53,8 @@ export default async function InvitePage({
     return (
       <AuthCard title={`Join ${invite.household_name}`} error={reasons[invite.status]}>
         <p className="text-center text-sm text-stone-500">
-          Ask the person who invited you to send a new invite.
+          Ask the person who invited you to send a new invite, or{" "}
+          <Link href="/login" className="underline">sign in</Link> if you already have an account.
         </p>
       </AuthCard>
     );
@@ -62,12 +78,34 @@ export default async function InvitePage({
         </form>
       ) : (
         <div className="space-y-3">
-          <Link
-            href={`/signup?next=${encodeURIComponent(nextPath)}`}
-            className={`${buttonCls} block text-center`}
-          >
-            Create an account to join
-          </Link>
+          <form action={acceptInviteNewUser} className="space-y-3">
+            <input type="hidden" name="token" value={token} />
+            <input
+              value={invite.email}
+              disabled
+              className={`${inputCls} bg-stone-50 text-stone-400`}
+            />
+            <input name="name" type="text" required placeholder="Your name" className={inputCls} />
+            <input
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              placeholder="Choose a password (min 8 characters)"
+              className={inputCls}
+            />
+            <input
+              name="confirm"
+              type="password"
+              required
+              minLength={8}
+              placeholder="Repeat password"
+              className={inputCls}
+            />
+            <button className={buttonCls}>
+              Set password & join {invite.household_name}
+            </button>
+          </form>
           <Link
             href={`/login?next=${encodeURIComponent(nextPath)}`}
             className="block w-full rounded-lg border border-stone-300 px-3 py-2 text-center text-sm font-medium hover:bg-stone-100"
