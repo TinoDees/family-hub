@@ -28,8 +28,8 @@ export const MODULES: ModuleDef[] = [
     name: "Finance",
     icon: "💰",
     description: "Budgets, transactions and bills — multi-currency with AUD base.",
-    planned: ["Budgets per category", "Transaction ledger", "Bill reminders", "Multi-currency (AUD base)"],
-    status: "placeholder",
+    planned: ["Bill reminders", "Bank feeds (Basiq)", "Multi-currency conversion"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "none" },
   },
   {
