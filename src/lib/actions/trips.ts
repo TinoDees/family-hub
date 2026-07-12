@@ -118,7 +118,7 @@ export async function addExpense(formData: FormData) {
   const paidBy = String(formData.get("paid_by") ?? "");
   const sharedWith = formData.getAll("shared_with").map(String);
 
-  const back = `/holidays/${tripId}`;
+  const back = `/holidays/${tripId}/expenses`;
   if (!description) redirect(`${back}?error=Expense+needs+a+description`);
   if (!amount || amount <= 0) redirect(`${back}?error=Amount+must+be+positive`);
   if (!paidBy) redirect(`${back}?error=Pick+who+paid`);
@@ -135,6 +135,7 @@ export async function addExpense(formData: FormData) {
       currency: membership.household.base_currency,
       spent_at: String(formData.get("spent_at") || "") || new Date().toISOString().slice(0, 10),
       paid_by: paidBy,
+      receipt_photo_id: String(formData.get("receipt_photo_id") || "") || null,
       created_by: userId,
     })
     .select("id")
@@ -168,6 +169,35 @@ export async function deleteExpense(formData: FormData) {
     .delete()
     .eq("id", String(formData.get("expense_id")))
     .eq("household_id", membership.household_id);
-  revalidatePath(`/holidays/${tripId}`);
-  redirect(`/holidays/${tripId}`);
+  revalidatePath(`/holidays/${tripId}/expenses`);
+  redirect(`/holidays/${tripId}/expenses`);
+}
+
+export async function createTripAlbum(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const tripId = String(formData.get("trip_id"));
+  const supabase = await createClient();
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("id, name")
+    .eq("id", tripId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!trip) redirect("/holidays");
+
+  const { data: existing } = await supabase
+    .from("albums")
+    .select("id")
+    .eq("trip_id", trip.id)
+    .maybeSingle();
+  if (!existing) {
+    await supabase.from("albums").insert({
+      household_id: membership.household_id,
+      name: trip.name,
+      description: "Trip album",
+      trip_id: trip.id,
+    });
+  }
+  revalidatePath(`/holidays/${tripId}/photos`);
+  redirect(`/holidays/${tripId}/photos`);
 }

@@ -1,0 +1,133 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { requireModule } from "@/lib/module-guard";
+
+export type ScanResult = {
+  ok: boolean;
+  error?: string;
+  photoId?: string;
+  merchant?: string | null;
+  total?: number | null;
+  date?: string | null;
+};
+
+/**
+ * Stores the receipt image in the trip's album and asks Claude to read
+ * merchant / total / date from it. Env-gated on ANTHROPIC_API_KEY.
+ */
+export async function scanReceipt(
+  tripId: string,
+  imageBase64: string,
+  mediaType: string
+): Promise<ScanResult> {
+  const { membership } = await requireModule("holidays", "edit");
+  const supabase = await createClient();
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("id, name")
+    .eq("id", tripId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!trip) return { ok: false, error: "Trip not found" };
+
+  // ensure the trip album exists (also feeds the Photo Album module)
+  let { data: album } = await supabase
+    .from("albums")
+    .select("id")
+    .eq("trip_id", trip.id)
+    .maybeSingle();
+  if (!album) {
+    const { data: created, error } = await supabase
+      .from("albums")
+      .insert({
+        household_id: membership.household_id,
+        name: trip.name,
+        description: "Trip album",
+        trip_id: trip.id,
+      })
+      .select("id")
+      .single();
+    if (error || !created) return { ok: false, error: error?.message ?? "Could not create album" };
+    album = created;
+  }
+
+  // store the image
+  const bytes = Buffer.from(imageBase64, "base64");
+  if (bytes.length > 5 * 1024 * 1024) return { ok: false, error: "Image too large" };
+  const ext = mediaType === "image/png" ? "png" : mediaType === "image/jpeg" ? "jpg" : "webp";
+  const path = `${membership.household_id}/${album.id}/receipt-${crypto.randomUUID()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from("photos")
+    .upload(path, bytes, { contentType: mediaType });
+  if (upErr) return { ok: false, error: upErr.message };
+
+  const { data: photo, error: rowErr } = await supabase
+    .from("photos")
+    .insert({
+      household_id: membership.household_id,
+      album_id: album.id,
+      storage_path: path,
+      caption: "Receipt",
+    })
+    .select("id")
+    .single();
+  if (rowErr || !photo) return { ok: false, error: rowErr?.message ?? "Could not save photo" };
+
+  // read it with Claude (optional — expense can still be typed manually)
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    return {
+      ok: true,
+      photoId: photo.id,
+      error: "Receipt saved. AI reading needs ANTHROPIC_API_KEY — fill the details in manually.",
+    };
+  }
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: imageBase64 },
+              },
+              {
+                type: "text",
+                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null}. "total" is the final amount paid including tax/tip.',
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      return { ok: true, photoId: photo.id, error: `Receipt saved; AI reading failed (${res.status}) — fill in manually.` };
+    }
+    const data = await res.json();
+    const text: string = data?.content?.[0]?.text ?? "";
+    const match = text.match(/\{[\s\S]*\}/);
+    const parsed = match ? JSON.parse(match[0]) : {};
+    return {
+      ok: true,
+      photoId: photo.id,
+      merchant: typeof parsed.merchant === "string" ? parsed.merchant : null,
+      total: typeof parsed.total === "number" ? parsed.total : null,
+      date: typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null,
+    };
+  } catch {
+    return { ok: true, photoId: photo.id, error: "Receipt saved; AI reading failed — fill in manually." };
+  }
+}

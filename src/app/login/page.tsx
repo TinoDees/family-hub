@@ -9,7 +9,7 @@ export default async function LoginPage({
 }) {
   const { error, message, next } = await searchParams;
   return (
-    <AuthCard title="Family Hub" subtitle="Sign in to your household" error={error} message={message}>
+    <AuthCard title="Nestly" subtitle="Sign in to your household" error={error} message={message}>
       <form action={login} className="space-y-3">
         {next && <input type="hidden" name="next" value={next} />}
         <input name="email" type="email" required placeholder="Email" className={inputCls} />

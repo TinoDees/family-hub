@@ -40,7 +40,7 @@ export default async function InvitePage({
           message="You're already a member — no invite needed."
         >
           <Link href="/dashboard" className={`${buttonCls} block text-center`}>
-            Go to Family Hub
+            Go to Nestly
           </Link>
         </AuthCard>
       );

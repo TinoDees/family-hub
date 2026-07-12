@@ -15,7 +15,8 @@ export function AuthCard({
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <div className="text-3xl">🏠</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon-192.png" alt="Nestly" className="mx-auto h-12 w-12 rounded-xl" />
           <h1 className="mt-2 text-xl font-semibold text-stone-900">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-stone-500">{subtitle}</p>}
         </div>

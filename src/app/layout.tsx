@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Family Hub",
-  description: "Your household operating system",
+  title: "Nestly",
+  description: "Everything your family needs. Together.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -15,12 +15,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Family Hub",
+    title: "Nestly",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1c1917",
+  themeColor: "#2bb3a6",
 };
 
 export default function RootLayout({

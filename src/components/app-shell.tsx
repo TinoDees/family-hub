@@ -57,9 +57,10 @@ function SidebarHeader({ householdName }: { householdName: string }) {
   return (
     <div className="border-b border-stone-200 px-4 py-4">
       <div className="flex items-center gap-2">
-        <span className="text-2xl">🏠</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon-192.png" alt="Nestly" className="h-8 w-8 rounded-lg" />
         <div>
-          <div className="text-sm font-semibold leading-tight">Family Hub</div>
+          <div className="text-sm font-semibold leading-tight">Nestly</div>
           <div className="max-w-40 truncate text-xs text-stone-500">{householdName}</div>
         </div>
       </div>
