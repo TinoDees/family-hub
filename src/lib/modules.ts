@@ -37,8 +37,8 @@ export const MODULES: ModuleDef[] = [
     name: "Recipes",
     icon: "🍳",
     description: "Recipe cards for the household cookbook.",
-    planned: ["Recipe cards with photos", "Ingredients & steps", "Tags and search"],
-    status: "placeholder",
+    planned: ["Recipe photos", "Import from URL", "Specials-aware AI suggestions"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
@@ -46,8 +46,8 @@ export const MODULES: ModuleDef[] = [
     name: "Meal Planner",
     icon: "📅",
     description: "Weekly Mon–Sun meal planner that feeds the shopping list.",
-    planned: ["Mon–Sun weekly grid", "Drag recipes onto days", "Auto-generate shopping list"],
-    status: "placeholder",
+    planned: ["Auto-generate shopping list", "AI week suggestions from specials"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
