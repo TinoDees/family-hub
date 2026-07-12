@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   MODULES,
@@ -18,11 +19,11 @@ export type ModuleAccess = {
  * The single permission resolver — used by the sidebar, the dashboard grid,
  * the module route guard and the settings matrix, so they always agree.
  */
-export async function getPermissions(
+export const getPermissions = cache(async (
   householdId: string,
   userId: string,
   role: MemberRole
-): Promise<ModuleAccess[]> {
+): Promise<ModuleAccess[]> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("module_permissions")
@@ -39,7 +40,7 @@ export async function getPermissions(
     access: overrides.get(m.slug) ?? m.defaults[role],
     overridden: overrides.has(m.slug),
   }));
-}
+});
 
 export function visibleModules(perms: ModuleAccess[]): ModuleAccess[] {
   return perms.filter((p) => p.access !== "none");

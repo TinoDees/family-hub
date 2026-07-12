@@ -64,8 +64,8 @@ export const MODULES: ModuleDef[] = [
     name: "Holiday Planner",
     icon: "✈️",
     description: "Trips, day-by-day itineraries and trip expenses.",
-    planned: ["Trips with dates & destination", "Itinerary per day", "Trip expense tracking"],
-    status: "placeholder",
+    planned: ["Itinerary per day", "Guest access for friends", "Receipt scanning", "Settlement accept/decline"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {

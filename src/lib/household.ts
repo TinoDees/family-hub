@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberRole } from "@/lib/modules";
 
@@ -8,8 +9,8 @@ export type Membership = {
   household: { id: string; name: string; invite_code: string; base_currency: string };
 };
 
-/** Current user's membership (first household), or null. */
-export async function getMembership(): Promise<Membership | null> {
+/** Current user's membership (first household), or null. Memoized per request. */
+export const getMembership = cache(async (): Promise<Membership | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,4 +27,4 @@ export async function getMembership(): Promise<Membership | null> {
     .maybeSingle();
 
   return (data as unknown as Membership) ?? null;
-}
+});
