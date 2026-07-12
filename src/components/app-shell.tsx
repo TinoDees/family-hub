@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ModuleDef } from "@/lib/modules";
+import { InstallButton } from "@/components/install-button";
 
 function NavLinks({
   modules,
@@ -40,13 +41,14 @@ function NavLinks({
           </Link>
         ))}
       </nav>
-      {isOwner && (
-        <div className="border-t border-stone-200 p-3">
+      <div className="border-t border-stone-200 p-3">
+        {isOwner && (
           <Link href="/settings" className={linkCls(pathname.startsWith("/settings"))}>
             <span>⚙️</span> Settings
           </Link>
-        </div>
-      )}
+        )}
+        <InstallButton />
+      </div>
     </>
   );
 }
