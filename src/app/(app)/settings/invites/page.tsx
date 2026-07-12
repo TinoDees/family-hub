@@ -68,7 +68,7 @@ export default async function InvitesPage({
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-stone-700">Waiting to join</h3>
-        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
           {pending.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-stone-400">
               No open invites. Everyone who accepted is under Members.
@@ -122,7 +122,7 @@ export default async function InvitesPage({
       {expired.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-stone-400">Expired</h3>
-          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
             <table className="w-full text-sm">
               <tbody>
                 {expired.map((inv) => (

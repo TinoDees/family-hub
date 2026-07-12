@@ -38,7 +38,7 @@ export default async function MembersPage({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-900 text-left text-white">

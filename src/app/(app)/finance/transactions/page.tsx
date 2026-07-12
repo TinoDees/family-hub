@@ -117,7 +117,7 @@ export default async function TransactionsPage({
         </details>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
         {rows.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-stone-400">
             No transactions for {month.label}.{" "}
