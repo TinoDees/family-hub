@@ -73,8 +73,8 @@ export const MODULES: ModuleDef[] = [
     name: "Photo Album",
     icon: "📷",
     description: "Albums linked to trips, or standalone.",
-    planned: ["Albums (trip-linked or standalone)", "Upload & captions", "Supabase Storage"],
-    status: "placeholder",
+    planned: ["Trip-linked albums", "Captions & favourites", "Receipt scan (split-the-bill)"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "edit" },
   },
   {
