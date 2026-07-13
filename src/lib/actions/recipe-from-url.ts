@@ -102,13 +102,28 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
 
   // TikTok: the caption (via public oEmbed) very often contains the whole recipe
   if (/tiktok\.com\//i.test(clean)) {
+    let caption = "";
     try {
-      const oe = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(clean)}`, {
+      // share-sheet links are shorteners (vt.tiktok.com/…) — resolve to the real video URL first
+      let resolved = clean;
+      if (!/tiktok\.com\/@[^/]+\/video\//i.test(clean)) {
+        try {
+          const r = await fetch(clean, {
+            headers: { "user-agent": "Mozilla/5.0 (Linux; Android 14) Chrome/126 Mobile" },
+            redirect: "follow",
+            signal: AbortSignal.timeout(10000),
+          });
+          if (r.url && /tiktok\.com/i.test(r.url)) resolved = r.url.split("?")[0];
+        } catch {
+          /* keep the original */
+        }
+      }
+      const oe = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(resolved)}`, {
         signal: AbortSignal.timeout(10000),
       });
       if (oe.ok) {
         const meta = await oe.json();
-        const caption: string = meta?.title ?? "";
+        caption = String(meta?.title ?? "");
         if (caption.trim().length > 80) {
           const fromCaption = await readTextWithClaude(
             `TikTok video caption by ${meta?.author_name ?? "unknown"}:\n${caption}`
@@ -117,12 +132,14 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
         }
       }
     } catch {
-      /* fall through to page fetch */
+      /* fall through to the advice below */
     }
+    const titleHint = caption
+      ? ` The caption only says: "${caption.replace(/#\S+/g, "").trim().slice(0, 80)}…"`
+      : "";
     return {
       ok: false,
-      error:
-        "This TikTok's caption doesn't contain the recipe. Save the video (Share → Save video) and share the file to Nestly instead — I'll watch it.",
+      error: `This TikTok's caption doesn't contain the full recipe.${titleHint} Save the video in TikTok (Share → Save video), then share the saved file to Nestly — I'll watch it and fill in everything.`,
     };
   }
 
