@@ -35,7 +35,7 @@ export default async function TripExpensesPage({
     supabase.from("trip_participants").select("id, name, user_id, family_id").eq("trip_id", id).order("created_at"),
     supabase
       .from("trip_expenses")
-      .select("id, description, amount, spent_at, paid_by, receipt_photo_id")
+      .select("id, description, amount, spent_at, paid_by, receipt_photo_id, is_treat")
       .eq("trip_id", id)
       .order("spent_at", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -199,7 +199,11 @@ export default async function TripExpensesPage({
                           )}
                         </div>
                         <div className="text-xs text-stone-400">
-                          {pName.get(e.paid_by)} paid · split {(sharesByExpense.get(e.id) ?? []).join(", ")}
+                          {e.is_treat ? (
+                            <span className="text-amber-600">🎁 treat — {pName.get(e.paid_by)} covered it</span>
+                          ) : (
+                            <>{pName.get(e.paid_by)} paid · split {(sharesByExpense.get(e.id) ?? []).join(", ")}</>
+                          )}
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-right font-medium">
@@ -208,6 +212,7 @@ export default async function TripExpensesPage({
                       {canEdit && (
                         <td className="px-2 py-2 text-right">
                           <div className="inline-flex items-center gap-1.5">
+                            {!e.is_treat && (
                             <ExpenseSplitModal
                               expense={{ id: e.id, description: e.description, amount: Number(e.amount) }}
                               items={(itemsByExpense.get(e.id) ?? []).map((it) => ({
@@ -220,6 +225,7 @@ export default async function TripExpensesPage({
                               currentShareIds={shareIdsByExpense.get(e.id) ?? []}
                               currency={currency}
                             />
+                            )}
                             <form action={deleteExpense}>
                               <input type="hidden" name="expense_id" value={e.id} />
                               <input type="hidden" name="trip_id" value={trip.id} />
@@ -261,6 +267,35 @@ export default async function TripExpensesPage({
                 })}
               </div>
             )}
+            {(() => {
+              const familyBalances = (families ?? []).map((f) => {
+                const agg = familyAgg.get(f.id) ?? { paid: 0, share: 0, rows: [] };
+                return {
+                  participantId: f.id,
+                  name: f.name,
+                  paid: agg.paid,
+                  share: agg.share,
+                  net: Math.round((agg.paid - agg.share) * 100) / 100,
+                };
+              });
+              const famTransfers = settle(familyBalances);
+              return famTransfers.length > 0 ? (
+                <div className="border-t border-stone-100 px-4 py-2.5">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                    Between families
+                  </div>
+                  <ul className="mt-1 space-y-1 text-sm">
+                    {famTransfers.map((t, i) => (
+                      <li key={i}>
+                        <span className="font-medium">{t.from}</span> pays{" "}
+                        <span className="font-medium">{t.to}</span>{" "}
+                        <span className="font-semibold">{formatMoney(t.amount, currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null;
+            })()}
             <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-400">
               Click a family for the itemised breakdown.
             </p>

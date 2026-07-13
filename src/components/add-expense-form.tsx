@@ -53,6 +53,7 @@ export function AddExpenseForm({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptPhotoId, setReceiptPhotoId] = useState("");
   const [items, setItems] = useState<Item[]>([]);
+  const [isTreat, setIsTreat] = useState(false);
   const [sharedWith, setSharedWith] = useState<Set<string>>(new Set(initialParticipants.map((p) => p.id)));
   const [scanning, setScanning] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -225,12 +226,22 @@ export function AddExpenseForm({
           )}
         </div>
 
-        {items.length > 0 && (
+        {items.length > 0 && !isTreat && (
           <div className="space-y-1.5 rounded-xl border border-stone-100 bg-stone-50/60 p-3">
-            <div className="text-xs font-medium text-stone-500">Who had what?</div>
+            <div className="text-xs font-medium text-stone-500">
+              Who had what? Same item several times = one row each (e.g. give Tino two of the four).
+            </div>
             {items.map((i, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <span className="flex-1 truncate text-sm">{i.description}</span>
+                <span className="flex-1 truncate text-sm">
+                  {i.description}
+                  {items.filter((x) => x.description === i.description).length > 1 && (
+                    <span className="ml-1 text-xs text-stone-400">
+                      ({items.slice(0, idx + 1).filter((x) => x.description === i.description).length}/
+                      {items.filter((x) => x.description === i.description).length})
+                    </span>
+                  )}
+                </span>
                 <span className="w-20 text-right text-sm font-medium">{money(i.amount)}</span>
                 <select
                   value={i.consumed_by}
@@ -250,6 +261,17 @@ export function AddExpenseForm({
             ))}
           </div>
         )}
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="is_treat"
+            checked={isTreat}
+            onChange={(e) => setIsTreat(e.target.checked)}
+            className="rounded border-stone-300"
+          />
+          🎁 Our treat — don&apos;t split this one (the payer covers it all)
+        </label>
 
         {newPersonFor !== null && (
           <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
@@ -275,6 +297,7 @@ export function AddExpenseForm({
             </button>
           </div>
         )}
+        {!isTreat && (
         <div>
           <div className="mb-1 flex items-center gap-3 text-xs font-medium">
             <span>{preview.hasAlloc ? `Shared part (${money(Math.max(0, preview.pool))}) split between` : "Split between"}</span>
@@ -300,8 +323,9 @@ export function AddExpenseForm({
             ))}
           </div>
         </div>
+        )}
 
-        {(preview.hasAlloc || preview.over) && (
+        {(preview.hasAlloc || preview.over) && !isTreat && (
           <div className="rounded-xl bg-stone-50 p-3">
             {preview.over ? (
               <p className="text-sm text-red-600">Allocated items exceed the amount — check the numbers.</p>
@@ -324,10 +348,10 @@ export function AddExpenseForm({
         <input type="hidden" name="receipt_photo_id" value={receiptPhotoId} />
         <input type="hidden" name="items_json" value={JSON.stringify(items)} />
         <button
-          disabled={preview.over}
+          disabled={preview.over && !isTreat}
           className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
         >
-          {preview.hasAlloc ? "Add — exact split" : "Add — split equally"}
+          {isTreat ? "Add — our treat 🎁" : preview.hasAlloc ? "Add — exact split" : "Add — split equally"}
         </button>
       </form>
     </>

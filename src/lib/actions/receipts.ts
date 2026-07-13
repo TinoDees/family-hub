@@ -107,7 +107,7 @@ export async function scanReceipt(
               },
               {
                 type: "text",
-                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null, "items": [{"description": string, "amount": number}]}. "total" is the final amount paid including tax/tip. "items" are the individual line items with their prices (combine quantity lines, e.g. "2x Beer" as one item with the combined price); [] if unreadable.',
+                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null, "items": [{"description": string, "qty": number, "unit_amount": number, "line_total": number}]}. "total" is the final amount paid including tax/tip. For each line item: qty = how many (1 if not stated), unit_amount = price for ONE, line_total = qty x unit_amount as printed. [] if unreadable.',
               },
             ],
           },
@@ -121,20 +121,45 @@ export async function scanReceipt(
     const text: string = data?.content?.[0]?.text ?? "";
     const match = text.match(/\{[\s\S]*\}/);
     const parsed = match ? JSON.parse(match[0]) : {};
-    // sanity check: line items should roughly add up to the total
+    // normalise: explode quantity lines into unit rows so counts can be
+    // allocated per person ("Tino had 2"), with cent-exact unit amounts.
+    type RawItem = { description?: unknown; qty?: unknown; unit_amount?: unknown; line_total?: unknown };
+    let units: { description: string; amount: number }[] = [];
+    if (Array.isArray(parsed.items)) {
+      for (const raw of parsed.items as RawItem[]) {
+        if (!raw?.description) continue;
+        const lineTotal =
+          typeof raw.line_total === "number"
+            ? raw.line_total
+            : typeof raw.unit_amount === "number" && typeof raw.qty === "number"
+              ? raw.unit_amount * raw.qty
+              : null;
+        if (lineTotal === null) continue;
+        const qty =
+          typeof raw.qty === "number" && Number.isInteger(raw.qty) && raw.qty >= 1 && raw.qty <= 12
+            ? raw.qty
+            : 1;
+        const desc = String(raw.description).slice(0, 200);
+        const totalCents = Math.round(lineTotal * 100);
+        const baseCents = Math.floor(totalCents / qty);
+        const rem = totalCents - baseCents * qty;
+        for (let u = 0; u < qty; u++) {
+          units.push({ description: desc, amount: (baseCents + (u < rem ? 1 : 0)) / 100 });
+        }
+        if (units.length > 60) break;
+      }
+    }
+    // sanity check: unit rows should roughly add up to the total
     let itemWarning: string | undefined;
-    if (Array.isArray(parsed.items) && typeof parsed.total === "number" && parsed.items.length > 0) {
-      const sum = parsed.items.reduce(
-        (acc: number, i: { amount?: unknown }) =>
-          acc + (typeof i.amount === "number" ? i.amount : 0),
-        0
-      );
+    if (typeof parsed.total === "number" && units.length > 0) {
+      const sum = units.reduce((acc, i) => acc + i.amount, 0);
       if (Math.abs(sum - parsed.total) > Math.max(1, parsed.total * 0.15)) {
-        parsed.items = [];
+        units = [];
         itemWarning =
           "Line items didn't match the total, so they were dropped — allocate manually or re-scan.";
       }
     }
+    parsed.items = units;
     return {
       ...(itemWarning ? { error: itemWarning } : {}),
       ok: true,
@@ -142,15 +167,7 @@ export async function scanReceipt(
       merchant: typeof parsed.merchant === "string" ? parsed.merchant : null,
       total: typeof parsed.total === "number" ? parsed.total : null,
       date: typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null,
-      items: Array.isArray(parsed.items)
-        ? parsed.items
-            .filter((i: Record<string, unknown>) => i && typeof i.amount === "number" && i.description)
-            .map((i: Record<string, unknown>) => ({
-              description: String(i.description).slice(0, 200),
-              amount: Math.round((i.amount as number) * 100) / 100,
-            }))
-            .slice(0, 100)
-        : [],
+      items: parsed.items as { description: string; amount: number }[],
     };
   } catch {
     return { ok: true, photoId: photo.id, error: "Receipt saved; AI reading failed — fill in manually." };

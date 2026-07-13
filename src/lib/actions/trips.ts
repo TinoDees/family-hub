@@ -182,6 +182,7 @@ export async function addExpense(formData: FormData) {
   if (!paidBy) redirect(`${back}?error=Pick+who+paid`);
   if (sharedWith.length === 0) redirect(`${back}?error=Pick+who+shares+the+cost`);
 
+  const isTreat = formData.get("is_treat") === "on";
   const supabase = await createClient();
   const { data: expense, error } = await supabase
     .from("trip_expenses")
@@ -194,6 +195,7 @@ export async function addExpense(formData: FormData) {
       spent_at: String(formData.get("spent_at") || "") || new Date().toISOString().slice(0, 10),
       paid_by: paidBy,
       receipt_photo_id: String(formData.get("receipt_photo_id") || "") || null,
+      is_treat: isTreat,
       created_by: userId,
     })
     .select("id")
@@ -213,6 +215,28 @@ export async function addExpense(formData: FormData) {
   const cents = Math.round(amount * 100);
   const perParticipant = new Map<string, number>();
   let allocatedCents = 0;
+  if (isTreat) {
+    // whole bill on the payer — nothing to split
+    const { error: shareErr } = await supabase.from("trip_expense_shares").insert([
+      { expense_id: expense.id, participant_id: paidBy, amount },
+    ]);
+    if (shareErr) {
+      await supabase.from("trip_expenses").delete().eq("id", expense.id);
+      redirect(`${back}?error=${enc(shareErr.message)}`);
+    }
+    if (items.length > 0) {
+      await supabase.from("trip_expense_items").insert(
+        items.map((i, idx) => ({
+          expense_id: expense.id,
+          position: idx,
+          description: String(i.description).slice(0, 200),
+          amount: Math.round(i.amount * 100) / 100,
+        }))
+      );
+    }
+    revalidatePath(back);
+    redirect(back);
+  }
   for (const i of items) {
     if (i.consumed_by) {
       const c = Math.round(i.amount * 100);
