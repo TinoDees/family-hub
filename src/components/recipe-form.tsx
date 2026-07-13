@@ -1,4 +1,5 @@
 import { IngredientEditor, type IngredientRow } from "@/components/ingredient-editor";
+import { SubmitButton } from "@/components/submit-button";
 import { inputCls, buttonCls } from "@/components/auth-card";
 
 export type RecipeFormData = {
@@ -75,7 +76,7 @@ export function RecipeForm({
         />
       </div>
 
-      <button className={`${buttonCls} w-auto px-8`}>{submitLabel}</button>
+      <SubmitButton label={submitLabel} className={`${buttonCls} w-auto px-8`} />
     </form>
   );
 }

@@ -34,7 +34,7 @@ export async function scanRecipeImage(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-sonnet-5",
         max_tokens: 2000,
         messages: [
           {
@@ -46,7 +46,7 @@ export async function scanRecipeImage(
               },
               {
                 type: "text",
-                text: `Read the recipe in this image. It may be HANDWRITTEN — read handwriting carefully, inferring unclear words from cooking context. Reply with ONLY a JSON object, no other text:
+                text: `Read the recipe in this image. It may be HANDWRITTEN and may be ROTATED sideways — mentally rotate if needed and read handwriting carefully, inferring unclear words from cooking context. Reply with ONLY a JSON object, no other text:
 {"name": string, "description": string|null, "servings": number|null,
  "prep_minutes": number|null, "cook_minutes": number|null,
  "ingredients": [{"qty": string, "unit": string, "name": string, "note": string}],

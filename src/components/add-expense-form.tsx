@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { addExpense, createParticipantInline } from "@/lib/actions/trips";
 import { addGuestExpense } from "@/lib/actions/guest-trip";
 import { scanReceipt } from "@/lib/actions/receipts";
+import { SubmitButton } from "@/components/submit-button";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
 
@@ -347,12 +348,17 @@ export function AddExpenseForm({
         <input type="hidden" name="trip_id" value={tripId} />
         <input type="hidden" name="receipt_photo_id" value={receiptPhotoId} />
         <input type="hidden" name="items_json" value={JSON.stringify(items)} />
-        <button
-          disabled={preview.over && !isTreat}
-          className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
-        >
-          {isTreat ? "Add — our treat 🎁" : preview.hasAlloc ? "Add — exact split" : "Add — split equally"}
-        </button>
+        {preview.over && !isTreat ? (
+          <button disabled className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white opacity-40">
+            Add
+          </button>
+        ) : (
+          <SubmitButton
+            label={isTreat ? "Add — our treat 🎁" : preview.hasAlloc ? "Add — exact split" : "Add — split equally"}
+            pendingLabel="Adding…"
+            className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700"
+          />
+        )}
       </form>
     </>
   );
