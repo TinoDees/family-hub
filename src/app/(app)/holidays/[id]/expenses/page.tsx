@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/finance";
 import { computeBalances, settle } from "@/lib/settlement";
 import { deleteExpense } from "@/lib/actions/trips";
 import { removeReceipt } from "@/lib/actions/receipts";
+import { ExpenseSplitModal } from "@/components/expense-split-modal";
 import { AddExpenseForm } from "@/components/add-expense-form";
 import { TripTabs } from "@/components/trip-tabs";
 
@@ -41,6 +42,17 @@ export default async function TripExpensesPage({
   if (!trip) notFound();
 
   const expenseIds = (expenses ?? []).map((e) => e.id);
+  const { data: allItems } = expenseIds.length
+    ? await supabase
+        .from("trip_expense_items")
+        .select("id, expense_id, description, amount, consumed_by, position")
+        .in("expense_id", expenseIds)
+        .order("position")
+    : { data: [] as { id: string; expense_id: string; description: string; amount: number; consumed_by: string | null; position: number }[] };
+  const itemsByExpense = new Map<string, typeof allItems>();
+  for (const it of allItems ?? []) {
+    itemsByExpense.set(it.expense_id, [...(itemsByExpense.get(it.expense_id) ?? []), it]);
+  }
   const { data: shares } = expenseIds.length
     ? await supabase
         .from("trip_expense_shares")
@@ -72,10 +84,15 @@ export default async function TripExpensesPage({
   const transfers = settle(balances);
   const total = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
   const sharesByExpense = new Map<string, string[]>();
+  const shareIdsByExpense = new Map<string, string[]>();
   for (const s of shares ?? []) {
     sharesByExpense.set(s.expense_id, [
       ...(sharesByExpense.get(s.expense_id) ?? []),
       pName.get(s.participant_id) ?? "?",
+    ]);
+    shareIdsByExpense.set(s.expense_id, [
+      ...(shareIdsByExpense.get(s.expense_id) ?? []),
+      s.participant_id,
     ]);
   }
 
@@ -143,11 +160,25 @@ export default async function TripExpensesPage({
                       </td>
                       {canEdit && (
                         <td className="px-2 py-2 text-right">
-                          <form action={deleteExpense}>
-                            <input type="hidden" name="expense_id" value={e.id} />
-                            <input type="hidden" name="trip_id" value={trip.id} />
-                            <button className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600">✕</button>
-                          </form>
+                          <div className="inline-flex items-center gap-1.5">
+                            <ExpenseSplitModal
+                              expense={{ id: e.id, description: e.description, amount: Number(e.amount) }}
+                              items={(itemsByExpense.get(e.id) ?? []).map((it) => ({
+                                id: it.id,
+                                description: it.description,
+                                amount: Number(it.amount),
+                                consumed_by: it.consumed_by,
+                              }))}
+                              participants={pList.map((p) => ({ id: p.id, name: p.name }))}
+                              currentShareIds={shareIdsByExpense.get(e.id) ?? []}
+                              currency={currency}
+                            />
+                            <form action={deleteExpense}>
+                              <input type="hidden" name="expense_id" value={e.id} />
+                              <input type="hidden" name="trip_id" value={trip.id} />
+                              <button className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600">✕</button>
+                            </form>
+                          </div>
                         </td>
                       )}
                     </tr>

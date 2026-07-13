@@ -71,6 +71,55 @@ export async function addGuestExpense(formData: FormData) {
     }))
   );
   if (shareErr) redirect(`${back}?error=${encodeURIComponent(shareErr.message)}`);
+  // optional line items (from receipt scan)
+  let items: { description: string; amount: number }[] = [];
+  try {
+    items = JSON.parse(String(formData.get("items_json") || "[]"));
+  } catch {}
+  if (Array.isArray(items) && items.length > 0) {
+    await supabase.from("trip_expense_items").insert(
+      items
+        .filter((i) => i && i.description && typeof i.amount === "number")
+        .slice(0, 100)
+        .map((i, idx) => ({
+          expense_id: expense.id,
+          position: idx,
+          description: String(i.description).slice(0, 200),
+          amount: Math.round(i.amount * 100) / 100,
+        }))
+    );
+  }
+
   revalidatePath(back);
   redirect(back);
+}
+
+export async function createGuestTripAlbum(formData: FormData) {
+  const tripId = String(formData.get("trip_id"));
+  const me = await myParticipant(tripId);
+  if (!me) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("id, name")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (!trip) redirect("/");
+
+  const { data: existing } = await supabase
+    .from("albums")
+    .select("id")
+    .eq("trip_id", trip.id)
+    .maybeSingle();
+  if (!existing) {
+    await supabase.from("albums").insert({
+      household_id: me.household_id,
+      name: trip.name,
+      description: "Trip album",
+      trip_id: trip.id,
+    });
+  }
+  revalidatePath(`/guest/${tripId}`);
+  redirect(`/guest/${tripId}`);
 }

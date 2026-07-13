@@ -47,6 +47,7 @@ export function AddExpenseForm({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptPhotoId, setReceiptPhotoId] = useState("");
+  const [items, setItems] = useState<{ description: string; amount: number }[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function AddExpenseForm({
         return;
       }
       if (res.photoId) setReceiptPhotoId(res.photoId);
+      if (res.items && res.items.length > 0) setItems(res.items);
       if (res.merchant) setDescription(res.merchant);
       if (res.total) setAmount(String(res.total));
       if (res.date) setDate(res.date);
@@ -161,6 +163,13 @@ export function AddExpenseForm({
       </div>
       <input type="hidden" name="trip_id" value={tripId} />
       <input type="hidden" name="receipt_photo_id" value={receiptPhotoId} />
+      <input type="hidden" name="items_json" value={JSON.stringify(items)} />
+      {items.length > 0 && (
+        <p className="text-xs text-stone-400">
+          {items.length} line item{items.length === 1 ? "" : "s"} captured — allocate them per person
+          after adding (click the expense).
+        </p>
+      )}
       <button className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700">
         Add — split equally
       </button>

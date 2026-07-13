@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/finance";
 import { signOut } from "@/lib/actions/auth";
 import { AddExpenseForm } from "@/components/add-expense-form";
+import { PhotoUploader } from "@/components/photo-uploader";
+import { createGuestTripAlbum } from "@/lib/actions/guest-trip";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +24,14 @@ export default async function GuestTripPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: trip }, { data: participants }] = await Promise.all([
+  const [{ data: trip }, { data: participants }, { data: album }] = await Promise.all([
     supabase
       .from("trips")
-      .select("id, name, destination, start_date, end_date, status")
+      .select("id, name, destination, start_date, end_date, status, household_id")
       .eq("id", tripId)
       .maybeSingle(),
     supabase.from("trip_participants").select("id, name, user_id").eq("trip_id", tripId).order("created_at"),
+    supabase.from("albums").select("id, name").eq("trip_id", tripId).maybeSingle(),
   ]);
   if (!trip) redirect("/");
   const me = (participants ?? []).find((p) => p.user_id === user.id);
@@ -57,6 +60,23 @@ export default async function GuestTripPage({
     .filter((s) => s.participant_id === me.id)
     .reduce((sum, s) => sum + Number(s.amount), 0);
   const net = Math.round((myPaid - myShare) * 100) / 100;
+
+  const { data: photos } = album
+    ? await supabase
+        .from("photos")
+        .select("id, storage_path, caption")
+        .eq("album_id", album.id)
+        .order("created_at", { ascending: false })
+        .limit(60)
+    : { data: [] };
+  const signedPhotos = (photos ?? []).length
+    ? (
+        await supabase.storage
+          .from("photos")
+          .createSignedUrls((photos ?? []).map((p) => p.storage_path), 3600)
+      ).data
+    : [];
+  const photoUrl = new Map((signedPhotos ?? []).map((s) => [s.path, s.signedUrl]));
 
   const sharesByExpense = new Map<string, string[]>();
   for (const s of shares ?? []) {
@@ -159,6 +179,43 @@ export default async function GuestTripPage({
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">📷 Trip photos</h2>
+          </div>
+          {!album ? (
+            <form action={createGuestTripAlbum} className="rounded-xl border border-dashed border-stone-300 bg-white p-6 text-center">
+              <input type="hidden" name="trip_id" value={trip.id} />
+              <p className="text-sm text-stone-500">No trip album yet.</p>
+              <button className="mt-3 rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700">
+                Create trip album
+              </button>
+            </form>
+          ) : (
+            <>
+              <PhotoUploader householdId={trip.household_id} albumId={album.id} />
+              {(photos ?? []).length > 0 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  {(photos ?? []).map((p) => {
+                    const url = photoUrl.get(p.storage_path);
+                    return (
+                      <div key={p.id} className="overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
+                        {url ? (
+                          <a href={url} target="_blank" rel="noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt={p.caption ?? ""} className="aspect-square w-full object-cover" loading="lazy" />
+                          </a>
+                        ) : (
+                          <div className="flex aspect-square items-center justify-center text-stone-300">📷</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

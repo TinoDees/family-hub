@@ -10,6 +10,7 @@ export type ScanResult = {
   merchant?: string | null;
   total?: number | null;
   date?: string | null;
+  items?: { description: string; amount: number }[];
 };
 
 /**
@@ -106,7 +107,7 @@ export async function scanReceipt(
               },
               {
                 type: "text",
-                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null}. "total" is the final amount paid including tax/tip.',
+                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null, "items": [{"description": string, "amount": number}]}. "total" is the final amount paid including tax/tip. "items" are the individual line items with their prices (combine quantity lines, e.g. "2x Beer" as one item with the combined price); [] if unreadable.',
               },
             ],
           },
@@ -126,6 +127,15 @@ export async function scanReceipt(
       merchant: typeof parsed.merchant === "string" ? parsed.merchant : null,
       total: typeof parsed.total === "number" ? parsed.total : null,
       date: typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null,
+      items: Array.isArray(parsed.items)
+        ? parsed.items
+            .filter((i: Record<string, unknown>) => i && typeof i.amount === "number" && i.description)
+            .map((i: Record<string, unknown>) => ({
+              description: String(i.description).slice(0, 200),
+              amount: Math.round((i.amount as number) * 100) / 100,
+            }))
+            .slice(0, 100)
+        : [],
     };
   } catch {
     return { ok: true, photoId: photo.id, error: "Receipt saved; AI reading failed — fill in manually." };

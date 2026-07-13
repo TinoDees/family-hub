@@ -156,6 +156,25 @@ export async function addExpense(formData: FormData) {
     await supabase.from("trip_expenses").delete().eq("id", expense.id);
     redirect(`${back}?error=${enc(shareErr.message)}`);
   }
+  // optional line items (from receipt scan)
+  let items: { description: string; amount: number }[] = [];
+  try {
+    items = JSON.parse(String(formData.get("items_json") || "[]"));
+  } catch {}
+  if (Array.isArray(items) && items.length > 0) {
+    await supabase.from("trip_expense_items").insert(
+      items
+        .filter((i) => i && i.description && typeof i.amount === "number")
+        .slice(0, 100)
+        .map((i, idx) => ({
+          expense_id: expense.id,
+          position: idx,
+          description: String(i.description).slice(0, 200),
+          amount: Math.round(i.amount * 100) / 100,
+        }))
+    );
+  }
+
   revalidatePath(back);
   redirect(back);
 }
