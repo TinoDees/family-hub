@@ -175,6 +175,16 @@ export default async function TripOverviewPage({
           {canEdit && (
             <form action={setAgreedRate} className="mt-3 flex flex-wrap items-center gap-2 border-b border-stone-100 pb-3 text-sm">
               <input type="hidden" name="trip_id" value={trip.id} />
+              <span className="text-stone-500">1 {membership.household.base_currency} =</span>
+              <input
+                name="rate_value"
+                type="number"
+                step="0.0001"
+                min="0"
+                required
+                placeholder="e.g. 22.5"
+                className="w-28 rounded-lg border border-stone-300 px-2 py-1 text-sm"
+              />
               <select
                 name="currency"
                 required
@@ -190,15 +200,7 @@ export default async function TripOverviewPage({
                   </option>
                 ))}
               </select>
-              <input
-                name="agreed_rate"
-                type="number"
-                step="0.000001"
-                min="0"
-                required
-                placeholder="rate to AUD, e.g. 0.045"
-                className="w-44 rounded-lg border border-stone-300 px-2 py-1 text-sm"
-              />
+              <input type="hidden" name="direction" value="base_to_foreign" />
               <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
                 Set rate
               </button>
@@ -207,31 +209,36 @@ export default async function TripOverviewPage({
           <div className="mt-3 space-y-2">
             {[...new Set([...currencyAgg.keys(), ...fxMap.keys()])].map((cur) => {
               const agg = currencyAgg.get(cur) ?? { orig: 0, aud: 0 };
-              const marketRate = agg.orig > 0 ? agg.aud / agg.orig : null;
+              const marketRate = agg.orig > 0 ? agg.aud / agg.orig : null; // foreign -> base
+              const base = membership.household.base_currency;
+              const officialPerBase = marketRate ? 1 / marketRate : null; // base -> foreign
+              const agreed = fxMap.get(cur);
+              const agreedPerBase = agreed ? 1 / agreed : null;
               return (
                 <form key={cur} action={setAgreedRate} className="flex flex-wrap items-center gap-3 text-sm">
                   <input type="hidden" name="trip_id" value={trip.id} />
                   <input type="hidden" name="currency" value={cur} />
+                  <input type="hidden" name="direction" value="base_to_foreign" />
                   <span className="w-12 font-mono font-semibold">{cur}</span>
-                  <span className="text-stone-500">
-                    market ≈{" "}
-                    <span className="font-medium text-stone-700">
-                      {marketRate ? marketRate.toFixed(4) : "—"}
+                  {officialPerBase && (
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-500">
+                      official 1 {base} = {officialPerBase.toFixed(2)} {cur}
                     </span>
-                  </span>
+                  )}
                   {canEdit ? (
                     <>
                       <label className="flex items-center gap-1.5">
-                        <span className="text-stone-500">agreed</span>
+                        <span className="text-stone-500">agreed 1 {base} =</span>
                         <input
-                          name="agreed_rate"
+                          name="rate_value"
                           type="number"
-                          step="0.000001"
+                          step="0.0001"
                           min="0"
-                          defaultValue={fxMap.get(cur) ?? ""}
-                          placeholder={marketRate ? marketRate.toFixed(4) : "0.0000"}
-                          className="w-28 rounded-lg border border-stone-300 px-2 py-1 text-sm"
+                          defaultValue={agreedPerBase ? agreedPerBase.toFixed(2) : ""}
+                          placeholder={officialPerBase ? officialPerBase.toFixed(2) : ""}
+                          className="w-24 rounded-lg border border-stone-300 px-2 py-1 text-sm"
                         />
+                        <span className="text-stone-500">{cur}</span>
                       </label>
                       <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
                         Save
@@ -239,9 +246,9 @@ export default async function TripOverviewPage({
                     </>
                   ) : (
                     <span className="text-stone-500">
-                      agreed:{" "}
+                      agreed: 1 {base} ={" "}
                       <span className="font-medium text-stone-700">
-                        {fxMap.get(cur)?.toFixed(4) ?? "—"}
+                        {agreedPerBase ? `${agreedPerBase.toFixed(2)} ${cur}` : "—"}
                       </span>
                     </span>
                   )}

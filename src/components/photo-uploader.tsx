@@ -78,8 +78,38 @@ export function PhotoUploader({
     }
   };
 
+  const [dragOver, setDragOver] = useState(false);
+
+  const fromItems = (items: DataTransferItemList | null) => {
+    if (!items || busy) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      const f = item.getAsFile?.();
+      if (f && f.type.startsWith("image/")) files.push(f);
+    }
+    if (files.length) {
+      const dt = new DataTransfer();
+      files.forEach((f) => dt.items.add(f));
+      upload(dt.files);
+    }
+  };
+
   return (
-    <div className="rounded-xl border border-dashed border-stone-300 bg-white p-5 text-center">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        fromItems(e.dataTransfer.items);
+      }}
+      onPaste={(e) => fromItems(e.clipboardData?.items ?? null)}
+      tabIndex={0}
+      className={`rounded-xl border border-dashed bg-white p-5 text-center outline-none ${dragOver ? "border-sky-400 bg-sky-50" : "border-stone-300"}`}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -110,6 +140,7 @@ export function PhotoUploader({
       )}
       <p className="mt-2 text-xs text-stone-400">
         Photos are resized on your device before upload — fast even on holiday Wi-Fi.
+        <span className="hidden sm:inline"> Drag &amp; drop here, or click this box and paste (Ctrl+V).</span>
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>

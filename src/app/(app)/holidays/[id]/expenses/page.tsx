@@ -103,6 +103,20 @@ export default async function TripExpensesPage({
   }));
 
   const balances = computeBalances(pList, adjExpenses, adjShares);
+
+  // single foreign currency context for secondary display
+  const foreignCurrencies = [...new Set((expenses ?? []).map((e) => e.original_currency).filter(Boolean))] as string[];
+  const fxContext = (() => {
+    if (foreignCurrencies.length !== 1) return null;
+    const cur = foreignCurrencies[0];
+    const agreed = agreedRate.get(cur) ?? null; // foreign -> base
+    const withOrig = (expenses ?? []).filter((e) => e.original_currency === cur && e.original_amount);
+    const sumOrig = withOrig.reduce((s2, e) => s2 + Number(e.original_amount), 0);
+    const sumAud = withOrig.reduce((s2, e) => s2 + Number(e.amount), 0);
+    const market = sumOrig > 0 ? sumAud / sumOrig : null;
+    const effective = agreed ?? market;
+    return effective ? { cur, agreed, market, toForeign: (aud: number) => aud / effective } : null;
+  })();
   const transfers = settle(balances);
 
   // family aggregation
@@ -328,12 +342,32 @@ export default async function TripExpensesPage({
                         <span className="font-medium">{t.from}</span> pays{" "}
                         <span className="font-medium">{t.to}</span>{" "}
                         <span className="font-semibold">{formatMoney(t.amount, currency)}</span>
+                        {fxContext && (
+                          <span className="ml-1.5 text-xs text-stone-400">
+                            ≈ {fxContext.cur} {Math.round(fxContext.toForeign(t.amount)).toLocaleString()}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : null;
             })()}
+            {fxContext && (
+              <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-500">
+                Rates ({fxContext.cur}):{" "}
+                {fxContext.agreed ? (
+                  <>agreed <span className="font-medium">1 {currency} = {(1 / fxContext.agreed).toFixed(2)} {fxContext.cur}</span></>
+                ) : (
+                  "no agreed rate set"
+                )}
+                {fxContext.market && (
+                  <span className="ml-1.5 rounded-full bg-stone-100 px-2 py-0.5">
+                    official 1 {currency} = {(1 / fxContext.market).toFixed(2)} {fxContext.cur}
+                  </span>
+                )}
+              </p>
+            )}
             <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-400">
               Click a family for the itemised breakdown.
             </p>
@@ -345,9 +379,16 @@ export default async function TripExpensesPage({
               {balances.map((b) => (
                 <li key={b.participantId} className="flex items-center justify-between">
                   <span>{b.name}</span>
-                  <span className={b.net > 0.004 ? "font-medium text-emerald-600" : b.net < -0.004 ? "font-medium text-red-600" : "text-stone-400"}>
-                    {b.net > 0.004 ? "is owed " : b.net < -0.004 ? "owes " : "settled"}
-                    {Math.abs(b.net) > 0.004 && formatMoney(Math.abs(b.net), currency)}
+                  <span className="text-right">
+                    <span className={b.net > 0.004 ? "font-medium text-emerald-600" : b.net < -0.004 ? "font-medium text-red-600" : "text-stone-400"}>
+                      {b.net > 0.004 ? "is owed " : b.net < -0.004 ? "owes " : "settled"}
+                      {Math.abs(b.net) > 0.004 && formatMoney(Math.abs(b.net), currency)}
+                    </span>
+                    {fxContext && Math.abs(b.net) > 0.004 && (
+                      <span className="block text-[10px] text-stone-400">
+                        ≈ {fxContext.cur} {Math.round(fxContext.toForeign(Math.abs(b.net))).toLocaleString()}
+                      </span>
+                    )}
                   </span>
                 </li>
               ))}
@@ -361,6 +402,11 @@ export default async function TripExpensesPage({
                       <span className="font-medium">{t.from}</span> pays{" "}
                       <span className="font-medium">{t.to}</span>{" "}
                       <span className="font-semibold">{formatMoney(t.amount, currency)}</span>
+                      {fxContext && (
+                        <span className="ml-1.5 text-xs text-stone-400">
+                          ≈ {fxContext.cur} {Math.round(fxContext.toForeign(t.amount)).toLocaleString()}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

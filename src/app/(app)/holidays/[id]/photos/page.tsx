@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { createTripAlbum } from "@/lib/actions/trips";
-import { deletePhoto } from "@/lib/actions/photos";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { PhotoGallery } from "@/components/photo-gallery";
 import { TripTabs } from "@/components/trip-tabs";
 
 export default async function TripPhotosPage({
@@ -73,60 +73,18 @@ export default async function TripPhotosPage({
             This album also appears in the{" "}
             <Link href="/photos" className="underline">Photo Album</Link> module.
           </p>
-          {canEdit && <PhotoUploader householdId={membership.household_id} albumId={album.id} showVisibility />}
-          {(() => {
-            const receipts = (photos ?? []).filter((p) => p.caption === "Receipt");
-            const normal = (photos ?? []).filter((p) => p.caption !== "Receipt");
-            const card = (p: { id: string; storage_path: string; caption: string | null }) => {
-                const url = urlFor.get(p.storage_path);
-                return (
-                  <div key={p.id} className="group relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
-                    {url ? (
-                      <a href={url} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt={p.caption ?? ""} className="aspect-square w-full object-cover" loading="lazy" />
-                      </a>
-                    ) : (
-                      <div className="flex aspect-square items-center justify-center text-stone-300">📷</div>
-                    )}
-                    {p.caption && (
-                      <div className="absolute inset-x-0 bottom-0 bg-black/50 px-2 py-1 text-xs text-white">{p.caption}</div>
-                    )}
-                    {canEdit && (
-                      <form action={deletePhoto} className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <input type="hidden" name="photo_id" value={p.id} />
-                        <input type="hidden" name="album_id" value={album.id} />
-                        <button className="rounded-full bg-black/50 px-2 py-1 text-xs text-white hover:bg-red-600">✕</button>
-                      </form>
-                    )}
-                  </div>
-                );
-            };
-            return (
-              <>
-                <div className="rounded-xl border border-stone-200 bg-white p-4">
-                  <h2 className="mb-3 text-sm font-semibold">📷 Photos</h2>
-                  {normal.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-stone-400">No photos yet.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                      {normal.map(card)}
-                    </div>
-                  )}
-                </div>
-                {receipts.length > 0 && (
-                  <details className="rounded-xl border border-stone-200 bg-white">
-                    <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
-                      🧾 Receipts ({receipts.length})
-                    </summary>
-                    <div className="grid grid-cols-3 gap-2 border-t border-stone-100 p-4 sm:grid-cols-4 md:grid-cols-6">
-                      {receipts.map(card)}
-                    </div>
-                  </details>
-                )}
-              </>
-            );
-          })()}
+          {canEdit && (
+            <PhotoUploader householdId={membership.household_id} albumId={album.id} showVisibility />
+          )}
+          <PhotoGallery
+            canEdit={canEdit}
+            photos={(photos ?? []).map((p) => ({
+              id: p.id,
+              url: urlFor.get(p.storage_path) ?? null,
+              caption: p.caption,
+              isReceipt: p.caption === "Receipt",
+            }))}
+          />
         </>
       )}
     </div>

@@ -390,7 +390,13 @@ export async function setAgreedRate(formData: FormData) {
   const { membership } = await requireModule("holidays", "edit");
   const tripId = String(formData.get("trip_id"));
   const currency = String(formData.get("currency") ?? "").trim().toUpperCase();
-  const rateRaw = String(formData.get("agreed_rate") ?? "").trim();
+  // form enters "1 BASE = X FOREIGN"; we store foreign->base (multiplier to base)
+  const valueRaw = String(formData.get("rate_value") ?? formData.get("agreed_rate") ?? "").trim();
+  const direction = String(formData.get("direction") ?? "foreign_to_base");
+  const value = parseFloat(valueRaw);
+  const rateRaw = valueRaw
+    ? String(direction === "base_to_foreign" ? (value > 0 ? 1 / value : 0) : value)
+    : "";
   if (!CURRENCY_CODES.has(currency))
     redirect(`/holidays/${tripId}?error=Pick+a+currency+from+the+list`);
   const supabase = await createClient();
