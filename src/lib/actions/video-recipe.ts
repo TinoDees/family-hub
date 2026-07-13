@@ -44,20 +44,30 @@ function parseRecipeJson(text: string): ScannedRecipe {
 }
 
 async function generateFromPart(part: unknown, key: string): Promise<ScannedRecipe> {
+  // hop models on 404 (retired) and 429/503 (busy); two passes with a pause
   let res: Response | null = null;
-  for (const model of MODELS) {
-    res = await fetch(`${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [part, { text: RECIPE_PROMPT }] }],
-      }),
-    });
-    if (res.ok) break;
-    if (res.status !== 404) break; // real error — don't mask it by model-hopping
+  outer: for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
+    for (const model of MODELS) {
+      res = await fetch(`${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [part, { text: RECIPE_PROMPT }] }],
+        }),
+      });
+      if (res.ok) break outer;
+      if (![404, 429, 503].includes(res.status)) break outer; // real error — surface it
+    }
   }
   if (!res || !res.ok) {
     const body = res ? await res.text() : "";
+    if (res && [429, 503].includes(res.status)) {
+      return {
+        ok: false,
+        error: "Google's video AI is busy right now — wait a minute and tap Read/share again. (Free-tier keys get queued at peak times; adding billing to the Google key removes this.)",
+      };
+    }
     return { ok: false, error: `Gemini failed (${res?.status}): ${body.slice(0, 200)}` };
   }
   const data = await res.json();
