@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireModule } from "@/lib/module-guard";
 import { NewRecipeClient } from "@/components/new-recipe-client";
 
-export const maxDuration = 150;
+export const maxDuration = 300;
 
 function extractUrl(...candidates: (string | undefined)[]): string | undefined {
   for (const c of candidates) {

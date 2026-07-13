@@ -70,8 +70,8 @@ export function NewRecipeClient({
   };
 
   const onVideo = async (file: File) => {
-    if (file.size > 100 * 1024 * 1024) {
-      setMsg("Video too large (max 100 MB) — trim it or use a shorter clip.");
+    if (file.size > 300 * 1024 * 1024) {
+      setMsg("Video too large (max 300 MB). Trim it first: open it in your Gallery → edit ✂ → keep just the recipe part → save, then share the trimmed copy.");
       return;
     }
     setScanning(true);
@@ -231,6 +231,8 @@ export function NewRecipeClient({
           </ol>
           <p className="text-xs text-stone-400">
             The narration matters — most quantities are spoken, so record with sound.
+            Keep recordings small: start recording just before the recipe begins and stop right
+            after. If a recording is too big, trim it in your Gallery (edit ✂) before sharing.
           </p>
         </div>
       </details>

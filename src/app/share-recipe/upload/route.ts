@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /** POST target for the PWA share sheet: video files land here. */
 export async function POST(request: Request) {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   if (file instanceof File && file.size > 0) {
     if (file.type.startsWith("video/")) {
-      if (file.size > 100 * 1024 * 1024)
+      if (file.size > 300 * 1024 * 1024)
         return NextResponse.redirect(`${origin}/share-recipe?err=too-big`, 303);
       const supabase = await createClient();
       const ext = file.name.split(".").pop() || "mp4";

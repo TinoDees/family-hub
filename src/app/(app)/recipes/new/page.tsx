@@ -3,7 +3,7 @@ import { requireModule } from "@/lib/module-guard";
 import { NewRecipeClient } from "@/components/new-recipe-client";
 
 // video → recipe can take a while (upload + Gemini processing)
-export const maxDuration = 150;
+export const maxDuration = 300;
 
 export default async function NewRecipePage({
   searchParams,

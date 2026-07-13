@@ -155,8 +155,8 @@ export async function recipeFromVideo(storagePath: string): Promise<VideoRecipeR
       { file_data: { mime_type: mime, file_uri: fileUri } },
       key
     );
-    if (result.ok) {
-      // keep the video so the recipe card can play it later
+    if (result.ok && bytes.length <= 140 * 1024 * 1024) {
+      // keep the video so the recipe card can play it later (skip huge recordings)
       const ext = storagePath.split(".").pop() || "mp4";
       const keepPath = `${membership.household_id}/${crypto.randomUUID()}.${ext}`;
       const { error: keepErr } = await supabase.storage
