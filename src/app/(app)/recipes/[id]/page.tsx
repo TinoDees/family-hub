@@ -6,6 +6,7 @@ import { deleteRecipe } from "@/lib/actions/recipes";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { RecipeScaler } from "@/components/recipe-scaler";
 import { RecipePhotoUploader } from "@/components/recipe-photo-uploader";
+import { CookMode } from "@/components/cook-mode";
 import { setHeroPhoto, deleteRecipePhoto } from "@/lib/actions/recipe-photos";
 
 function MethodSteps({ instructions }: { instructions: string }) {
@@ -103,7 +104,9 @@ export default async function RecipePage({
             )}
           </div>
         </div>
-        {access === "edit" && (
+        <div className="flex items-center gap-2">
+          <CookMode />
+          {access === "edit" && (
           <div className="flex items-center gap-2">
             <Link href={`/recipes/${recipe.id}/edit`} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
               Edit
@@ -117,7 +120,8 @@ export default async function RecipePage({
               />
             </form>
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {((photos ?? []).length > 0 || access === "edit") && (
