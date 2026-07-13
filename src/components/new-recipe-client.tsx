@@ -202,7 +202,7 @@ export function NewRecipeClient({
           </button>
         </div>
         <span className="w-full text-xs text-stone-400">
-          Cookbook pages, screenshots, saved videos, YouTube links — or any recipe website link. On Android you can share a page straight to the Nestly app.
+          Cookbook pages, screenshots, saved videos, YouTube links — or any recipe website link. Handwritten notes work too: take a normal photo and use &ldquo;From a screenshot&rdquo;, or untick B&amp;W in the scanner.
         </span>
       </div>
 

@@ -28,16 +28,16 @@ export function IngredientEditor({ initial }: { initial?: IngredientRow[] }) {
       }))
   );
 
-  const cell = "rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm";
+  const cell = "min-w-0 w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm";
 
   return (
     <div className="space-y-2">
       <input type="hidden" name="ingredients_json" value={json} />
-      <div className="grid grid-cols-[5rem_5rem_1fr_1fr_2rem] gap-2 text-xs font-medium text-stone-400">
+      <div className="grid grid-cols-[3.5rem_3.5rem_minmax(0,1.4fr)_minmax(0,1fr)_1.5rem] gap-2 text-xs font-medium text-stone-400">
         <span>Qty</span><span>Unit</span><span>Ingredient</span><span>Note</span><span />
       </div>
       {rows.map((r, i) => (
-        <div key={i} className="grid grid-cols-[5rem_5rem_1fr_1fr_2rem] gap-2">
+        <div key={i} className="grid grid-cols-[3.5rem_3.5rem_minmax(0,1.4fr)_minmax(0,1fr)_1.5rem] gap-2">
           <input value={r.qty} onChange={(e) => update(i, "qty", e.target.value)} placeholder="500" className={cell} inputMode="decimal" />
           <input value={r.unit} onChange={(e) => update(i, "unit", e.target.value)} placeholder="g" className={cell} />
           <input value={r.name} onChange={(e) => update(i, "name", e.target.value)} placeholder="beef mince" className={cell} />
