@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { claimHeroIfEmpty } from "@/lib/actions/recipe-photos";
 
 async function resizeImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);

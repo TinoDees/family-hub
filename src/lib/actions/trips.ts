@@ -205,7 +205,7 @@ export async function addExpense(formData: FormData) {
   if (error || !expense) redirect(`${back}?error=${enc(error?.message ?? "Could not save")}`);
 
   // shares: exact when items are allocated, else equal
-  type ItemIn = { description: string; amount: number; consumed_by?: string | null };
+  type ItemIn = { description: string; amount: number; original_amount?: number | null; consumed_by?: string | null };
   let items: ItemIn[] = [];
   try {
     items = JSON.parse(String(formData.get("items_json") || "[]"));
@@ -233,6 +233,8 @@ export async function addExpense(formData: FormData) {
           position: idx,
           description: String(i.description).slice(0, 200),
           amount: Math.round(i.amount * 100) / 100,
+          original_amount:
+            typeof i.original_amount === "number" ? Math.round(i.original_amount * 100) / 100 : null,
         }))
       );
     }
@@ -275,6 +277,8 @@ export async function addExpense(formData: FormData) {
         position: idx,
         description: String(i.description).slice(0, 200),
         amount: Math.round(i.amount * 100) / 100,
+        original_amount:
+          typeof i.original_amount === "number" ? Math.round(i.original_amount * 100) / 100 : null,
         consumed_by: i.consumed_by || null,
       }))
     );

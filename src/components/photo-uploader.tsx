@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 /** Downscale an image in the browser to max 1600px, WebP ~80%. */
 async function resizeImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);

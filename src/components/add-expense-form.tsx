@@ -10,11 +10,11 @@ import { SubmitButton } from "@/components/submit-button";
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
 
 type Participant = { id: string; name: string };
-type Item = { description: string; amount: number; consumed_by: string };
+type Item = { description: string; amount: number; original_amount?: number; consumed_by: string };
 
 async function toResizedBase64(file: File): Promise<{ data: string; mediaType: string }> {
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
@@ -256,7 +256,14 @@ export function AddExpenseForm({
                     </span>
                   )}
                 </span>
-                <span className="w-20 text-right text-sm font-medium">{money(i.amount)}</span>
+                <span className="whitespace-nowrap text-right text-sm">
+                  {i.original_amount != null && originalCurrency && (
+                    <span className="mr-1.5 text-xs text-stone-400">
+                      {originalCurrency} {i.original_amount.toLocaleString()}
+                    </span>
+                  )}
+                  <span className="font-medium">{money(i.amount)}</span>
+                </span>
                 <select
                   value={i.consumed_by}
                   onChange={(e) => {

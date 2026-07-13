@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { saveExpenseSplit, resetEqualSplit } from "@/lib/actions/split";
 
 type Participant = { id: string; name: string };
-type Item = { id: string; description: string; amount: number; consumed_by: string | null };
+type Item = { id: string; description: string; amount: number; original_amount?: number; consumed_by: string | null };
 
 function money(n: number, currency: string) {
   return new Intl.NumberFormat("en-AU", { style: "currency", currency, currencyDisplay: "narrowSymbol" }).format(n);
@@ -17,6 +17,7 @@ export function ExpenseSplitModal({
   currentShareIds,
   currency,
   receiptUrl,
+  originalCurrency,
 }: {
   expense: { id: string; description: string; amount: number };
   items: Item[];
@@ -24,6 +25,7 @@ export function ExpenseSplitModal({
   currentShareIds: string[];
   currency: string;
   receiptUrl?: string;
+  originalCurrency?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [alloc, setAlloc] = useState<Record<string, string>>(
@@ -105,7 +107,14 @@ export function ExpenseSplitModal({
                 {items.map((i) => (
                   <div key={i.id} className="flex items-center gap-2 rounded-lg border border-stone-100 px-3 py-1.5">
                     <span className="flex-1 truncate text-sm">{i.description}</span>
-                    <span className="w-20 text-right text-sm font-medium">{money(Number(i.amount), currency)}</span>
+                    <span className="whitespace-nowrap text-right text-sm">
+                      {i.original_amount != null && originalCurrency && (
+                        <span className="mr-1.5 text-xs text-stone-400">
+                          {originalCurrency} {i.original_amount.toLocaleString()}
+                        </span>
+                      )}
+                      <span className="font-medium">{money(Number(i.amount), currency)}</span>
+                    </span>
                     <select
                       value={alloc[i.id] ?? ""}
                       onChange={(e) => setAlloc((a) => ({ ...a, [i.id]: e.target.value }))}

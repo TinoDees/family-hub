@@ -10,7 +10,7 @@ export type ScanResult = {
   merchant?: string | null;
   total?: number | null;
   date?: string | null;
-  items?: { description: string; amount: number }[];
+  items?: { description: string; amount: number; original_amount?: number }[];
   originalTotal?: number | null;
   originalCurrency?: string | null;
   fxRate?: number | null;
@@ -57,6 +57,12 @@ export async function scanReceipt(
     album = created;
   }
 
+  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mediaType)) {
+    return {
+      ok: false,
+      error: "That image format isn't readable (probably HEIC) — screenshot it and try again.",
+    };
+  }
   // store the image
   const bytes = Buffer.from(imageBase64, "base64");
   if (bytes.length > 5 * 1024 * 1024) return { ok: false, error: "Image too large" };
@@ -205,6 +211,7 @@ export async function scanReceipt(
               parsed.total = Math.round((parsed.total as number) * rate * 100) / 100;
               parsed.items = (parsed.items as { description: string; amount: number }[]).map((i) => ({
                 ...i,
+                original_amount: i.amount,
                 amount: Math.round(i.amount * rate * 100) / 100,
               }));
             }

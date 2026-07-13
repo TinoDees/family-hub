@@ -24,6 +24,13 @@ export async function scanRecipeImage(
 
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return { ok: false, error: "Recipe scanning needs ANTHROPIC_API_KEY" };
+  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mediaType)) {
+    return {
+      ok: false,
+      error:
+        "Your phone saved this photo in a format I can't read (probably HEIC). Quick fix: screenshot the photo and upload the screenshot — or set the camera to 'Most compatible' (JPEG).",
+    };
+  }
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {

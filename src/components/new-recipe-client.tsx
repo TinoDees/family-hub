@@ -14,7 +14,7 @@ const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), 
 async function toBase64(file: File): Promise<{ data: string; mediaType: string }> {
   // resize first — full-resolution photos exceed the server action size limit
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);

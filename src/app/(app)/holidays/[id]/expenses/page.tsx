@@ -47,10 +47,10 @@ export default async function TripExpensesPage({
   const { data: allItems } = expenseIds.length
     ? await supabase
         .from("trip_expense_items")
-        .select("id, expense_id, description, amount, consumed_by, position")
+        .select("id, expense_id, description, amount, original_amount, consumed_by, position")
         .in("expense_id", expenseIds)
         .order("position")
-    : { data: [] as { id: string; expense_id: string; description: string; amount: number; consumed_by: string | null; position: number }[] };
+    : { data: [] as { id: string; expense_id: string; description: string; amount: number; original_amount: number | null; consumed_by: string | null; position: number }[] };
   const itemsByExpense = new Map<string, typeof allItems>();
   for (const it of allItems ?? []) {
     itemsByExpense.set(it.expense_id, [...(itemsByExpense.get(it.expense_id) ?? []), it]);
@@ -225,8 +225,10 @@ export default async function TripExpensesPage({
                                 id: it.id,
                                 description: it.description,
                                 amount: Number(it.amount),
+                                original_amount: it.original_amount != null ? Number(it.original_amount) : undefined,
                                 consumed_by: it.consumed_by,
                               }))}
+                              originalCurrency={e.original_currency ?? undefined}
                               participants={pList.map((p) => ({ id: p.id, name: p.name }))}
                               currentShareIds={shareIdsByExpense.get(e.id) ?? []}
                               currency={currency}
