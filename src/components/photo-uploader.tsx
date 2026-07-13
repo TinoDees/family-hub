@@ -26,10 +26,14 @@ async function resizeImage(file: File): Promise<Blob> {
 export function PhotoUploader({
   householdId,
   albumId,
+  showVisibility = false,
 }: {
   householdId: string;
   albumId: string;
+  /** trip albums: let the uploader pick family-only vs everyone on the trip */
+  showVisibility?: boolean;
 }) {
+  const [visibility, setVisibility] = useState<"trip" | "household">("trip");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -59,6 +63,7 @@ export function PhotoUploader({
           household_id: householdId,
           album_id: albumId,
           storage_path: path,
+          visibility: showVisibility ? visibility : "trip",
         });
         if (rowErr) throw new Error(rowErr.message);
         done++;
@@ -91,6 +96,18 @@ export function PhotoUploader({
       >
         {busy ? progress || "Uploading…" : "📷 Add photos"}
       </label>
+      {showVisibility && (
+        <div className="mt-3 flex items-center justify-center gap-4 text-xs">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="photo-visibility" checked={visibility === "trip"} onChange={() => setVisibility("trip")} />
+            Everyone on the trip
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="photo-visibility" checked={visibility === "household"} onChange={() => setVisibility("household")} />
+            Family only
+          </label>
+        </div>
+      )}
       <p className="mt-2 text-xs text-stone-400">
         Photos are resized on your device before upload — fast even on holiday Wi-Fi.
       </p>

@@ -60,33 +60,54 @@ export async function addGuestExpense(formData: FormData) {
   if (error || !expense)
     redirect(`${back}?error=${encodeURIComponent(error?.message ?? "Could not save")}`);
 
-  const cents = Math.round(amount * 100);
-  const base = Math.floor(cents / sharedWith.length);
-  const remainder = cents - base * sharedWith.length;
-  const { error: shareErr } = await supabase.from("trip_expense_shares").insert(
-    sharedWith.map((pid, i) => ({
-      expense_id: expense.id,
-      participant_id: pid,
-      amount: (base + (i < remainder ? 1 : 0)) / 100,
-    }))
-  );
-  if (shareErr) redirect(`${back}?error=${encodeURIComponent(shareErr.message)}`);
-  // optional line items (from receipt scan)
-  let items: { description: string; amount: number }[] = [];
+  // shares: exact when items are allocated, else equal
+  type ItemIn = { description: string; amount: number; consumed_by?: string | null };
+  let items: ItemIn[] = [];
   try {
     items = JSON.parse(String(formData.get("items_json") || "[]"));
   } catch {}
-  if (Array.isArray(items) && items.length > 0) {
+  items = (Array.isArray(items) ? items : [])
+    .filter((i) => i && i.description && typeof i.amount === "number")
+    .slice(0, 100);
+
+  const cents = Math.round(amount * 100);
+  const perParticipant = new Map<string, number>();
+  let allocatedCents = 0;
+  for (const i of items) {
+    if (i.consumed_by) {
+      const c = Math.round(i.amount * 100);
+      perParticipant.set(i.consumed_by, (perParticipant.get(i.consumed_by) ?? 0) + c);
+      allocatedCents += c;
+    }
+  }
+  const poolCents = cents - allocatedCents;
+  if (poolCents < 0) {
+    await supabase.from("trip_expenses").delete().eq("id", expense.id);
+    redirect(`${back}?error=${encodeURIComponent("Allocated items exceed the bill total")}`);
+  }
+  if (poolCents > 0) {
+    const base = Math.floor(poolCents / sharedWith.length);
+    const remainder = poolCents - base * sharedWith.length;
+    sharedWith.forEach((pid, i) => {
+      perParticipant.set(pid, (perParticipant.get(pid) ?? 0) + base + (i < remainder ? 1 : 0));
+    });
+  }
+  const shares = [...perParticipant.entries()]
+    .filter(([, c]) => c > 0)
+    .map(([pid, c]) => ({ expense_id: expense.id, participant_id: pid, amount: c / 100 }));
+
+  const { error: shareErr } = await supabase.from("trip_expense_shares").insert(shares);
+  if (shareErr) redirect(`${back}?error=${encodeURIComponent(shareErr.message)}`);
+
+  if (items.length > 0) {
     await supabase.from("trip_expense_items").insert(
-      items
-        .filter((i) => i && i.description && typeof i.amount === "number")
-        .slice(0, 100)
-        .map((i, idx) => ({
-          expense_id: expense.id,
-          position: idx,
-          description: String(i.description).slice(0, 200),
-          amount: Math.round(i.amount * 100) / 100,
-        }))
+      items.map((i, idx) => ({
+        expense_id: expense.id,
+        position: idx,
+        description: String(i.description).slice(0, 200),
+        amount: Math.round(i.amount * 100) / 100,
+        consumed_by: i.consumed_by || null,
+      }))
     );
   }
 

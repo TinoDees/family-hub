@@ -73,7 +73,7 @@ export default async function TripPhotosPage({
             This album also appears in the{" "}
             <Link href="/photos" className="underline">Photo Album</Link> module.
           </p>
-          {canEdit && <PhotoUploader householdId={membership.household_id} albumId={album.id} />}
+          {canEdit && <PhotoUploader householdId={membership.household_id} albumId={album.id} showVisibility />}
           {(photos ?? []).length === 0 ? (
             <div className="rounded-xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-400">
               No photos yet.
