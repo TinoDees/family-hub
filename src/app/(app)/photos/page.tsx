@@ -15,7 +15,7 @@ export default async function PhotosPage({
   const supabase = await createClient();
   const { data: albums } = await supabase
     .from("albums")
-    .select("id, name, description, created_at, photos(count)")
+    .select("id, name, description, created_at, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos(count)")
     .eq("household_id", membership.household_id)
     .order("created_at", { ascending: false });
 
@@ -26,6 +26,10 @@ export default async function PhotosPage({
     .eq("household_id", membership.household_id)
     .order("created_at", { ascending: true });
   const coverPath = new Map<string, string>();
+  for (const a of albums ?? []) {
+    const heroPath = (a.hero as unknown as { storage_path: string } | null)?.storage_path;
+    if (heroPath) coverPath.set(a.id, heroPath);
+  }
   for (const p of covers ?? []) {
     if (!coverPath.has(p.album_id)) coverPath.set(p.album_id, p.storage_path);
   }

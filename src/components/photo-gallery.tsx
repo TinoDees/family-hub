@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { bulkDeletePhotos, updatePhotoCaptions } from "@/lib/actions/photos-bulk";
+import { bulkDeletePhotos, updatePhotoCaptions, setAlbumHero } from "@/lib/actions/photos-bulk";
 
 export type GalleryPhoto = { id: string; url: string | null; caption: string | null; isReceipt: boolean };
 
@@ -130,6 +130,25 @@ export function PhotoGallery({
                 className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
               >
                 {pending ? "Deleting…" : "🗑 Delete"}
+              </button>
+              <button
+                type="button"
+                disabled={
+                  selected.size !== 1 ||
+                  photos.find((p) => selected.has(p.id))?.isReceipt === true
+                }
+                onClick={() => {
+                  const id = [...selected][0];
+                  startTransition(async () => {
+                    const res = await setAlbumHero(id);
+                    setMsg(res.ok ? "Hero picture set ★" : (res.error ?? "Failed"));
+                    exitSelect();
+                    router.refresh();
+                  });
+                }}
+                className="rounded-lg border border-amber-300 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+              >
+                ★ Hero
               </button>
               <button
                 type="button"

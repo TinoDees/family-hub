@@ -39,3 +39,20 @@ export async function updatePhotoCaptions(
   revalidatePath("/photos");
   return { ok: true };
 }
+
+export async function setAlbumHero(photoId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: photo } = await supabase
+    .from("photos")
+    .select("id, album_id")
+    .eq("id", photoId)
+    .maybeSingle();
+  if (!photo) return { ok: false, error: "Photo not found" };
+  const { error } = await supabase
+    .from("albums")
+    .update({ hero_photo_id: photo.id })
+    .eq("id", photo.album_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/photos");
+  return { ok: true };
+}

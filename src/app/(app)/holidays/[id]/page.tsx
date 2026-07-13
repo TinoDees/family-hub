@@ -59,7 +59,11 @@ export default async function TripOverviewPage({
       .from("trip_expenses")
       .select("id, amount, original_amount, original_currency")
       .eq("trip_id", id),
-    supabase.from("albums").select("id, photos(count)").eq("trip_id", id).maybeSingle(),
+    supabase
+      .from("albums")
+      .select("id, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos(count)")
+      .eq("trip_id", id)
+      .maybeSingle(),
     supabase.from("trip_fx_rates").select("currency, agreed_rate").eq("trip_id", id),
     supabase
       .from("trip_invites")
@@ -84,6 +88,12 @@ export default async function TripOverviewPage({
     }
   }
   const photoCount = (album?.photos as unknown as { count: number }[])?.[0]?.count ?? 0;
+  let heroUrl: string | null = null;
+  const heroPath = (album?.hero as unknown as { storage_path: string } | null)?.storage_path;
+  if (heroPath) {
+    const { data: heroSigned } = await supabase.storage.from("photos").createSignedUrl(heroPath, 3600);
+    heroUrl = heroSigned?.signedUrl ?? null;
+  }
   const inviteFor = new Map(
     (invites ?? [])
       .filter((i) => new Date(i.expires_at) > new Date())
@@ -152,11 +162,17 @@ export default async function TripOverviewPage({
             <span className="font-medium text-stone-700">{formatMoney(total, currency)}</span> total
           </div>
         </Link>
-        <Link href={`/holidays/${trip.id}/photos`} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-          <div className="text-2xl">📷</div>
-          <div className="mt-2 font-medium">Trip photos</div>
-          <div className="mt-1 text-sm text-stone-500">
-            {photoCount} photo{photoCount === 1 ? "" : "s"} — also in the Photo Album
+        <Link href={`/holidays/${trip.id}/photos`} className="relative overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+          {heroUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={heroUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />
+          )}
+          <div className={heroUrl ? "relative bg-gradient-to-t from-black/70 via-black/20 to-transparent p-5 text-white" : "p-5"}>
+            <div className="text-2xl">📷</div>
+            <div className="mt-2 font-medium">Trip photos</div>
+            <div className={`mt-1 text-sm ${heroUrl ? "text-white/80" : "text-stone-500"}`}>
+              {photoCount} photo{photoCount === 1 ? "" : "s"} — also in the Photo Album
+            </div>
           </div>
         </Link>
       </div>

@@ -300,6 +300,21 @@ export default async function TripExpensesPage({
               <h2 className="text-sm font-semibold">Spend by family</h2>
               <span className="text-sm font-medium">{formatMoney(total, currency)}</span>
             </div>
+            {fxContext && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 bg-stone-50 px-4 py-2">
+                <span className="text-sm font-semibold">
+                  💱 1 {currency} = {(1 / (fxContext.agreed ?? fxContext.market!)).toFixed(2)} {fxContext.cur}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${fxContext.agreed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                  {fxContext.agreed ? "agreed rate" : "official (no agreed rate set)"}
+                </span>
+                {fxContext.agreed && fxContext.market && (
+                  <span className="rounded-full bg-stone-200 px-2 py-0.5 text-xs text-stone-600">
+                    official {(1 / fxContext.market).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            )}
             {(families ?? []).length === 0 ? (
               <p className="px-4 py-4 text-center text-sm text-stone-400">No families set up yet — see Overview.</p>
             ) : (
@@ -353,28 +368,20 @@ export default async function TripExpensesPage({
                 </div>
               ) : null;
             })()}
-            {fxContext && (
-              <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-500">
-                Rates ({fxContext.cur}):{" "}
-                {fxContext.agreed ? (
-                  <>agreed <span className="font-medium">1 {currency} = {(1 / fxContext.agreed).toFixed(2)} {fxContext.cur}</span></>
-                ) : (
-                  "no agreed rate set"
-                )}
-                {fxContext.market && (
-                  <span className="ml-1.5 rounded-full bg-stone-100 px-2 py-0.5">
-                    official 1 {currency} = {(1 / fxContext.market).toFixed(2)} {fxContext.cur}
-                  </span>
-                )}
-              </p>
-            )}
             <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-400">
               Click a family for the itemised breakdown.
             </p>
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <h2 className="text-sm font-semibold">Balances</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Balances</h2>
+              {fxContext && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
+                  💱 1 {currency} = {(1 / (fxContext.agreed ?? fxContext.market!)).toFixed(2)} {fxContext.cur}
+                </span>
+              )}
+            </div>
             <ul className="mt-3 space-y-1.5 text-sm">
               {balances.map((b) => (
                 <li key={b.participantId} className="flex items-center justify-between">
