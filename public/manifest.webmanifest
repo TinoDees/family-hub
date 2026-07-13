@@ -7,12 +7,16 @@
   "background_color": "#fafaf9",
   "theme_color": "#2bb3a6",
   "share_target": {
-    "action": "/share-recipe",
-    "method": "GET",
+    "action": "/share-recipe/upload",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        { "name": "media", "accept": ["video/*", "image/*"] }
+      ]
     }
   },
   "icons": [

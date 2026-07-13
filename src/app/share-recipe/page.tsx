@@ -15,10 +15,10 @@ function extractUrl(...candidates: (string | undefined)[]): string | undefined {
 export default async function ShareRecipePage({
   searchParams,
 }: {
-  searchParams: Promise<{ url?: string; text?: string; title?: string }>;
+  searchParams: Promise<{ url?: string; text?: string; title?: string; video?: string; err?: string }>;
 }) {
   const { membership } = await requireModule("recipes", "edit");
-  const { url, text, title } = await searchParams;
+  const { url, text, title, video, err } = await searchParams;
   const shared = extractUrl(url, text, title);
 
   return (
@@ -32,12 +32,26 @@ export default async function ShareRecipePage({
         </Link>
       </header>
       <main className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
-        {!shared && (
-          <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
-            Share a recipe page to Nestly, or paste the link below.
+        {err === "too-big" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            That video is over 100 MB — trim it or share a shorter clip.
           </p>
         )}
-        <NewRecipeClient householdId={membership.household_id} initialUrl={shared} />
+        {err === "upload" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            Upload failed — try again.
+          </p>
+        )}
+        {!shared && !video && !err && (
+          <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            Share a recipe page or a saved video to Nestly, or paste a link below.
+          </p>
+        )}
+        <NewRecipeClient
+          householdId={membership.household_id}
+          initialUrl={shared}
+          initialVideoPath={video}
+        />
       </main>
     </div>
   );

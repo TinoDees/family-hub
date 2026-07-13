@@ -22,10 +22,13 @@ async function toBase64(file: File): Promise<{ data: string; mediaType: string }
 export function NewRecipeClient({
   householdId,
   initialUrl,
+  initialVideoPath,
 }: {
   householdId: string;
   /** pre-filled by the Android share target — auto-reads on load */
   initialUrl?: string;
+  /** a video file already uploaded by the share target — auto-processes */
+  initialVideoPath?: string;
 }) {
   const [youtubeUrl, setYoutubeUrl] = useState(initialUrl ?? "");
   const [autoRan, setAutoRan] = useState(false);
@@ -104,10 +107,23 @@ export function NewRecipeClient({
     }
   };
 
-  // share-target flow: auto-read the shared link once
-  if (initialUrl && !autoRan) {
+  // share-target flow: auto-read the shared link / video once
+  if ((initialUrl || initialVideoPath) && !autoRan) {
     setAutoRan(true);
-    setTimeout(() => onLink(initialUrl), 0);
+    if (initialVideoPath) {
+      setTimeout(async () => {
+        setScanning(true);
+        setMsg("Watching your shared video… this takes up to a minute.");
+        try {
+          const res = await recipeFromVideo(initialVideoPath);
+          applyResult(res);
+        } finally {
+          setScanning(false);
+        }
+      }, 0);
+    } else if (initialUrl) {
+      setTimeout(() => onLink(initialUrl), 0);
+    }
   }
 
   // also allow choosing an existing photo/screenshot (e.g. TikTok caption screenshot)

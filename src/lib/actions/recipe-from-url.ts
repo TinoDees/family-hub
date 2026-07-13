@@ -100,6 +100,32 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
   const clean = url.trim();
   if (!/^https?:\/\//i.test(clean)) return { ok: false, error: "That doesn't look like a link" };
 
+  // TikTok: the caption (via public oEmbed) very often contains the whole recipe
+  if (/tiktok\.com\//i.test(clean)) {
+    try {
+      const oe = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(clean)}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (oe.ok) {
+        const meta = await oe.json();
+        const caption: string = meta?.title ?? "";
+        if (caption.trim().length > 80) {
+          const fromCaption = await readTextWithClaude(
+            `TikTok video caption by ${meta?.author_name ?? "unknown"}:\n${caption}`
+          );
+          if (fromCaption.ok) return fromCaption;
+        }
+      }
+    } catch {
+      /* fall through to page fetch */
+    }
+    return {
+      ok: false,
+      error:
+        "This TikTok's caption doesn't contain the recipe. Save the video (Share → Save video) and share the file to Nestly instead — I'll watch it.",
+    };
+  }
+
   let html = "";
   try {
     const res = await fetch(clean, {
@@ -124,15 +150,24 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
     }
   }
 
-  // 2. fall back to Claude over the page text
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { ok: false, error: "No structured recipe found and ANTHROPIC_API_KEY is not set" };
-  const text = html
+  // 2. fall back to Claude over the page text (og: description tags included —
+  //    that's where Facebook/Instagram put captions when pages are JS-rendered)
+  const ogParts = [...html.matchAll(/<meta[^>]+(?:property|name)=["']og:(?:title|description)["'][^>]+content=["']([^"']+)["']/gi)]
+    .map((m) => m[1])
+    .join("\n");
+  const text = (ogParts + "\n" + html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, " "))
     .slice(0, 30000);
+  return readTextWithClaude(text);
+}
+
+/** Claude over plain text → our recipe schema. */
+async function readTextWithClaude(text: string): Promise<ScannedRecipe> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return { ok: false, error: "No structured recipe found and ANTHROPIC_API_KEY is not set" };
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
