@@ -56,6 +56,7 @@ export function AddExpenseForm({
   const [sharedWith, setSharedWith] = useState<Set<string>>(new Set(initialParticipants.map((p) => p.id)));
   const [scanning, setScanning] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const isGuest = Boolean(guestParticipantId);
 
@@ -157,14 +158,45 @@ export function AddExpenseForm({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Add expense</h2>
-          <button
-            type="button"
-            disabled={scanning}
-            onClick={() => setScannerOpen(true)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${scanning ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
-          >
-            {scanning ? "Reading…" : "📷 Scan receipt"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={scanning}
+              onClick={() => setScannerOpen(true)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${scanning ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
+            >
+              {scanning ? "Reading…" : "📷 Scan receipt"}
+            </button>
+            <label className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium ${scanning ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}>
+              🖼 From library
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={scanning}
+                onChange={(e) => e.target.files?.[0] && onReceipt(e.target.files[0])}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file && file.type.startsWith("image/") && !scanning) onReceipt(file);
+          }}
+          className={`hidden items-center justify-center rounded-lg border border-dashed px-3 py-2 text-xs transition-colors sm:flex ${
+            dragOver ? "border-sky-400 bg-sky-50 text-sky-700" : "border-stone-200 text-stone-400"
+          }`}
+        >
+          {dragOver ? "Drop it — I'll read it" : "…or drag a receipt image anywhere here"}
         </div>
         {scanMsg && <p className="rounded-lg bg-sky-50 px-3 py-1.5 text-xs text-sky-800">{scanMsg}</p>}
 
