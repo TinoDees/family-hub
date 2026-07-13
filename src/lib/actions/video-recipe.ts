@@ -5,7 +5,8 @@ import { requireModule } from "@/lib/module-guard";
 import type { ScannedRecipe } from "@/lib/actions/recipe-scan";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com";
-const MODEL = "gemini-2.5-flash";
+// newest first — older ones get retired for new API accounts
+const MODELS = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
 
 const RECIPE_PROMPT = `Watch this cooking video (including the narration and any on-screen text) and write the recipe. Reply with ONLY a JSON object, no other text:
 {"name": string, "description": string|null, "servings": number|null,
@@ -43,16 +44,21 @@ function parseRecipeJson(text: string): ScannedRecipe {
 }
 
 async function generateFromPart(part: unknown, key: string): Promise<ScannedRecipe> {
-  const res = await fetch(`${GEMINI_BASE}/v1beta/models/${MODEL}:generateContent?key=${key}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [part, { text: RECIPE_PROMPT }] }],
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    return { ok: false, error: `Gemini failed (${res.status}): ${body.slice(0, 200)}` };
+  let res: Response | null = null;
+  for (const model of MODELS) {
+    res = await fetch(`${GEMINI_BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [part, { text: RECIPE_PROMPT }] }],
+      }),
+    });
+    if (res.ok) break;
+    if (res.status !== 404) break; // real error — don't mask it by model-hopping
+  }
+  if (!res || !res.ok) {
+    const body = res ? await res.text() : "";
+    return { ok: false, error: `Gemini failed (${res?.status}): ${body.slice(0, 200)}` };
   }
   const data = await res.json();
   const text: string =

@@ -25,7 +25,7 @@ export default async function ShareRecipePage({
     <div className="min-h-screen bg-stone-50">
       <header className="flex items-center gap-2 border-b border-stone-200 bg-white px-4 py-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon-192.png" alt="Nestly" className="h-8 w-8 rounded-lg" />
+        <img src="/nestly-icon-192.png" alt="Nestly" className="h-8 w-8 rounded-lg" />
         <div className="text-sm font-semibold">Nestly — save a recipe</div>
         <Link href="/recipes" className="ml-auto text-sm text-stone-500 underline">
           Recipes
