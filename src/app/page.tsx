@@ -10,5 +10,16 @@ export default async function Home() {
   if (!user) redirect("/login");
 
   const membership = await getMembership();
-  redirect(membership ? "/dashboard" : "/onboarding");
+  if (membership) redirect("/dashboard");
+
+  // no household — maybe a trip guest?
+  const { data: participation } = await supabase
+    .from("trip_participants")
+    .select("trip_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+  if (participation) redirect(`/guest/${participation.trip_id}`);
+
+  redirect("/onboarding");
 }

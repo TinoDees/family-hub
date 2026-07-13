@@ -2,12 +2,15 @@ import Link from "next/link";
 import { requireModule } from "@/lib/module-guard";
 import { NewRecipeClient } from "@/components/new-recipe-client";
 
+// video → recipe can take a while (upload + Gemini processing)
+export const maxDuration = 150;
+
 export default async function NewRecipePage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  await requireModule("recipes", "edit");
+  const { membership } = await requireModule("recipes", "edit");
   const { error } = await searchParams;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -16,7 +19,7 @@ export default async function NewRecipePage({
         <h1 className="text-2xl font-semibold">New recipe</h1>
       </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <NewRecipeClient />
+      <NewRecipeClient householdId={membership.household_id} />
     </div>
   );
 }

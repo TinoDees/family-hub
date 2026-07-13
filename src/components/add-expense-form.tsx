@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { addExpense } from "@/lib/actions/trips";
+import { addGuestExpense } from "@/lib/actions/guest-trip";
 import { scanReceipt } from "@/lib/actions/receipts";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
@@ -35,9 +36,12 @@ const inputCls =
 export function AddExpenseForm({
   tripId,
   participants,
+  guestParticipantId,
 }: {
   tripId: string;
   participants: Participant[];
+  /** set for trip guests: locks payer to themselves and uses the guest action */
+  guestParticipantId?: string;
 }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -83,7 +87,7 @@ export function AddExpenseForm({
           }}
         />
       )}
-    <form action={addExpense} className="space-y-3 rounded-xl border border-stone-200 bg-white p-5">
+    <form action={guestParticipantId ? addGuestExpense : addExpense} className="space-y-3 rounded-xl border border-stone-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Add expense</h2>
         <button
@@ -133,14 +137,16 @@ export function AddExpenseForm({
             className={inputCls}
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium">Paid by</label>
-          <select name="paid_by" className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
-            {participants.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
+        {!guestParticipantId && (
+          <div>
+            <label className="mb-1 block text-xs font-medium">Paid by</label>
+            <select name="paid_by" className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+              {participants.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div>
         <div className="mb-1 text-xs font-medium">Split between</div>

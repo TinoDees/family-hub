@@ -21,16 +21,16 @@ export async function scanReceipt(
   imageBase64: string,
   mediaType: string
 ): Promise<ScanResult> {
-  const { membership } = await requireModule("holidays", "edit");
   const supabase = await createClient();
 
+  // RLS decides who can see the trip: household members AND trip guests.
   const { data: trip } = await supabase
     .from("trips")
-    .select("id, name")
+    .select("id, name, household_id")
     .eq("id", tripId)
-    .eq("household_id", membership.household_id)
     .maybeSingle();
   if (!trip) return { ok: false, error: "Trip not found" };
+  const householdId = trip.household_id;
 
   // ensure the trip album exists (also feeds the Photo Album module)
   let { data: album } = await supabase
@@ -42,7 +42,7 @@ export async function scanReceipt(
     const { data: created, error } = await supabase
       .from("albums")
       .insert({
-        household_id: membership.household_id,
+        household_id: householdId,
         name: trip.name,
         description: "Trip album",
         trip_id: trip.id,
@@ -57,7 +57,7 @@ export async function scanReceipt(
   const bytes = Buffer.from(imageBase64, "base64");
   if (bytes.length > 5 * 1024 * 1024) return { ok: false, error: "Image too large" };
   const ext = mediaType === "image/png" ? "png" : mediaType === "image/jpeg" ? "jpg" : "webp";
-  const path = `${membership.household_id}/${album.id}/receipt-${crypto.randomUUID()}.${ext}`;
+  const path = `${householdId}/${album.id}/receipt-${crypto.randomUUID()}.${ext}`;
   const { error: upErr } = await supabase.storage
     .from("photos")
     .upload(path, bytes, { contentType: mediaType });
@@ -66,7 +66,7 @@ export async function scanReceipt(
   const { data: photo, error: rowErr } = await supabase
     .from("photos")
     .insert({
-      household_id: membership.household_id,
+      household_id: householdId,
       album_id: album.id,
       storage_path: path,
       caption: "Receipt",

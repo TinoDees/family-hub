@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { RecipeForm } from "@/components/recipe-form";
 import { createRecipe } from "@/lib/actions/recipes";
 import { scanRecipeImage, type ScannedRecipe } from "@/lib/actions/recipe-scan";
+import { recipeFromVideo, recipeFromYouTube } from "@/lib/actions/video-recipe";
+import { createClient } from "@/lib/supabase/client";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
 
@@ -16,7 +18,8 @@ async function toBase64(file: File): Promise<{ data: string; mediaType: string }
   return { data: btoa(binary), mediaType: file.type || "image/jpeg" };
 }
 
-export function NewRecipeClient() {
+export function NewRecipeClient({ householdId }: { householdId: string }) {
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,6 +40,54 @@ export function NewRecipeClient() {
       setScanned(res);
       setVersion((v) => v + 1);
       setMsg(`Read "${res.name}" — check everything, then save.`);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const applyResult = (res: ScannedRecipe) => {
+    if (!res.ok) {
+      setMsg(res.error ?? "Could not read the recipe");
+      return;
+    }
+    setScanned(res);
+    setVersion((v) => v + 1);
+    setMsg(`Read "${res.name}" — check everything, then save.`);
+  };
+
+  const onVideo = async (file: File) => {
+    if (file.size > 100 * 1024 * 1024) {
+      setMsg("Video too large (max 100 MB) — trim it or use a shorter clip.");
+      return;
+    }
+    setScanning(true);
+    setMsg("Uploading video…");
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() || "mp4";
+      const path = `${householdId}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("video-temp")
+        .upload(path, file, { contentType: file.type || "video/mp4" });
+      if (error) {
+        setMsg(`Upload failed: ${error.message}`);
+        return;
+      }
+      setMsg("Watching the video… this takes up to a minute.");
+      const res = await recipeFromVideo(path);
+      applyResult(res);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const onYouTube = async () => {
+    if (!youtubeUrl.trim()) return;
+    setScanning(true);
+    setMsg("Watching the video… this takes up to a minute.");
+    try {
+      const res = await recipeFromYouTube(youtubeUrl);
+      applyResult(res);
     } finally {
       setScanning(false);
     }
@@ -85,8 +136,34 @@ export function NewRecipeClient() {
             onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])}
           />
         </label>
-        <span className="text-xs text-stone-400">
-          Cookbook pages, recipe cards, or screenshots of TikTok/Instagram captions.
+        <label className="cursor-pointer rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-100">
+          🎬 From a video
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            disabled={scanning}
+            onChange={(e) => e.target.files?.[0] && onVideo(e.target.files[0])}
+          />
+        </label>
+        <div className="flex min-w-64 flex-1 items-center gap-2">
+          <input
+            value={youtubeUrl}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
+            placeholder="…or paste a YouTube link"
+            className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm placeholder:text-stone-400"
+          />
+          <button
+            type="button"
+            disabled={scanning || !youtubeUrl.trim()}
+            onClick={onYouTube}
+            className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-100 disabled:opacity-40"
+          >
+            Read
+          </button>
+        </div>
+        <span className="w-full text-xs text-stone-400">
+          Cookbook pages, screenshots of TikTok/Instagram captions, saved videos (TikTok → Save video → upload here), or YouTube links.
         </span>
       </div>
       {msg && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">{msg}</p>}

@@ -201,3 +201,35 @@ export async function createTripAlbum(formData: FormData) {
   revalidatePath(`/holidays/${tripId}/photos`);
   redirect(`/holidays/${tripId}/photos`);
 }
+
+export async function createTripInvite(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const tripId = String(formData.get("trip_id"));
+  const participantId = String(formData.get("participant_id"));
+  const supabase = await createClient();
+
+  const { data: participant } = await supabase
+    .from("trip_participants")
+    .select("id, user_id")
+    .eq("id", participantId)
+    .eq("trip_id", tripId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!participant) redirect(`/holidays/${tripId}?error=Participant+not+found`);
+  if (participant.user_id) redirect(`/holidays/${tripId}?error=Already+claimed`);
+
+  // one live invite per participant
+  await supabase
+    .from("trip_invites")
+    .delete()
+    .eq("participant_id", participantId)
+    .is("accepted_at", null);
+  const { error } = await supabase.from("trip_invites").insert({
+    trip_id: tripId,
+    participant_id: participantId,
+    household_id: membership.household_id,
+  });
+  if (error) redirect(`/holidays/${tripId}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(`/holidays/${tripId}`);
+  redirect(`/holidays/${tripId}`);
+}

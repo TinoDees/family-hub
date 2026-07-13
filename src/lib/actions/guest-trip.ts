@@ -1,0 +1,76 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+/** The signed-in user's own participant row for a trip (guests and members). */
+async function myParticipant(tripId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("trip_participants")
+    .select("id, name, household_id")
+    .eq("trip_id", tripId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return data;
+}
+
+export async function acceptTripInvite(formData: FormData) {
+  const token = String(formData.get("token") ?? "");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("accept_trip_invite", { p_token: token });
+  if (error || !data)
+    redirect(`/trip-invite/${token}?error=${encodeURIComponent(error?.message ?? "Could not join")}`);
+  revalidatePath("/", "layout");
+  redirect(`/guest/${data}`);
+}
+
+export async function addGuestExpense(formData: FormData) {
+  const tripId = String(formData.get("trip_id"));
+  const back = `/guest/${tripId}`;
+  const me = await myParticipant(tripId);
+  if (!me) redirect("/login");
+
+  const amount = Math.round(parseFloat(String(formData.get("amount") ?? "0")) * 100) / 100;
+  const description = String(formData.get("description") ?? "").trim();
+  const sharedWith = formData.getAll("shared_with").map(String);
+  if (!description) redirect(`${back}?error=Expense+needs+a+description`);
+  if (!amount || amount <= 0) redirect(`${back}?error=Amount+must+be+positive`);
+  if (sharedWith.length === 0) redirect(`${back}?error=Pick+who+shares+the+cost`);
+
+  const supabase = await createClient();
+  const { data: expense, error } = await supabase
+    .from("trip_expenses")
+    .insert({
+      trip_id: tripId,
+      household_id: me.household_id,
+      description,
+      amount,
+      spent_at: String(formData.get("spent_at") || "") || new Date().toISOString().slice(0, 10),
+      paid_by: me.id,
+      receipt_photo_id: String(formData.get("receipt_photo_id") || "") || null,
+    })
+    .select("id")
+    .single();
+  if (error || !expense)
+    redirect(`${back}?error=${encodeURIComponent(error?.message ?? "Could not save")}`);
+
+  const cents = Math.round(amount * 100);
+  const base = Math.floor(cents / sharedWith.length);
+  const remainder = cents - base * sharedWith.length;
+  const { error: shareErr } = await supabase.from("trip_expense_shares").insert(
+    sharedWith.map((pid, i) => ({
+      expense_id: expense.id,
+      participant_id: pid,
+      amount: (base + (i < remainder ? 1 : 0)) / 100,
+    }))
+  );
+  if (shareErr) redirect(`${back}?error=${encodeURIComponent(shareErr.message)}`);
+  revalidatePath(back);
+  redirect(back);
+}
