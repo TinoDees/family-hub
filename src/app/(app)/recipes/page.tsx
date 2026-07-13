@@ -14,11 +14,19 @@ export default async function RecipesPage({
   const supabase = await createClient();
   let query = supabase
     .from("recipes")
-    .select("id, name, description, servings, prep_minutes, cook_minutes, tags")
+    .select("id, name, description, servings, prep_minutes, cook_minutes, tags, hero_photo_id, hero:recipe_photos!recipes_hero_photo_id_fkey(storage_path)")
     .eq("household_id", membership.household_id)
     .order("name");
   if (q) query = query.ilike("name", `%${q}%`);
   const { data: recipes } = await query;
+
+  const heroPaths = (recipes ?? [])
+    .map((r) => (r.hero as unknown as { storage_path: string } | null)?.storage_path)
+    .filter(Boolean) as string[];
+  const { data: signed } = heroPaths.length
+    ? await supabase.storage.from("recipe-photos").createSignedUrls(heroPaths, 3600)
+    : { data: [] };
+  const heroUrl = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -45,8 +53,17 @@ export default async function RecipesPage({
             <Link
               key={r.id}
               href={`/recipes/${r.id}`}
-              className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition-shadow hover:shadow-md"
             >
+              {(() => {
+                const path = (r.hero as unknown as { storage_path: string } | null)?.storage_path;
+                const url = path ? heroUrl.get(path) : null;
+                return url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={url} alt={r.name} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+                ) : null;
+              })()}
+              <div className="p-5 pt-4">
               <div className="font-medium">{r.name}</div>
               {r.description && (
                 <div className="mt-1 line-clamp-2 text-sm text-stone-500">{r.description}</div>
@@ -59,6 +76,7 @@ export default async function RecipesPage({
                 {r.tags.slice(0, 3).map((t: string) => (
                   <span key={t} className="rounded-full bg-stone-100 px-2 py-0.5">{t}</span>
                 ))}
+              </div>
               </div>
             </Link>
           ))}
