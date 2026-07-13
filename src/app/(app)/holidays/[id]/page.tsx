@@ -9,10 +9,12 @@ import {
   deleteTrip,
   setTripStatus,
   createTripInvite,
+  addTripFamily,
+  removeTripFamily,
 } from "@/lib/actions/trips";
-import { CopyButton } from "@/components/copy-button";
 import { TripTabs } from "@/components/trip-tabs";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { CopyButton } from "@/components/copy-button";
 import { inputCls } from "@/components/auth-card";
 
 export default async function TripOverviewPage({
@@ -29,33 +31,50 @@ export default async function TripOverviewPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: trip }, { data: participants }, { data: expenses }, { data: album }, { data: invites }] =
-    await Promise.all([
-      supabase
-        .from("trips")
-        .select("id, name, destination, start_date, end_date, status")
-        .eq("id", id)
-        .eq("household_id", membership.household_id)
-        .maybeSingle(),
-      supabase.from("trip_participants").select("id, name, user_id").eq("trip_id", id).order("created_at"),
-      supabase.from("trip_expenses").select("id, amount").eq("trip_id", id),
-      supabase.from("albums").select("id, photos(count)").eq("trip_id", id).maybeSingle(),
-      supabase
-        .from("trip_invites")
-        .select("participant_id, token, expires_at")
-        .eq("trip_id", id)
-        .is("accepted_at", null)
-        .is("revoked_at", null),
-    ]);
+  const [
+    { data: trip },
+    { data: families },
+    { data: participants },
+    { data: expenses },
+    { data: album },
+    { data: invites },
+  ] = await Promise.all([
+    supabase
+      .from("trips")
+      .select("id, name, destination, start_date, end_date, status")
+      .eq("id", id)
+      .eq("household_id", membership.household_id)
+      .maybeSingle(),
+    supabase.from("trip_families").select("id, name").eq("trip_id", id).order("created_at"),
+    supabase
+      .from("trip_participants")
+      .select("id, name, user_id, family_id, email, is_manager")
+      .eq("trip_id", id)
+      .order("created_at"),
+    supabase.from("trip_expenses").select("id, amount").eq("trip_id", id),
+    supabase.from("albums").select("id, photos(count)").eq("trip_id", id).maybeSingle(),
+    supabase
+      .from("trip_invites")
+      .select("participant_id, token, expires_at")
+      .eq("trip_id", id)
+      .is("accepted_at", null)
+      .is("revoked_at", null),
+  ]);
   if (!trip) notFound();
 
   const total = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
+  const photoCount = (album?.photos as unknown as { count: number }[])?.[0]?.count ?? 0;
   const inviteFor = new Map(
     (invites ?? [])
       .filter((i) => new Date(i.expires_at) > new Date())
       .map((i) => [i.participant_id, i.token])
   );
-  const photoCount = (album?.photos as unknown as { count: number }[])?.[0]?.count ?? 0;
+  const byFamily = new Map<string, NonNullable<typeof participants>>();
+  const unassigned: NonNullable<typeof participants> = [];
+  for (const p of participants ?? []) {
+    if (p.family_id) byFamily.set(p.family_id, [...(byFamily.get(p.family_id) ?? []), p]);
+    else unassigned.push(p);
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -85,7 +104,7 @@ export default async function TripOverviewPage({
               <input type="hidden" name="trip_id" value={trip.id} />
               <ConfirmSubmit
                 label="Delete"
-                confirmMessage={`Delete "${trip.name}" including all its expenses and unlink its album?`}
+                confirmMessage={`Delete "${trip.name}" including all its expenses?`}
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
               />
             </form>
@@ -114,58 +133,119 @@ export default async function TripOverviewPage({
         </Link>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-sm font-semibold">Who&apos;s on the trip</h2>
-        <ul className="mt-3 space-y-1.5">
-          {(participants ?? []).map((p) => (
-            <li key={p.id} className="flex items-center justify-between text-sm">
-              <span>
-                {p.name}
-                {p.user_id ? (
-                  <span className="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">
-                    has access
-                  </span>
-                ) : (
-                  <span className="ml-1.5 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-400">
-                    no account
-                  </span>
-                )}
-              </span>
-              <span className="flex items-center gap-2">
-                {canEdit && !p.user_id && (
-                  inviteFor.get(p.id) ? (
-                    <CopyButton path={`/trip-invite/${inviteFor.get(p.id)}`} label="Copy invite link" />
-                  ) : (
-                    <form action={createTripInvite}>
-                      <input type="hidden" name="trip_id" value={trip.id} />
-                      <input type="hidden" name="participant_id" value={p.id} />
-                      <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
-                        Invite as guest
-                      </button>
-                    </form>
-                  )
-                )}
-                {canEdit && (
-                  <form action={removeParticipant}>
-                    <input type="hidden" name="participant_id" value={p.id} />
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Families on this trip</h2>
+        </div>
+
+        {(families ?? []).map((f) => {
+          const members = byFamily.get(f.id) ?? [];
+          return (
+            <div key={f.id} className="rounded-xl border border-stone-200 bg-white p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">{f.name}</h3>
+                {canEdit && members.length === 0 && (
+                  <form action={removeTripFamily}>
                     <input type="hidden" name="trip_id" value={trip.id} />
-                    <button className="text-xs text-stone-300 hover:text-red-600">remove</button>
+                    <input type="hidden" name="family_id" value={f.id} />
+                    <button className="text-xs text-stone-300 hover:text-red-600">remove family</button>
                   </form>
                 )}
-              </span>
-            </li>
-          ))}
-        </ul>
+              </div>
+              <ul className="mt-3 space-y-1.5">
+                {members.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-1.5">
+                      {p.name}
+                      {p.is_manager && <span title="Manager">⭐</span>}
+                      {p.email && <span className="text-xs text-stone-400">{p.email}</span>}
+                      {p.user_id ? (
+                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">has access</span>
+                      ) : (
+                        <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-400">no access yet</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {canEdit && !p.user_id && (
+                        inviteFor.get(p.id) ? (
+                          <CopyButton path={`/trip-invite/${inviteFor.get(p.id)}`} label="Copy invite link" />
+                        ) : (
+                          <form action={createTripInvite}>
+                            <input type="hidden" name="trip_id" value={trip.id} />
+                            <input type="hidden" name="participant_id" value={p.id} />
+                            <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
+                              Invite
+                            </button>
+                          </form>
+                        )
+                      )}
+                      {canEdit && (
+                        <form action={removeParticipant}>
+                          <input type="hidden" name="participant_id" value={p.id} />
+                          <input type="hidden" name="trip_id" value={trip.id} />
+                          <button className="text-xs text-stone-300 hover:text-red-600">remove</button>
+                        </form>
+                      )}
+                    </span>
+                  </li>
+                ))}
+                {members.length === 0 && (
+                  <li className="text-sm text-stone-400">No members yet.</li>
+                )}
+              </ul>
+              {canEdit && (
+                <form action={addParticipant} className="mt-3 flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="trip_id" value={trip.id} />
+                  <input type="hidden" name="family_id" value={f.id} />
+                  <input name="name" required placeholder="Name" className={`${inputCls} w-36`} />
+                  <input name="email" type="email" placeholder="email (for the invite)" className={`${inputCls} w-56`} />
+                  <label className="flex items-center gap-1.5 pb-2 text-xs text-stone-500">
+                    <input type="checkbox" name="is_manager" className="rounded border-stone-300" /> manager
+                  </label>
+                  <button className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium hover:bg-stone-100">
+                    Add member
+                  </button>
+                </form>
+              )}
+            </div>
+          );
+        })}
+
+        {unassigned.length > 0 && (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-white p-5">
+            <h3 className="text-sm font-medium text-stone-500">Not in a family yet</h3>
+            <ul className="mt-2 space-y-1 text-sm">
+              {unassigned.map((p) => (
+                <li key={p.id} className="flex items-center justify-between">
+                  <span>{p.name}</span>
+                  {canEdit && (
+                    <form action={removeParticipant}>
+                      <input type="hidden" name="participant_id" value={p.id} />
+                      <input type="hidden" name="trip_id" value={trip.id} />
+                      <button className="text-xs text-stone-300 hover:text-red-600">remove</button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {canEdit && (
-          <form action={addParticipant} className="mt-3 flex gap-2">
+          <form action={addTripFamily} className="flex items-end gap-2 rounded-xl border border-stone-200 bg-white p-5">
             <input type="hidden" name="trip_id" value={trip.id} />
-            <input name="name" required placeholder="e.g. Michael Schmidt" className={`${inputCls} flex-1`} />
-            <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">Add</button>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium">Add another family</label>
+              <input name="name" required placeholder="e.g. Family Schmidt" className={inputCls} />
+            </div>
+            <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
+              Add family
+            </button>
           </form>
         )}
-        <p className="mt-3 text-xs text-stone-400">
-          &ldquo;Invite as guest&rdquo; creates a link your friend opens to set a password —
-          they then see only this trip, and within it only their own expenses.
+        <p className="text-xs text-stone-400">
+          ⭐ managers keep the family record. Members with an email get an invite link —
+          once they claim it, they see this trip only.
         </p>
       </div>
     </div>

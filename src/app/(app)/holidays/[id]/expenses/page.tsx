@@ -7,6 +7,7 @@ import { computeBalances, settle } from "@/lib/settlement";
 import { deleteExpense } from "@/lib/actions/trips";
 import { removeReceipt } from "@/lib/actions/receipts";
 import { ExpenseSplitModal } from "@/components/expense-split-modal";
+import { FamilySpendModal, type FamilyDetailRow } from "@/components/family-spend-modal";
 import { AddExpenseForm } from "@/components/add-expense-form";
 import { TripTabs } from "@/components/trip-tabs";
 
@@ -24,20 +25,21 @@ export default async function TripExpensesPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: trip }, { data: participants }, { data: expenses }] = await Promise.all([
+  const [{ data: trip }, { data: participants }, { data: expenses }, { data: families }] = await Promise.all([
     supabase
       .from("trips")
       .select("id, name")
       .eq("id", id)
       .eq("household_id", membership.household_id)
       .maybeSingle(),
-    supabase.from("trip_participants").select("id, name, user_id").eq("trip_id", id).order("created_at"),
+    supabase.from("trip_participants").select("id, name, user_id, family_id").eq("trip_id", id).order("created_at"),
     supabase
       .from("trip_expenses")
       .select("id, description, amount, spent_at, paid_by, receipt_photo_id")
       .eq("trip_id", id)
       .order("spent_at", { ascending: false })
       .order("created_at", { ascending: false }),
+    supabase.from("trip_families").select("id, name").eq("trip_id", id).order("created_at"),
   ]);
   if (!trip) notFound();
 
@@ -82,6 +84,51 @@ export default async function TripExpensesPage({
   const pName = new Map(pList.map((p) => [p.id, p.name]));
   const balances = computeBalances(pList, expenses ?? [], shares ?? []);
   const transfers = settle(balances);
+
+  // family aggregation
+  const familyOf = new Map(pList.map((p) => [p.id, p.family_id]));
+  const expenseName = new Map((expenses ?? []).map((e) => [e.id, e.description]));
+  const familyAgg = new Map<string, { paid: number; share: number; rows: FamilyDetailRow[] }>();
+  const aggFor = (fid: string) => {
+    if (!familyAgg.has(fid)) familyAgg.set(fid, { paid: 0, share: 0, rows: [] });
+    return familyAgg.get(fid)!;
+  };
+  for (const e of expenses ?? []) {
+    const fid = familyOf.get(e.paid_by);
+    if (fid) aggFor(fid).paid += Number(e.amount);
+  }
+  const itemisedByParticipant = new Map<string, number>(); // participant|expense -> itemised sum
+  for (const it of allItems ?? []) {
+    if (it.consumed_by) {
+      const fid = familyOf.get(it.consumed_by);
+      if (fid) {
+        aggFor(fid).rows.push({
+          member: pName.get(it.consumed_by) ?? "?",
+          expense: expenseName.get(it.expense_id) ?? "",
+          item: it.description,
+          amount: Number(it.amount),
+        });
+      }
+      const k = `${it.consumed_by}|${it.expense_id}`;
+      itemisedByParticipant.set(k, (itemisedByParticipant.get(k) ?? 0) + Number(it.amount));
+    }
+  }
+  for (const sh of shares ?? []) {
+    const fid = familyOf.get(sh.participant_id);
+    if (!fid) continue;
+    const agg = aggFor(fid);
+    agg.share += Number(sh.amount);
+    const itemised = itemisedByParticipant.get(`${sh.participant_id}|${sh.expense_id}`) ?? 0;
+    const sharedPart = Math.round((Number(sh.amount) - itemised) * 100) / 100;
+    if (sharedPart > 0.004) {
+      agg.rows.push({
+        member: pName.get(sh.participant_id) ?? "?",
+        expense: expenseName.get(sh.expense_id) ?? "",
+        item: "share of shared costs",
+        amount: sharedPart,
+      });
+    }
+  }
   const total = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
   const sharesByExpense = new Map<string, string[]>();
   const shareIdsByExpense = new Map<string, string[]>();
@@ -190,6 +237,35 @@ export default async function TripExpensesPage({
         </div>
 
         <div className="space-y-6">
+          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">
+              <h2 className="text-sm font-semibold">Spend by family</h2>
+              <span className="text-sm font-medium">{formatMoney(total, currency)}</span>
+            </div>
+            {(families ?? []).length === 0 ? (
+              <p className="px-4 py-4 text-center text-sm text-stone-400">No families set up yet — see Overview.</p>
+            ) : (
+              <div className="divide-y divide-stone-100">
+                {(families ?? []).map((f) => {
+                  const agg = familyAgg.get(f.id) ?? { paid: 0, share: 0, rows: [] };
+                  return (
+                    <FamilySpendModal
+                      key={f.id}
+                      familyName={f.name}
+                      paid={agg.paid}
+                      share={agg.share}
+                      rows={agg.rows}
+                      currency={currency}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            <p className="border-t border-stone-100 px-4 py-2 text-xs text-stone-400">
+              Click a family for the itemised breakdown.
+            </p>
+          </div>
+
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <h2 className="text-sm font-semibold">Balances</h2>
             <ul className="mt-3 space-y-1.5 text-sm">

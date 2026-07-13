@@ -95,7 +95,7 @@ export async function scanReceipt(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-sonnet-5",
         max_tokens: 300,
         messages: [
           {
@@ -121,7 +121,22 @@ export async function scanReceipt(
     const text: string = data?.content?.[0]?.text ?? "";
     const match = text.match(/\{[\s\S]*\}/);
     const parsed = match ? JSON.parse(match[0]) : {};
+    // sanity check: line items should roughly add up to the total
+    let itemWarning: string | undefined;
+    if (Array.isArray(parsed.items) && typeof parsed.total === "number" && parsed.items.length > 0) {
+      const sum = parsed.items.reduce(
+        (acc: number, i: { amount?: unknown }) =>
+          acc + (typeof i.amount === "number" ? i.amount : 0),
+        0
+      );
+      if (Math.abs(sum - parsed.total) > Math.max(1, parsed.total * 0.15)) {
+        parsed.items = [];
+        itemWarning =
+          "Line items didn't match the total, so they were dropped — allocate manually or re-scan.";
+      }
+    }
     return {
+      ...(itemWarning ? { error: itemWarning } : {}),
       ok: true,
       photoId: photo.id,
       merchant: typeof parsed.merchant === "string" ? parsed.merchant : null,

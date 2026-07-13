@@ -29,13 +29,32 @@ export async function createTrip(formData: FormData) {
     .single();
   if (error || !data) redirect(`/holidays?error=${enc(error?.message ?? "Could not create trip")}`);
 
-  // creator joins automatically as first participant
-  await supabase.from("trip_participants").insert({
-    trip_id: data.id,
-    household_id: membership.household_id,
-    user_id: userId,
-    name: membership.display_name ?? "Me",
-  });
+  // own family + every household member join automatically
+  const { data: family } = await supabase
+    .from("trip_families")
+    .insert({
+      trip_id: data.id,
+      household_id: membership.household_id,
+      name: membership.household.name,
+    })
+    .select("id")
+    .single();
+  const { data: members } = await supabase
+    .from("household_members")
+    .select("user_id, display_name")
+    .eq("household_id", membership.household_id);
+  if (family && members) {
+    await supabase.from("trip_participants").insert(
+      members.map((m) => ({
+        trip_id: data.id,
+        household_id: membership.household_id,
+        user_id: m.user_id,
+        name: m.display_name ?? "Member",
+        family_id: family.id,
+        is_manager: m.user_id === userId,
+      }))
+    );
+  }
   redirect(`/holidays/${data.id}`);
 }
 
@@ -76,7 +95,45 @@ export async function addParticipant(formData: FormData) {
     household_id: membership.household_id,
     user_id: String(formData.get("user_id") || "") || null,
     name,
+    family_id: String(formData.get("family_id") || "") || null,
+    email: String(formData.get("email") ?? "").trim().toLowerCase() || null,
+    is_manager: formData.get("is_manager") === "on",
   });
+  revalidatePath(`/holidays/${tripId}`);
+  redirect(`/holidays/${tripId}`);
+}
+
+export async function addTripFamily(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const tripId = String(formData.get("trip_id"));
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) redirect(`/holidays/${tripId}?error=Family+needs+a+name`);
+  const supabase = await createClient();
+  await supabase.from("trip_families").insert({
+    trip_id: tripId,
+    household_id: membership.household_id,
+    name,
+  });
+  revalidatePath(`/holidays/${tripId}`);
+  redirect(`/holidays/${tripId}`);
+}
+
+export async function removeTripFamily(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const tripId = String(formData.get("trip_id"));
+  const familyId = String(formData.get("family_id"));
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("trip_participants")
+    .select("id", { count: "exact", head: true })
+    .eq("family_id", familyId);
+  if ((count ?? 0) > 0)
+    redirect(`/holidays/${tripId}?error=Remove+the+family+members+first`);
+  await supabase
+    .from("trip_families")
+    .delete()
+    .eq("id", familyId)
+    .eq("household_id", membership.household_id);
   revalidatePath(`/holidays/${tripId}`);
   redirect(`/holidays/${tripId}`);
 }
