@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import type { ScannedRecipe } from "@/lib/actions/recipe-scan";
 
+export type VideoRecipeResult = ScannedRecipe & { video_path?: string };
+
 const GEMINI_BASE = "https://generativelanguage.googleapis.com";
 // newest first — older ones get retired for new API accounts
 const MODELS = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"];
@@ -81,7 +83,7 @@ async function generateFromPart(part: unknown, key: string): Promise<ScannedReci
 }
 
 /** YouTube links go straight to Gemini — no upload needed. */
-export async function recipeFromYouTube(url: string): Promise<ScannedRecipe> {
+export async function recipeFromYouTube(url: string): Promise<VideoRecipeResult> {
   await requireModule("recipes", "edit");
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, error: "Video reading needs GEMINI_API_KEY" };
@@ -91,7 +93,7 @@ export async function recipeFromYouTube(url: string): Promise<ScannedRecipe> {
 }
 
 /** Uploaded video: pull from our temp bucket, hand to Gemini Files API, read, clean up. */
-export async function recipeFromVideo(storagePath: string): Promise<ScannedRecipe> {
+export async function recipeFromVideo(storagePath: string): Promise<VideoRecipeResult> {
   const { membership } = await requireModule("recipes", "edit");
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, error: "Video reading needs GEMINI_API_KEY" };
@@ -149,7 +151,20 @@ export async function recipeFromVideo(storagePath: string): Promise<ScannedRecip
     if (state !== "ACTIVE") return { ok: false, error: "Video processing timed out — try a shorter clip" };
 
     // 4. read the recipe
-    return await generateFromPart({ file_data: { mime_type: mime, file_uri: fileUri } }, key);
+    const result: VideoRecipeResult = await generateFromPart(
+      { file_data: { mime_type: mime, file_uri: fileUri } },
+      key
+    );
+    if (result.ok) {
+      // keep the video so the recipe card can play it later
+      const ext = storagePath.split(".").pop() || "mp4";
+      const keepPath = `${membership.household_id}/${crypto.randomUUID()}.${ext}`;
+      const { error: keepErr } = await supabase.storage
+        .from("recipe-videos")
+        .upload(keepPath, bytes, { contentType: mime });
+      if (!keepErr) result.video_path = keepPath;
+    }
+    return result;
   } finally {
     // clean up both copies
     supabase.storage.from("video-temp").remove([storagePath]).then(() => {});

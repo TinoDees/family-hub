@@ -3,6 +3,8 @@ import { inputCls, buttonCls } from "@/components/auth-card";
 
 export type RecipeFormData = {
   id?: string;
+  source_url?: string | null;
+  video_path?: string | null;
   name?: string;
   description?: string | null;
   servings?: number;
@@ -25,6 +27,8 @@ export function RecipeForm({
   return (
     <form action={action} className="space-y-5">
       {recipe?.id && <input type="hidden" name="recipe_id" value={recipe.id} />}
+      <input type="hidden" name="source_url" value={recipe?.source_url ?? ""} />
+      <input type="hidden" name="video_path" value={recipe?.video_path ?? ""} />
 
       <div className="rounded-xl border border-stone-200 bg-white p-6 space-y-4">
         <div className="flex flex-wrap gap-3">

@@ -143,16 +143,40 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
     };
   }
 
+  const isFacebook = /(facebook\.com|fb\.watch)\//i.test(clean);
+
   let html = "";
   try {
     const res = await fetch(clean, {
-      headers: { "user-agent": "Mozilla/5.0 (compatible; NestlyBot/1.0)" },
+      headers: {
+        // FB and friends serve link-preview meta tags to crawler UAs
+        "user-agent": isFacebook
+          ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+          : "Mozilla/5.0 (compatible; NestlyBot/1.0)",
+      },
+      redirect: "follow",
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return { ok: false, error: `Could not open the page (${res.status})` };
-    html = await res.text();
+    if (!res.ok && !isFacebook) return { ok: false, error: `Could not open the page (${res.status})` };
+    html = res.ok ? await res.text() : "";
   } catch {
-    return { ok: false, error: "Could not reach that page — check the link" };
+    if (!isFacebook) return { ok: false, error: "Could not reach that page — check the link" };
+  }
+
+  if (isFacebook) {
+    // best effort: og:description sometimes carries the caption for public posts
+    const og = [...html.matchAll(/<meta[^>]+(?:property|name)=["']og:description["'][^>]+content=["']([^"']+)["']/gi)]
+      .map((m) => m[1])
+      .join("\n");
+    if (og.trim().length > 80) {
+      const fromCaption = await readTextWithClaude(`Facebook post caption:\n${og}`);
+      if (fromCaption.ok) return fromCaption;
+    }
+    return {
+      ok: false,
+      error:
+        "Facebook keeps its posts behind a login, so I can't read this link. Save the video in Facebook (or screen-record it), then share the file to Nestly — I'll watch it and build the card.",
+    };
   }
 
   // 1. structured data (most recipe sites have it) — free and exact

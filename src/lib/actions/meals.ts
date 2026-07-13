@@ -13,12 +13,14 @@ export async function addMealEntry(formData: FormData) {
   if (!recipeId && !customText) redirect(`/meals?w=${w}`);
 
   const supabase = await createClient();
+  const servingsRaw = parseInt(String(formData.get("servings") ?? ""));
   await supabase.from("meal_plan_entries").insert({
     household_id: membership.household_id,
     entry_date: String(formData.get("entry_date")),
     slot: String(formData.get("slot") ?? "dinner"),
     recipe_id: recipeId || null,
     custom_text: recipeId ? null : customText || null,
+    servings: recipeId && servingsRaw > 0 ? servingsRaw : null,
     created_by: userId,
   });
   revalidatePath("/meals");

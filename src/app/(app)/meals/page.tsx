@@ -42,7 +42,7 @@ export default async function MealsPage({
   const [{ data: entries }, { data: recipes }] = await Promise.all([
     supabase
       .from("meal_plan_entries")
-      .select("id, entry_date, slot, recipe_id, custom_text, recipe:recipes(name)")
+      .select("id, entry_date, slot, recipe_id, custom_text, servings, recipe:recipes(name, servings)")
       .eq("household_id", membership.household_id)
       .gte("entry_date", iso(days[0]))
       .lte("entry_date", iso(days[6]))
@@ -61,22 +61,33 @@ export default async function MealsPage({
     byCell.set(k, [...(byCell.get(k) ?? []), e]);
   }
 
-  // week ingredient summary from planned recipes
+  // week ingredient summary — scaled by each entry's planned servings
   const plannedRecipeIds = [...new Set((entries ?? []).map((e) => e.recipe_id).filter(Boolean))] as string[];
   const { data: weekIngredients } = plannedRecipeIds.length
     ? await supabase
         .from("recipe_ingredients")
-        .select("name, qty, unit")
+        .select("recipe_id, name, qty, unit")
         .in("recipe_id", plannedRecipeIds)
-    : { data: [] as { name: string; qty: number | null; unit: string | null }[] };
+    : { data: [] as { recipe_id: string; name: string; qty: number | null; unit: string | null }[] };
 
-  const agg = new Map<string, { name: string; unit: string | null; qty: number | null }>();
+  const ingredientsByRecipe = new Map<string, NonNullable<typeof weekIngredients>>();
   for (const i of weekIngredients ?? []) {
-    const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
-    const cur = agg.get(key);
-    if (cur && cur.qty !== null && i.qty !== null) cur.qty += Number(i.qty);
-    else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: i.qty !== null ? Number(i.qty) : null });
-    else cur.qty = null; // mixed with/without qty → just list it
+    ingredientsByRecipe.set(i.recipe_id, [...(ingredientsByRecipe.get(i.recipe_id) ?? []), i]);
+  }
+  const agg = new Map<string, { name: string; unit: string | null; qty: number | null }>();
+  for (const e of entries ?? []) {
+    if (!e.recipe_id) continue;
+    const rec = e.recipe as unknown as { name: string; servings: number } | null;
+    const base = rec?.servings ?? 4;
+    const factor = e.servings && base ? e.servings / base : 1;
+    for (const i of ingredientsByRecipe.get(e.recipe_id) ?? []) {
+      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
+      const cur = agg.get(key);
+      const scaledQty = i.qty !== null ? Number(i.qty) * factor : null;
+      if (cur && cur.qty !== null && scaledQty !== null) cur.qty += scaledQty;
+      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaledQty });
+      else cur.qty = null;
+    }
   }
 
   return (
@@ -125,6 +136,7 @@ export default async function MealsPage({
                             {e.recipe_id ? (
                               <Link href={`/recipes/${e.recipe_id}`} className="hover:underline">
                                 {(e.recipe as unknown as { name: string } | null)?.name ?? "Recipe"}
+                                {e.servings && <span className="text-stone-400"> ×{e.servings}</span>}
                               </Link>
                             ) : (
                               <span>{e.custom_text}</span>
@@ -151,6 +163,7 @@ export default async function MealsPage({
                                   <option key={r.id} value={r.id}>{r.name}</option>
                                 ))}
                               </select>
+                              <input name="servings" type="number" min="1" placeholder="serves (optional)" className="w-full rounded border border-stone-200 px-1 py-1 text-xs" />
                               <input name="custom_text" placeholder="or free text" className="w-full rounded border border-stone-200 px-1 py-1 text-xs" />
                               <button className="w-full rounded bg-stone-900 px-1 py-1 text-xs text-white hover:bg-stone-700">Add</button>
                             </form>

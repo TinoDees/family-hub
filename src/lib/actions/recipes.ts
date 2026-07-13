@@ -41,6 +41,8 @@ function recipeFields(formData: FormData) {
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean)
       .slice(0, 12),
+    source_url: String(formData.get("source_url") ?? "").trim() || null,
+    video_path: String(formData.get("video_path") ?? "").trim() || null,
   };
 }
 

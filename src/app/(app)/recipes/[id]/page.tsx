@@ -4,6 +4,33 @@ import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { deleteRecipe } from "@/lib/actions/recipes";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { RecipeScaler } from "@/components/recipe-scaler";
+
+function MethodSteps({ instructions }: { instructions: string }) {
+  const lines = instructions.split("\n").map((l) => l.trim()).filter(Boolean);
+  const steps: string[] = [];
+  for (const line of lines) {
+    const m = line.match(/^(\d+)[.)]\s*(.*)$/);
+    if (m) steps.push(m[2]);
+    else if (steps.length > 0) steps[steps.length - 1] += ` ${line}`;
+    else steps.push(line);
+  }
+  if (steps.length <= 1) {
+    return <div className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">{instructions}</div>;
+  }
+  return (
+    <ol className="space-y-3">
+      {steps.map((step, i) => (
+        <li key={i} className="flex gap-3">
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-900 text-xs font-semibold text-white">
+            {i + 1}
+          </span>
+          <span className="text-sm leading-relaxed text-stone-700">{step}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default async function RecipePage({
   params,
@@ -29,6 +56,14 @@ export default async function RecipePage({
   ]);
   if (!recipe) notFound();
 
+  let videoUrl: string | null = null;
+  if (recipe.video_path) {
+    const { data } = await supabase.storage
+      .from("recipe-videos")
+      .createSignedUrl(recipe.video_path, 3600);
+    videoUrl = data?.signedUrl ?? null;
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -43,6 +78,11 @@ export default async function RecipePage({
             {recipe.tags.map((t: string) => (
               <span key={t} className="rounded-full bg-stone-100 px-2 py-0.5">{t}</span>
             ))}
+            {recipe.source_url && (
+              <a href={recipe.source_url} target="_blank" rel="noreferrer" className="text-sky-600 underline">
+                original source ↗
+              </a>
+            )}
           </div>
         </div>
         {access === "edit" && (
@@ -62,33 +102,34 @@ export default async function RecipePage({
         )}
       </div>
 
+      {videoUrl && (
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-black">
+          <video src={videoUrl} controls playsInline preload="metadata" className="mx-auto max-h-96 w-full" />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1.5fr]">
         <div className="rounded-xl border border-stone-200 bg-white p-6">
           <h2 className="mb-3 text-sm font-semibold">Ingredients</h2>
           {(ingredients ?? []).length === 0 ? (
             <p className="text-sm text-stone-400">None listed.</p>
           ) : (
-            <ul className="space-y-1.5 text-sm">
-              {(ingredients ?? []).map((i) => (
-                <li key={i.id} className="flex gap-2">
-                  <span className="min-w-16 text-right font-medium text-stone-600">
-                    {i.qty ? `${Number(i.qty)}${i.unit ? ` ${i.unit}` : ""}` : ""}
-                  </span>
-                  <span>
-                    {i.name}
-                    {i.note && <span className="text-stone-400"> ({i.note})</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <RecipeScaler
+              baseServings={recipe.servings}
+              ingredients={(ingredients ?? []).map((i) => ({
+                id: i.id,
+                name: i.name,
+                qty: i.qty !== null ? Number(i.qty) : null,
+                unit: i.unit,
+                note: i.note,
+              }))}
+            />
           )}
         </div>
         <div className="rounded-xl border border-stone-200 bg-white p-6">
           <h2 className="mb-3 text-sm font-semibold">Method</h2>
           {recipe.instructions ? (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-stone-700">
-              {recipe.instructions}
-            </div>
+            <MethodSteps instructions={recipe.instructions} />
           ) : (
             <p className="text-sm text-stone-400">No method written down yet.</p>
           )}

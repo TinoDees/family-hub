@@ -36,6 +36,8 @@ export function NewRecipeClient({
   const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [scanned, setScanned] = useState<ScannedRecipe | null>(null);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
+  const [videoPath, setVideoPath] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
   const onCapture = async (file: File) => {
@@ -87,6 +89,7 @@ export function NewRecipeClient({
       }
       setMsg("Watching the video… this takes up to a minute.");
       const res = await recipeFromVideo(path);
+      if (res.ok && res.video_path) setVideoPath(res.video_path);
       applyResult(res);
     } finally {
       setScanning(false);
@@ -101,6 +104,7 @@ export function NewRecipeClient({
     setMsg(isYouTube ? "Watching the video… this takes up to a minute." : "Reading the page…");
     try {
       const res = isYouTube ? await recipeFromYouTube(url) : await recipeFromUrl(url);
+      if (res.ok) setSourceUrl(url);
       applyResult(res);
     } finally {
       setScanning(false);
@@ -116,6 +120,7 @@ export function NewRecipeClient({
         setMsg("Watching your shared video… this takes up to a minute.");
         try {
           const res = await recipeFromVideo(initialVideoPath);
+          if (res.ok && res.video_path) setVideoPath(res.video_path);
           applyResult(res);
         } finally {
           setScanning(false);
@@ -209,6 +214,8 @@ export function NewRecipeClient({
         recipe={
           scanned
             ? {
+                source_url: sourceUrl,
+                video_path: videoPath,
                 name: scanned.name,
                 description: scanned.description ?? null,
                 servings: scanned.servings ?? 4,
