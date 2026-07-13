@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireModule } from "@/lib/module-guard";
-import { createRecipe } from "@/lib/actions/recipes";
-import { RecipeForm } from "@/components/recipe-form";
+import { NewRecipeClient } from "@/components/new-recipe-client";
 
 export default async function NewRecipePage({
   searchParams,
@@ -17,7 +16,7 @@ export default async function NewRecipePage({
         <h1 className="text-2xl font-semibold">New recipe</h1>
       </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <RecipeForm action={createRecipe} submitLabel="Save recipe" />
+      <NewRecipeClient />
     </div>
   );
 }

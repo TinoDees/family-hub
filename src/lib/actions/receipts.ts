@@ -131,3 +131,38 @@ export async function scanReceipt(
     return { ok: true, photoId: photo.id, error: "Receipt saved; AI reading failed — fill in manually." };
   }
 }
+
+/** Detach and delete the stored receipt scan for one expense. */
+export async function removeReceipt(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const expenseId = String(formData.get("expense_id"));
+  const tripId = String(formData.get("trip_id"));
+
+  const supabase = await createClient();
+  const { data: expense } = await supabase
+    .from("trip_expenses")
+    .select("id, receipt_photo_id")
+    .eq("id", expenseId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+
+  if (expense?.receipt_photo_id) {
+    const { data: photo } = await supabase
+      .from("photos")
+      .select("storage_path")
+      .eq("id", expense.receipt_photo_id)
+      .maybeSingle();
+    await supabase
+      .from("trip_expenses")
+      .update({ receipt_photo_id: null })
+      .eq("id", expenseId);
+    if (photo) {
+      await supabase.storage.from("photos").remove([photo.storage_path]);
+      await supabase.from("photos").delete().eq("id", expense.receipt_photo_id);
+    }
+  }
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/holidays/${tripId}/expenses`);
+  const { redirect } = await import("next/navigation");
+  redirect(`/holidays/${tripId}/expenses`);
+}

@@ -49,6 +49,24 @@ export default async function HouseholdSettingsPage({
             3-letter code, e.g. AUD. All Finance amounts convert to this.
           </p>
         </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Auto-delete receipt scans after</label>
+          <div className="flex items-center gap-2">
+            <input
+              name="receipt_retention_days"
+              type="number"
+              min="1"
+              defaultValue={(membership.household as unknown as { receipt_retention_days?: number | null }).receipt_retention_days ?? ""}
+              placeholder="—"
+              className={`${inputCls} w-24`}
+            />
+            <span className="text-sm text-stone-500">days</span>
+          </div>
+          <p className="mt-1 text-xs text-stone-400">
+            Keeps storage small — trip receipts older than this are deleted nightly.
+            Leave empty to keep receipts forever.
+          </p>
+        </div>
         <button className={`${buttonCls} w-auto px-6`}>Save</button>
       </form>
 

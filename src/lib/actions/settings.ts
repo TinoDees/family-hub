@@ -16,10 +16,13 @@ export async function updateHousehold(formData: FormData) {
     .toUpperCase();
   if (!name) redirect("/settings?error=Household+name+cannot+be+empty");
 
+  const retentionRaw = String(formData.get("receipt_retention_days") ?? "").trim();
+  const retention = retentionRaw ? Math.max(1, parseInt(retentionRaw)) || null : null;
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("households")
-    .update({ name, base_currency: baseCurrency })
+    .update({ name, base_currency: baseCurrency, receipt_retention_days: retention })
     .eq("id", membership.household_id);
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
 

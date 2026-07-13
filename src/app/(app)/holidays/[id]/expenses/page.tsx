@@ -5,6 +5,7 @@ import { requireModule } from "@/lib/module-guard";
 import { formatMoney } from "@/lib/finance";
 import { computeBalances, settle } from "@/lib/settlement";
 import { deleteExpense } from "@/lib/actions/trips";
+import { removeReceipt } from "@/lib/actions/receipts";
 import { AddExpenseForm } from "@/components/add-expense-form";
 import { TripTabs } from "@/components/trip-tabs";
 
@@ -114,14 +115,23 @@ export default async function TripExpensesPage({
                         <div className="font-medium">
                           {e.description}
                           {e.receipt_photo_id && receiptUrl.get(e.receipt_photo_id) && (
-                            <a
-                              href={receiptUrl.get(e.receipt_photo_id)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-2 text-xs text-sky-600 underline"
-                            >
-                              receipt
-                            </a>
+                            <span className="ml-2 inline-flex items-center gap-1">
+                              <a
+                                href={receiptUrl.get(e.receipt_photo_id)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-sky-600 underline"
+                              >
+                                receipt
+                              </a>
+                              {canEdit && (
+                                <form action={removeReceipt} className="inline">
+                                  <input type="hidden" name="expense_id" value={e.id} />
+                                  <input type="hidden" name="trip_id" value={trip.id} />
+                                  <button className="text-[10px] text-stone-300 hover:text-red-600" title="Delete receipt scan">✕</button>
+                                </form>
+                              )}
+                            </span>
                           )}
                         </div>
                         <div className="text-xs text-stone-400">

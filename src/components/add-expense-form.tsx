@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { addExpense } from "@/lib/actions/trips";
 import { scanReceipt } from "@/lib/actions/receipts";
+
+const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
 
 type Participant = { id: string; name: string };
 
@@ -41,6 +44,7 @@ export function AddExpenseForm({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptPhotoId, setReceiptPhotoId] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
 
   const onReceipt = async (file: File) => {
@@ -69,22 +73,27 @@ export function AddExpenseForm({
   };
 
   return (
+    <>
+      {scannerOpen && (
+        <DocScannerModal
+          onClose={() => setScannerOpen(false)}
+          onCapture={(file) => {
+            setScannerOpen(false);
+            onReceipt(file);
+          }}
+        />
+      )}
     <form action={addExpense} className="space-y-3 rounded-xl border border-stone-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">Add expense</h2>
-        <label
-          className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium ${scanning ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
+        <button
+          type="button"
+          disabled={scanning}
+          onClick={() => setScannerOpen(true)}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${scanning ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
         >
           {scanning ? "Reading…" : "📷 Scan receipt"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            disabled={scanning}
-            onChange={(e) => e.target.files?.[0] && onReceipt(e.target.files[0])}
-          />
-        </label>
+        </button>
       </div>
       {scanMsg && <p className="rounded-lg bg-sky-50 px-3 py-1.5 text-xs text-sky-800">{scanMsg}</p>}
 
@@ -150,5 +159,6 @@ export function AddExpenseForm({
         Add — split equally
       </button>
     </form>
+    </>
   );
 }
