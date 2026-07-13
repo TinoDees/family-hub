@@ -148,16 +148,28 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
   let html = "";
   try {
     const res = await fetch(clean, {
-      headers: {
-        // FB and friends serve link-preview meta tags to crawler UAs
-        "user-agent": isFacebook
-          ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
-          : "Mozilla/5.0 (compatible; NestlyBot/1.0)",
-      },
+      headers: isFacebook
+        ? { "user-agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" }
+        : {
+            // look like a normal browser — many news-corp era sites 403 plain bots
+            "user-agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "accept-language": "en-AU,en;q=0.9",
+          },
       redirect: "follow",
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok && !isFacebook) return { ok: false, error: `Could not open the page (${res.status})` };
+    if (!res.ok && !isFacebook) {
+      if ([403, 429, 503].includes(res.status)) {
+        return {
+          ok: false,
+          error:
+            "This website blocks automated readers. Easy workaround: screenshot the recipe on the page (ingredients + method) and use 'From a screenshot' — that always works.",
+        };
+      }
+      return { ok: false, error: `Could not open the page (${res.status})` };
+    }
     html = res.ok ? await res.text() : "";
   } catch {
     if (!isFacebook) return { ok: false, error: "Could not reach that page — check the link" };

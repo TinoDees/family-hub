@@ -205,6 +205,35 @@ export function NewRecipeClient({
           Cookbook pages, screenshots, saved videos, YouTube links — or any recipe website link. On Android you can share a page straight to the Nestly app.
         </span>
       </div>
+
+      <details className="rounded-xl border border-stone-200 bg-white">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-600">
+          📘 How do I get a Facebook or Instagram recipe in?
+        </summary>
+        <div className="space-y-2 border-t border-stone-100 px-4 py-3 text-sm text-stone-600">
+          <p>
+            Facebook and Instagram don&apos;t let any app read their videos — so we record the
+            screen instead. It takes 30 seconds:
+          </p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>Open the recipe video and turn the volume on.</li>
+            <li>
+              <strong>Android:</strong> swipe down from the top twice → tap{" "}
+              <strong>Screen recorder</strong> → play the video from the start.
+              <br />
+              <strong>iPhone:</strong> Control Centre → tap the record button ◉ → play the video.
+            </li>
+            <li>Stop recording when it&apos;s done (tap the red timer).</li>
+            <li>
+              Open your Gallery → find the recording → <strong>Share → Nestly</strong> (or use
+              &ldquo;From a video&rdquo; above). Nestly watches it and writes the recipe.
+            </li>
+          </ol>
+          <p className="text-xs text-stone-400">
+            The narration matters — most quantities are spoken, so record with sound.
+          </p>
+        </div>
+      </details>
       {msg && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">{msg}</p>}
 
       <RecipeForm
