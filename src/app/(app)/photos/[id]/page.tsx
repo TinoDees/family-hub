@@ -19,7 +19,7 @@ export default async function AlbumPage({
   const [{ data: album }, { data: photos }] = await Promise.all([
     supabase
       .from("albums")
-      .select("id, name, description, trip_id")
+      .select("id, name, description, trip_id, hero_photo_id")
       .eq("id", id)
       .eq("household_id", membership.household_id)
       .maybeSingle(),
@@ -70,6 +70,7 @@ export default async function AlbumPage({
 
       <PhotoGallery
         canEdit={access === "edit"}
+        heroPhotoId={album.hero_photo_id}
         photos={(photos ?? []).map((p) => ({
           id: p.id,
           url: urlFor.get(p.storage_path) ?? null,

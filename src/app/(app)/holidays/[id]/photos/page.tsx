@@ -24,7 +24,7 @@ export default async function TripPhotosPage({
       .eq("id", id)
       .eq("household_id", membership.household_id)
       .maybeSingle(),
-    supabase.from("albums").select("id, name").eq("trip_id", id).maybeSingle(),
+    supabase.from("albums").select("id, name, hero_photo_id").eq("trip_id", id).maybeSingle(),
   ]);
   if (!trip) notFound();
 
@@ -78,6 +78,7 @@ export default async function TripPhotosPage({
           )}
           <PhotoGallery
             canEdit={canEdit}
+            heroPhotoId={album.hero_photo_id}
             photos={(photos ?? []).map((p) => ({
               id: p.id,
               url: urlFor.get(p.storage_path) ?? null,

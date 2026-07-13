@@ -21,7 +21,7 @@ export default async function HolidaysPage({
   const currency = membership.household.base_currency;
 
   const supabase = await createClient();
-  const [{ data: trips }, { data: totals }] = await Promise.all([
+  const [{ data: trips }, { data: totals }, { data: albums }] = await Promise.all([
     supabase
       .from("trips")
       .select("id, name, destination, start_date, end_date, status")
@@ -31,7 +31,23 @@ export default async function HolidaysPage({
       .from("trip_expenses")
       .select("trip_id, amount")
       .eq("household_id", membership.household_id),
+    supabase
+      .from("albums")
+      .select("trip_id, hero:photos!albums_hero_photo_id_fkey(storage_path)")
+      .eq("household_id", membership.household_id)
+      .not("trip_id", "is", null),
   ]);
+
+  const heroPathByTrip = new Map<string, string>();
+  for (const a of albums ?? []) {
+    const path = (a.hero as unknown as { storage_path: string } | null)?.storage_path;
+    if (a.trip_id && path) heroPathByTrip.set(a.trip_id, path);
+  }
+  const heroPaths = [...heroPathByTrip.values()];
+  const { data: signedHeroes } = heroPaths.length
+    ? await supabase.storage.from("photos").createSignedUrls(heroPaths, 3600)
+    : { data: [] };
+  const heroUrlByPath = new Map((signedHeroes ?? []).map((s) => [s.path, s.signedUrl]));
   const totalFor = new Map<string, number>();
   for (const t of totals ?? []) {
     totalFor.set(t.trip_id, (totalFor.get(t.trip_id) ?? 0) + Number(t.amount));
@@ -71,18 +87,27 @@ export default async function HolidaysPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {(trips ?? []).map((t) => (
+            (() => {
+              const heroPath = heroPathByTrip.get(t.id);
+              const heroUrl = heroPath ? heroUrlByPath.get(heroPath) : null;
+              return (
             <Link
               key={t.id}
               href={`/holidays/${t.id}`}
-              className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+              className="relative overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition-shadow hover:shadow-md"
             >
+              {heroUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={heroUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )}
+              <div className={heroUrl ? "relative bg-gradient-to-t from-black/75 via-black/30 to-black/10 p-5 text-white" : "p-5"}>
               <div className="flex items-start justify-between gap-2">
                 <div className="font-medium">{t.name}</div>
                 <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STATUS_STYLE[t.status]}`}>
                   {t.status}
                 </span>
               </div>
-              <div className="mt-1 text-sm text-stone-500">
+              <div className={`mt-1 text-sm ${heroUrl ? "text-white/80" : "text-stone-500"}`}>
                 {t.destination ?? "—"}
                 {t.start_date && (
                   <>
@@ -93,11 +118,14 @@ export default async function HolidaysPage({
                   </>
                 )}
               </div>
-              <div className="mt-3 text-sm text-stone-600">
+              <div className={`mt-3 text-sm ${heroUrl ? "text-white/90" : "text-stone-600"}`}>
                 Spent so far:{" "}
                 <span className="font-medium">{formatMoney(totalFor.get(t.id) ?? 0, currency)}</span>
               </div>
+              </div>
             </Link>
+              );
+            })()
           ))}
         </div>
       )}

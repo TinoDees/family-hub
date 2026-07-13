@@ -12,12 +12,14 @@ function Grid({
   selected,
   toggle,
   small,
+  heroPhotoId,
 }: {
   photos: GalleryPhoto[];
   selecting: boolean;
   selected: Set<string>;
   toggle: (id: string) => void;
   small?: boolean;
+  heroPhotoId?: string | null;
 }) {
   return (
     <div className={small ? "grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6" : "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4"}>
@@ -27,7 +29,7 @@ function Grid({
           onClick={() => selecting && toggle(p.id)}
           className={`relative overflow-hidden rounded-xl border bg-stone-100 ${
             selecting ? "cursor-pointer" : ""
-          } ${selected.has(p.id) ? "border-sky-500 ring-2 ring-sky-300" : "border-stone-200"}`}
+          } ${selected.has(p.id) ? "border-sky-500 ring-2 ring-sky-300" : p.id === heroPhotoId ? "border-amber-400 ring-2 ring-amber-200" : "border-stone-200"}`}
         >
           {p.url ? (
             selecting ? (
@@ -41,6 +43,11 @@ function Grid({
             )
           ) : (
             <div className="flex aspect-square items-center justify-center text-stone-300">📷</div>
+          )}
+          {p.id === heroPhotoId && !selecting && (
+            <span className="absolute left-1.5 top-1.5 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              ★ hero
+            </span>
           )}
           {selecting && (
             <span
@@ -63,9 +70,11 @@ function Grid({
 export function PhotoGallery({
   photos,
   canEdit,
+  heroPhotoId,
 }: {
   photos: GalleryPhoto[];
   canEdit: boolean;
+  heroPhotoId?: string | null;
 }) {
   const router = useRouter();
   const [selecting, setSelecting] = useState(false);
@@ -199,7 +208,7 @@ export function PhotoGallery({
         {normal.length === 0 ? (
           <p className="py-6 text-center text-sm text-stone-400">No photos yet.</p>
         ) : (
-          <Grid photos={normal} selecting={selecting} selected={selected} toggle={toggle} />
+          <Grid photos={normal} selecting={selecting} selected={selected} toggle={toggle} heroPhotoId={heroPhotoId} />
         )}
       </div>
 
