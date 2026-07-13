@@ -74,13 +74,10 @@ export default async function TripPhotosPage({
             <Link href="/photos" className="underline">Photo Album</Link> module.
           </p>
           {canEdit && <PhotoUploader householdId={membership.household_id} albumId={album.id} showVisibility />}
-          {(photos ?? []).length === 0 ? (
-            <div className="rounded-xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-400">
-              No photos yet.
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {(photos ?? []).map((p) => {
+          {(() => {
+            const receipts = (photos ?? []).filter((p) => p.caption === "Receipt");
+            const normal = (photos ?? []).filter((p) => p.caption !== "Receipt");
+            const card = (p: { id: string; storage_path: string; caption: string | null }) => {
                 const url = urlFor.get(p.storage_path);
                 return (
                   <div key={p.id} className="group relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
@@ -104,9 +101,32 @@ export default async function TripPhotosPage({
                     )}
                   </div>
                 );
-              })}
-            </div>
-          )}
+            };
+            return (
+              <>
+                <div className="rounded-xl border border-stone-200 bg-white p-4">
+                  <h2 className="mb-3 text-sm font-semibold">📷 Photos</h2>
+                  {normal.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-stone-400">No photos yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                      {normal.map(card)}
+                    </div>
+                  )}
+                </div>
+                {receipts.length > 0 && (
+                  <details className="rounded-xl border border-stone-200 bg-white">
+                    <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
+                      🧾 Receipts ({receipts.length})
+                    </summary>
+                    <div className="grid grid-cols-3 gap-2 border-t border-stone-100 p-4 sm:grid-cols-4 md:grid-cols-6">
+                      {receipts.map(card)}
+                    </div>
+                  </details>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </div>

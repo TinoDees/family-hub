@@ -1,5 +1,6 @@
 "use server";
 
+import { CURRENCY_CODES } from "@/lib/currencies";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -390,6 +391,8 @@ export async function setAgreedRate(formData: FormData) {
   const tripId = String(formData.get("trip_id"));
   const currency = String(formData.get("currency") ?? "").trim().toUpperCase();
   const rateRaw = String(formData.get("agreed_rate") ?? "").trim();
+  if (!CURRENCY_CODES.has(currency))
+    redirect(`/holidays/${tripId}?error=Pick+a+currency+from+the+list`);
   const supabase = await createClient();
 
   if (!rateRaw) {

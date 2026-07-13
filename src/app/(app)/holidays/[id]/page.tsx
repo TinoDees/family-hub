@@ -17,6 +17,7 @@ import { TripTabs } from "@/components/trip-tabs";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { CopyButton } from "@/components/copy-button";
 import { AddFamilyMember } from "@/components/add-family-member";
+import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { inputCls } from "@/components/auth-card";
 
 export default async function TripOverviewPage({
@@ -174,13 +175,21 @@ export default async function TripOverviewPage({
           {canEdit && (
             <form action={setAgreedRate} className="mt-3 flex flex-wrap items-center gap-2 border-b border-stone-100 pb-3 text-sm">
               <input type="hidden" name="trip_id" value={trip.id} />
-              <input
+              <select
                 name="currency"
                 required
-                maxLength={3}
-                placeholder="THB"
-                className="w-20 rounded-lg border border-stone-300 px-2 py-1 font-mono text-sm uppercase"
-              />
+                defaultValue=""
+                className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm"
+              >
+                <option value="" disabled>currency…</option>
+                {COMMON_CURRENCIES.filter(
+                  (c) => c.code !== membership.household.base_currency.toUpperCase()
+                ).map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </select>
               <input
                 name="agreed_rate"
                 type="number"

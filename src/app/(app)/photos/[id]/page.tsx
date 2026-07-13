@@ -63,13 +63,38 @@ export default async function AlbumPage({
         <PhotoUploader householdId={membership.household_id} albumId={album.id} />
       )}
 
-      {(photos ?? []).length === 0 ? (
-        <div className="rounded-xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-400">
-          No photos yet.
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {(photos ?? []).map((p) => {
+      {(() => {
+        const receipts = (photos ?? []).filter((p) => p.caption === "Receipt");
+        const normal = (photos ?? []).filter((p) => p.caption !== "Receipt");
+        return (
+          <>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <h2 className="mb-3 text-sm font-semibold">📷 Photos</h2>
+              {normal.length === 0 ? (
+                <p className="py-6 text-center text-sm text-stone-400">No photos yet.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  {normal.map((p) => renderPhoto(p))}
+                </div>
+              )}
+            </div>
+            {receipts.length > 0 && (
+              <details className="rounded-xl border border-stone-200 bg-white">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
+                  🧾 Receipts ({receipts.length})
+                </summary>
+                <div className="grid grid-cols-3 gap-2 border-t border-stone-100 p-4 sm:grid-cols-4 md:grid-cols-6">
+                  {receipts.map((p) => renderPhoto(p))}
+                </div>
+              </details>
+            )}
+          </>
+        );
+      })()}
+    </div>
+  );
+
+  function renderPhoto(p: { id: string; storage_path: string; caption: string | null }) {
             const url = urlFor.get(p.storage_path);
             return (
               <div key={p.id} className="group relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
@@ -89,15 +114,11 @@ export default async function AlbumPage({
                 {access === "edit" && (
                   <form action={deletePhoto} className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <input type="hidden" name="photo_id" value={p.id} />
-                    <input type="hidden" name="album_id" value={album.id} />
+                    <input type="hidden" name="album_id" value={album!.id} />
                     <button className="rounded-full bg-black/50 px-2 py-1 text-xs text-white hover:bg-red-600" title="Delete photo">✕</button>
                   </form>
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+    );
+  }
 }

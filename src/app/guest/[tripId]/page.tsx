@@ -216,9 +216,9 @@ export default async function GuestTripPage({
           ) : (
             <>
               <PhotoUploader householdId={trip.household_id} albumId={album.id} />
-              {(photos ?? []).length > 0 && (
+              {(photos ?? []).filter((p) => p.caption !== "Receipt").length > 0 && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                  {(photos ?? []).map((p) => {
+                  {(photos ?? []).filter((p) => p.caption !== "Receipt").map((p) => {
                     const url = photoUrl.get(p.storage_path);
                     return (
                       <div key={p.id} className="overflow-hidden rounded-xl border border-stone-200 bg-stone-100">
