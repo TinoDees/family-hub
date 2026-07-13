@@ -384,3 +384,36 @@ export async function createParticipantInline(
   revalidatePath(`/holidays/${tripId}`);
   return { ok: true, id: data.id, name: data.name };
 }
+
+export async function setAgreedRate(formData: FormData) {
+  const { membership } = await requireModule("holidays", "edit");
+  const tripId = String(formData.get("trip_id"));
+  const currency = String(formData.get("currency") ?? "").trim().toUpperCase();
+  const rateRaw = String(formData.get("agreed_rate") ?? "").trim();
+  const supabase = await createClient();
+
+  if (!rateRaw) {
+    await supabase
+      .from("trip_fx_rates")
+      .delete()
+      .eq("trip_id", tripId)
+      .eq("currency", currency);
+  } else {
+    const rate = parseFloat(rateRaw);
+    if (!rate || rate <= 0)
+      redirect(`/holidays/${tripId}?error=Rate+must+be+a+positive+number`);
+    await supabase.from("trip_fx_rates").upsert(
+      {
+        trip_id: tripId,
+        household_id: membership.household_id,
+        currency,
+        agreed_rate: rate,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "trip_id,currency" }
+    );
+  }
+  revalidatePath(`/holidays/${tripId}`);
+  revalidatePath(`/holidays/${tripId}/expenses`);
+  redirect(`/holidays/${tripId}`);
+}

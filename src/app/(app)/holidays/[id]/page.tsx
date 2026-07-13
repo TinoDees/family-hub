@@ -11,6 +11,7 @@ import {
   createTripInvite,
   addTripFamily,
   removeTripFamily,
+  setAgreedRate,
 } from "@/lib/actions/trips";
 import { TripTabs } from "@/components/trip-tabs";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -38,6 +39,7 @@ export default async function TripOverviewPage({
     { data: participants },
     { data: expenses },
     { data: album },
+    { data: fxRates },
     { data: invites },
   ] = await Promise.all([
     supabase
@@ -52,8 +54,12 @@ export default async function TripOverviewPage({
       .select("id, name, user_id, family_id, email, is_manager")
       .eq("trip_id", id)
       .order("created_at"),
-    supabase.from("trip_expenses").select("id, amount").eq("trip_id", id),
+    supabase
+      .from("trip_expenses")
+      .select("id, amount, original_amount, original_currency")
+      .eq("trip_id", id),
     supabase.from("albums").select("id, photos(count)").eq("trip_id", id).maybeSingle(),
+    supabase.from("trip_fx_rates").select("currency, agreed_rate").eq("trip_id", id),
     supabase
       .from("trip_invites")
       .select("participant_id, token, expires_at")
@@ -64,6 +70,18 @@ export default async function TripOverviewPage({
   if (!trip) notFound();
 
   const total = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
+
+  // foreign currencies seen on this trip: implied market rate + agreed rate
+  const fxMap = new Map((fxRates ?? []).map((r) => [r.currency as string, Number(r.agreed_rate)]));
+  const currencyAgg = new Map<string, { orig: number; aud: number }>();
+  for (const e of expenses ?? []) {
+    if (e.original_currency && e.original_amount) {
+      const cur = currencyAgg.get(e.original_currency) ?? { orig: 0, aud: 0 };
+      cur.orig += Number(e.original_amount);
+      cur.aud += Number(e.amount);
+      currencyAgg.set(e.original_currency, cur);
+    }
+  }
   const photoCount = (album?.photos as unknown as { count: number }[])?.[0]?.count ?? 0;
   const inviteFor = new Map(
     (invites ?? [])
@@ -141,6 +159,57 @@ export default async function TripOverviewPage({
           </div>
         </Link>
       </div>
+
+      {currencyAgg.size > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white p-5">
+          <h2 className="text-sm font-semibold">Exchange rates</h2>
+          <p className="mt-1 text-xs text-stone-400">
+            Market = live rate at scan time. Set an agreed rate (what you actually got
+            changing money) and balances use it — everyone sees all three numbers.
+          </p>
+          <div className="mt-3 space-y-2">
+            {[...currencyAgg.entries()].map(([cur, agg]) => {
+              const marketRate = agg.orig > 0 ? agg.aud / agg.orig : 0;
+              return (
+                <form key={cur} action={setAgreedRate} className="flex flex-wrap items-center gap-3 text-sm">
+                  <input type="hidden" name="trip_id" value={trip.id} />
+                  <input type="hidden" name="currency" value={cur} />
+                  <span className="w-12 font-mono font-semibold">{cur}</span>
+                  <span className="text-stone-500">
+                    market ≈ <span className="font-medium text-stone-700">{marketRate.toFixed(4)}</span>
+                  </span>
+                  {canEdit ? (
+                    <>
+                      <label className="flex items-center gap-1.5">
+                        <span className="text-stone-500">agreed</span>
+                        <input
+                          name="agreed_rate"
+                          type="number"
+                          step="0.000001"
+                          min="0"
+                          defaultValue={fxMap.get(cur) ?? ""}
+                          placeholder={marketRate.toFixed(4)}
+                          className="w-28 rounded-lg border border-stone-300 px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
+                        Save
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-stone-500">
+                      agreed:{" "}
+                      <span className="font-medium text-stone-700">
+                        {fxMap.get(cur)?.toFixed(4) ?? "—"}
+                      </span>
+                    </span>
+                  )}
+                </form>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">

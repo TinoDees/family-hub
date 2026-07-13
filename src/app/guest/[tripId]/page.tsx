@@ -40,7 +40,7 @@ export default async function GuestTripPage({
   // RLS already limits expenses to ones I paid or share in
   const { data: expenses } = await supabase
     .from("trip_expenses")
-    .select("id, description, amount, spent_at, paid_by, receipt_photo_id")
+    .select("id, description, amount, spent_at, paid_by, receipt_photo_id, original_amount, original_currency")
     .eq("trip_id", tripId)
     .order("spent_at", { ascending: false });
 
@@ -53,12 +53,27 @@ export default async function GuestTripPage({
     : { data: [] as { expense_id: string; participant_id: string; amount: number }[] };
 
   const pName = new Map((participants ?? []).map((p) => [p.id, p.name]));
+
+  // same agreed-rate adjustment the hosts see
+  const { data: fxRates } = await supabase
+    .from("trip_fx_rates")
+    .select("currency, agreed_rate")
+    .eq("trip_id", tripId);
+  const agreedRate = new Map((fxRates ?? []).map((r) => [r.currency as string, Number(r.agreed_rate)]));
+  const expenseFactor = new Map(
+    (expenses ?? []).map((e) => {
+      if (!e.original_currency || !e.original_amount || Number(e.amount) === 0) return [e.id, 1];
+      const agreed = agreedRate.get(e.original_currency);
+      return [e.id, agreed ? (Number(e.original_amount) * agreed) / Number(e.amount) : 1];
+    })
+  );
+
   const myPaid = (expenses ?? [])
     .filter((e) => e.paid_by === me.id)
-    .reduce((s, e) => s + Number(e.amount), 0);
+    .reduce((s, e) => s + Number(e.amount) * (expenseFactor.get(e.id) ?? 1), 0);
   const myShare = (shares ?? [])
     .filter((s) => s.participant_id === me.id)
-    .reduce((sum, s) => sum + Number(s.amount), 0);
+    .reduce((sum, s) => sum + Number(s.amount) * (expenseFactor.get(s.expense_id) ?? 1), 0);
   const net = Math.round((myPaid - myShare) * 100) / 100;
 
   const { data: photos } = album
@@ -173,7 +188,12 @@ export default async function GuestTripPage({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-right font-medium">
-                      {formatMoney(Number(e.amount))}
+                      {formatMoney(Number(e.amount) * (expenseFactor.get(e.id) ?? 1))}
+                      {e.original_amount && e.original_currency && (
+                        <div className="text-[10px] font-normal text-stone-400">
+                          {e.original_currency} {Number(e.original_amount).toLocaleString()}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

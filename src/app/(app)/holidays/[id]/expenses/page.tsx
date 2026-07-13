@@ -25,7 +25,7 @@ export default async function TripExpensesPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: trip }, { data: participants }, { data: expenses }, { data: families }] = await Promise.all([
+  const [{ data: trip }, { data: participants }, { data: expenses }, { data: families }, { data: fxRates }] = await Promise.all([
     supabase
       .from("trips")
       .select("id, name")
@@ -40,6 +40,7 @@ export default async function TripExpensesPage({
       .order("spent_at", { ascending: false })
       .order("created_at", { ascending: false }),
     supabase.from("trip_families").select("id, name").eq("trip_id", id).order("created_at"),
+    supabase.from("trip_fx_rates").select("currency, agreed_rate").eq("trip_id", id),
   ]);
   if (!trip) notFound();
 
@@ -82,7 +83,26 @@ export default async function TripExpensesPage({
 
   const pList = participants ?? [];
   const pName = new Map(pList.map((p) => [p.id, p.name]));
-  const balances = computeBalances(pList, expenses ?? [], shares ?? []);
+
+  // agreed exchange rates: rescale expense + share amounts before any maths
+  const agreedRate = new Map((fxRates ?? []).map((r) => [r.currency as string, Number(r.agreed_rate)]));
+  const factorFor = (e: { amount: number; original_amount: number | null; original_currency: string | null }) => {
+    if (!e.original_currency || !e.original_amount) return 1;
+    const agreed = agreedRate.get(e.original_currency);
+    if (!agreed || Number(e.amount) === 0) return 1;
+    return (Number(e.original_amount) * agreed) / Number(e.amount);
+  };
+  const expenseFactor = new Map((expenses ?? []).map((e) => [e.id, factorFor(e)]));
+  const adjExpenses = (expenses ?? []).map((e) => ({
+    ...e,
+    amount: Number(e.amount) * (expenseFactor.get(e.id) ?? 1),
+  }));
+  const adjShares = (shares ?? []).map((sh) => ({
+    ...sh,
+    amount: Number(sh.amount) * (expenseFactor.get(sh.expense_id) ?? 1),
+  }));
+
+  const balances = computeBalances(pList, adjExpenses, adjShares);
   const transfers = settle(balances);
 
   // family aggregation
@@ -93,7 +113,7 @@ export default async function TripExpensesPage({
     if (!familyAgg.has(fid)) familyAgg.set(fid, { paid: 0, share: 0, rows: [] });
     return familyAgg.get(fid)!;
   };
-  for (const e of expenses ?? []) {
+  for (const e of adjExpenses) {
     const fid = familyOf.get(e.paid_by);
     if (fid) aggFor(fid).paid += Number(e.amount);
   }
@@ -113,7 +133,7 @@ export default async function TripExpensesPage({
       itemisedByParticipant.set(k, (itemisedByParticipant.get(k) ?? 0) + Number(it.amount));
     }
   }
-  for (const sh of shares ?? []) {
+  for (const sh of adjShares) {
     const fid = familyOf.get(sh.participant_id);
     if (!fid) continue;
     const agg = aggFor(fid);
@@ -129,7 +149,7 @@ export default async function TripExpensesPage({
       });
     }
   }
-  const total = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
+  const total = adjExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const sharesByExpense = new Map<string, string[]>();
   const shareIdsByExpense = new Map<string, string[]>();
   for (const s of shares ?? []) {
@@ -206,13 +226,23 @@ export default async function TripExpensesPage({
                           )}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-2 text-right font-medium">
-                        {formatMoney(Number(e.amount), currency)}
-                        {e.original_amount && e.original_currency && (
-                          <div className="text-[10px] font-normal text-stone-400">
-                            {e.original_currency} {Number(e.original_amount).toLocaleString()}
-                          </div>
-                        )}
+                      <td className="whitespace-nowrap px-4 py-2 text-right">
+                        {(() => {
+                          const f = expenseFactor.get(e.id) ?? 1;
+                          const effective = Number(e.amount) * f;
+                          const hasAgreed = Math.abs(f - 1) > 0.0001;
+                          return (
+                            <>
+                              <div className="font-medium">{formatMoney(effective, currency)}</div>
+                              {e.original_amount && e.original_currency && (
+                                <div className="text-[10px] font-normal text-stone-400">
+                                  {e.original_currency} {Number(e.original_amount).toLocaleString()}
+                                  {hasAgreed && <> · mkt {formatMoney(Number(e.amount), currency)}</>}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </td>
                       {canEdit && (
                         <td className="px-2 py-2 text-right">
