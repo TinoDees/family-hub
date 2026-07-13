@@ -6,6 +6,7 @@ import { RecipeForm } from "@/components/recipe-form";
 import { createRecipe } from "@/lib/actions/recipes";
 import { scanRecipeImage, type ScannedRecipe } from "@/lib/actions/recipe-scan";
 import { recipeFromVideo, recipeFromYouTube } from "@/lib/actions/video-recipe";
+import { recipeFromUrl } from "@/lib/actions/recipe-from-url";
 import { createClient } from "@/lib/supabase/client";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
@@ -18,8 +19,16 @@ async function toBase64(file: File): Promise<{ data: string; mediaType: string }
   return { data: btoa(binary), mediaType: file.type || "image/jpeg" };
 }
 
-export function NewRecipeClient({ householdId }: { householdId: string }) {
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+export function NewRecipeClient({
+  householdId,
+  initialUrl,
+}: {
+  householdId: string;
+  /** pre-filled by the Android share target — auto-reads on load */
+  initialUrl?: string;
+}) {
+  const [youtubeUrl, setYoutubeUrl] = useState(initialUrl ?? "");
+  const [autoRan, setAutoRan] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -81,17 +90,25 @@ export function NewRecipeClient({ householdId }: { householdId: string }) {
     }
   };
 
-  const onYouTube = async () => {
-    if (!youtubeUrl.trim()) return;
+  const onLink = async (raw?: string) => {
+    const url = (raw ?? youtubeUrl).trim();
+    if (!url) return;
+    const isYouTube = /^https:\/\/(www\.)?(youtube\.com|youtu\.be)\//.test(url);
     setScanning(true);
-    setMsg("Watching the video… this takes up to a minute.");
+    setMsg(isYouTube ? "Watching the video… this takes up to a minute." : "Reading the page…");
     try {
-      const res = await recipeFromYouTube(youtubeUrl);
+      const res = isYouTube ? await recipeFromYouTube(url) : await recipeFromUrl(url);
       applyResult(res);
     } finally {
       setScanning(false);
     }
   };
+
+  // share-target flow: auto-read the shared link once
+  if (initialUrl && !autoRan) {
+    setAutoRan(true);
+    setTimeout(() => onLink(initialUrl), 0);
+  }
 
   // also allow choosing an existing photo/screenshot (e.g. TikTok caption screenshot)
   const onPick = async (file: File) => {
@@ -150,20 +167,21 @@ export function NewRecipeClient({ householdId }: { householdId: string }) {
           <input
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
-            placeholder="…or paste a YouTube link"
+            placeholder="…or paste a link (recipe page or YouTube)"
+            autoComplete="off"
             className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm placeholder:text-stone-400"
           />
           <button
             type="button"
             disabled={scanning || !youtubeUrl.trim()}
-            onClick={onYouTube}
+            onClick={() => onLink()}
             className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-100 disabled:opacity-40"
           >
             Read
           </button>
         </div>
         <span className="w-full text-xs text-stone-400">
-          Cookbook pages, screenshots of TikTok/Instagram captions, saved videos (TikTok → Save video → upload here), or YouTube links.
+          Cookbook pages, screenshots, saved videos, YouTube links — or any recipe website link. On Android you can share a page straight to the Nestly app.
         </span>
       </div>
       {msg && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">{msg}</p>}

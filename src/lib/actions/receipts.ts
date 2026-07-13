@@ -96,7 +96,7 @@ export async function scanReceipt(
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 300,
+        max_tokens: 2500,
         messages: [
           {
             role: "user",
@@ -118,9 +118,19 @@ export async function scanReceipt(
       return { ok: true, photoId: photo.id, error: `Receipt saved; AI reading failed (${res.status}) — fill in manually.` };
     }
     const data = await res.json();
-    const text: string = data?.content?.[0]?.text ?? "";
+    let text: string = data?.content?.[0]?.text ?? "";
+    text = text.replace(/```(?:json)?/g, "").trim();
     const match = text.match(/\{[\s\S]*\}/);
-    const parsed = match ? JSON.parse(match[0]) : {};
+    let parsed: Record<string, unknown> & { items?: unknown; total?: unknown; merchant?: unknown; date?: unknown } = {};
+    try {
+      parsed = match ? JSON.parse(match[0]) : {};
+    } catch {
+      return {
+        ok: true,
+        photoId: photo.id,
+        error: "Receipt saved; the AI answer was garbled — try scanning again.",
+      };
+    }
     // normalise: explode quantity lines into unit rows so counts can be
     // allocated per person ("Tino had 2"), with cent-exact unit amounts.
     type RawItem = { description?: unknown; qty?: unknown; unit_amount?: unknown; line_total?: unknown };
