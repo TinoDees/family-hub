@@ -160,23 +160,55 @@ export default async function TripOverviewPage({
         </Link>
       </div>
 
-      {currencyAgg.size > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-5">
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
           <h2 className="text-sm font-semibold">Exchange rates</h2>
           <p className="mt-1 text-xs text-stone-400">
             Market = live rate at scan time. Set an agreed rate (what you actually got
             changing money) and balances use it — everyone sees all three numbers.
           </p>
+          {currencyAgg.size === 0 && fxMap.size === 0 && (
+            <p className="mt-2 text-xs text-stone-400">
+              No foreign-currency expenses yet — add one below, or pre-set a rate for the trip.
+            </p>
+          )}
+          {canEdit && (
+            <form action={setAgreedRate} className="mt-3 flex flex-wrap items-center gap-2 border-b border-stone-100 pb-3 text-sm">
+              <input type="hidden" name="trip_id" value={trip.id} />
+              <input
+                name="currency"
+                required
+                maxLength={3}
+                placeholder="THB"
+                className="w-20 rounded-lg border border-stone-300 px-2 py-1 font-mono text-sm uppercase"
+              />
+              <input
+                name="agreed_rate"
+                type="number"
+                step="0.000001"
+                min="0"
+                required
+                placeholder="rate to AUD, e.g. 0.045"
+                className="w-44 rounded-lg border border-stone-300 px-2 py-1 text-sm"
+              />
+              <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
+                Set rate
+              </button>
+            </form>
+          )}
           <div className="mt-3 space-y-2">
-            {[...currencyAgg.entries()].map(([cur, agg]) => {
-              const marketRate = agg.orig > 0 ? agg.aud / agg.orig : 0;
+            {[...new Set([...currencyAgg.keys(), ...fxMap.keys()])].map((cur) => {
+              const agg = currencyAgg.get(cur) ?? { orig: 0, aud: 0 };
+              const marketRate = agg.orig > 0 ? agg.aud / agg.orig : null;
               return (
                 <form key={cur} action={setAgreedRate} className="flex flex-wrap items-center gap-3 text-sm">
                   <input type="hidden" name="trip_id" value={trip.id} />
                   <input type="hidden" name="currency" value={cur} />
                   <span className="w-12 font-mono font-semibold">{cur}</span>
                   <span className="text-stone-500">
-                    market ≈ <span className="font-medium text-stone-700">{marketRate.toFixed(4)}</span>
+                    market ≈{" "}
+                    <span className="font-medium text-stone-700">
+                      {marketRate ? marketRate.toFixed(4) : "—"}
+                    </span>
                   </span>
                   {canEdit ? (
                     <>
@@ -188,7 +220,7 @@ export default async function TripOverviewPage({
                           step="0.000001"
                           min="0"
                           defaultValue={fxMap.get(cur) ?? ""}
-                          placeholder={marketRate.toFixed(4)}
+                          placeholder={marketRate ? marketRate.toFixed(4) : "0.0000"}
                           className="w-28 rounded-lg border border-stone-300 px-2 py-1 text-sm"
                         />
                       </label>
@@ -209,7 +241,6 @@ export default async function TripOverviewPage({
             })}
           </div>
         </div>
-      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
