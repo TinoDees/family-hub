@@ -61,7 +61,7 @@ export default async function TripOverviewPage({
       .eq("trip_id", id),
     supabase
       .from("albums")
-      .select("id, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos(count)")
+      .select("id, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos!photos_album_id_fkey(count)")
       .eq("trip_id", id)
       .maybeSingle(),
     supabase.from("trip_fx_rates").select("currency, agreed_rate").eq("trip_id", id),

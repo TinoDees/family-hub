@@ -15,7 +15,7 @@ export default async function PhotosPage({
   const supabase = await createClient();
   const { data: albums } = await supabase
     .from("albums")
-    .select("id, name, description, created_at, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos(count)")
+    .select("id, name, description, created_at, hero_photo_id, hero:photos!albums_hero_photo_id_fkey(storage_path), photos!photos_album_id_fkey(count)")
     .eq("household_id", membership.household_id)
     .order("created_at", { ascending: false });
 
