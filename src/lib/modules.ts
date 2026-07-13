@@ -24,6 +24,15 @@ export type ModuleDef = {
 
 export const MODULES: ModuleDef[] = [
   {
+    slug: "planner",
+    name: "Family Planner",
+    icon: "📆",
+    description: "The family week — school, sport, appointments and meals in one view.",
+    planned: [],
+    status: "live",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
+  },
+  {
     slug: "finance",
     name: "Finance",
     icon: "💰",
@@ -55,8 +64,8 @@ export const MODULES: ModuleDef[] = [
     name: "Shopping Lists",
     icon: "🛒",
     description: "Shared lists that sync live across everyone's devices.",
-    planned: ["Realtime sync (Supabase Realtime)", "Check-off with who/when", "From meal plan or manual"],
-    status: "placeholder",
+    planned: ["Realtime sync", "Supermarket specials AI"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "edit" },
   },
   {

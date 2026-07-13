@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { addMealEntry, removeMealEntry } from "@/lib/actions/meals";
+import { shoppingListFromWeek } from "@/lib/actions/shopping";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 const SLOT_ICON: Record<string, string> = { breakfast: "🌅", lunch: "🥪", dinner: "🍽️", snack: "🍎" };
@@ -181,9 +182,20 @@ export default async function MealsPage({
 
       {agg.size > 0 && (
         <div className="rounded-xl border border-stone-200 bg-white p-6">
-          <h2 className="text-sm font-semibold">This week&apos;s ingredients</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">This week&apos;s ingredients</h2>
+            {access === "edit" && (
+              <form action={shoppingListFromWeek}>
+                <input type="hidden" name="week_start" value={iso(days[0])} />
+                <input type="hidden" name="week_end" value={iso(days[6])} />
+                <button className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700">
+                  🛒 Create shopping list
+                </button>
+              </form>
+            )}
+          </div>
           <p className="mt-1 text-xs text-stone-400">
-            Aggregated from planned recipes — the auto shopping list lands with the Shopping module.
+            Aggregated from planned recipes, scaled by planned servings.
           </p>
           <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {[...agg.values()]
