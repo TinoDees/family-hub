@@ -76,7 +76,7 @@ create policy "guest photo objects select" on storage.objects for select
     bucket_id = 'photos'
     and exists (
       select 1 from albums a
-      where a.id::text = split_part(name, '/', 2)
+      where a.id::text = split_part(objects.name, '/', 2)
         and a.trip_id is not null and is_trip_participant(a.trip_id)
     )
   );
@@ -85,7 +85,7 @@ create policy "guest photo objects insert" on storage.objects for insert
     bucket_id = 'photos'
     and exists (
       select 1 from albums a
-      where a.id::text = split_part(name, '/', 2)
+      where a.id::text = split_part(objects.name, '/', 2)
         and a.trip_id is not null and is_trip_participant(a.trip_id)
     )
   );
