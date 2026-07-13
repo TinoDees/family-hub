@@ -36,6 +36,7 @@ export async function createTrip(formData: FormData) {
       trip_id: data.id,
       household_id: membership.household_id,
       name: membership.household.name,
+      linked_household_id: membership.household_id,
     })
     .select("id")
     .single();

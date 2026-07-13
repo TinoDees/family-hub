@@ -15,6 +15,7 @@ import {
 import { TripTabs } from "@/components/trip-tabs";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { CopyButton } from "@/components/copy-button";
+import { AddFamilyMember } from "@/components/add-family-member";
 import { inputCls } from "@/components/auth-card";
 
 export default async function TripOverviewPage({
@@ -45,7 +46,7 @@ export default async function TripOverviewPage({
       .eq("id", id)
       .eq("household_id", membership.household_id)
       .maybeSingle(),
-    supabase.from("trip_families").select("id, name").eq("trip_id", id).order("created_at"),
+    supabase.from("trip_families").select("id, name, linked_household_id").eq("trip_id", id).order("created_at"),
     supabase
       .from("trip_participants")
       .select("id, name, user_id, family_id, email, is_manager")
@@ -69,6 +70,14 @@ export default async function TripOverviewPage({
       .filter((i) => new Date(i.expires_at) > new Date())
       .map((i) => [i.participant_id, i.token])
   );
+  // household members with emails, minus those already on the trip (for the picker)
+  const { data: memberEmails } = canEdit
+    ? await supabase.rpc("household_member_emails", { hid: membership.household_id })
+    : { data: [] };
+  const onTrip = new Set((participants ?? []).map((p) => p.user_id).filter(Boolean));
+  const pickerOptions = ((memberEmails ?? []) as { user_id: string; email: string; display_name: string }[])
+    .filter((m) => !onTrip.has(m.user_id));
+
   const byFamily = new Map<string, NonNullable<typeof participants>>();
   const unassigned: NonNullable<typeof participants> = [];
   for (const p of participants ?? []) {
@@ -194,18 +203,13 @@ export default async function TripOverviewPage({
                 )}
               </ul>
               {canEdit && (
-                <form action={addParticipant} className="mt-3 flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="trip_id" value={trip.id} />
-                  <input type="hidden" name="family_id" value={f.id} />
-                  <input name="name" required placeholder="Name" className={`${inputCls} w-36`} />
-                  <input name="email" type="email" placeholder="email (for the invite)" className={`${inputCls} w-56`} />
-                  <label className="flex items-center gap-1.5 pb-2 text-xs text-stone-500">
-                    <input type="checkbox" name="is_manager" className="rounded border-stone-300" /> manager
-                  </label>
-                  <button className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium hover:bg-stone-100">
-                    Add member
-                  </button>
-                </form>
+                <AddFamilyMember
+                  tripId={trip.id}
+                  familyId={f.id}
+                  householdOptions={
+                    f.linked_household_id === membership.household_id ? pickerOptions : []
+                  }
+                />
               )}
             </div>
           );

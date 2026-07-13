@@ -86,14 +86,21 @@ export function AddExpenseForm({
     }
   };
 
-  const addPerson = async (afterAdd?: (id: string) => void) => {
-    const name = window.prompt("Name of the person to add to this trip:");
-    if (!name?.trim()) return;
-    const res = await createParticipantInline(tripId, name);
+  const [newPersonFor, setNewPersonFor] = useState<number | "general" | null>(null);
+  const [newPersonName, setNewPersonName] = useState("");
+
+  const confirmAddPerson = async () => {
+    if (!newPersonName.trim()) return;
+    const target = newPersonFor;
+    const res = await createParticipantInline(tripId, newPersonName);
+    setNewPersonName("");
+    setNewPersonFor(null);
     if (res.ok && res.id && res.name) {
       setParticipants((p) => [...p, { id: res.id!, name: res.name! }]);
       setSharedWith((s) => new Set([...s, res.id!]));
-      afterAdd?.(res.id);
+      if (typeof target === "number") {
+        setItems((it) => it.map((r, i) => (i === target ? { ...r, consumed_by: res.id! } : r)));
+      }
     } else {
       setScanMsg(res.error ?? "Could not add person");
     }
@@ -101,9 +108,7 @@ export function AddExpenseForm({
 
   const setItemConsumer = (idx: number, value: string, addNew?: boolean) => {
     if (addNew) {
-      addPerson((newId) =>
-        setItems((it) => it.map((r, i) => (i === idx ? { ...r, consumed_by: newId } : r)))
-      );
+      setNewPersonFor(idx);
       return;
     }
     setItems((it) => it.map((r, i) => (i === idx ? { ...r, consumed_by: value } : r)));
@@ -214,11 +219,35 @@ export function AddExpenseForm({
           </div>
         )}
 
+        {newPersonFor !== null && (
+          <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
+            <input
+              value={newPersonName}
+              onChange={(e) => setNewPersonName(e.target.value)}
+              placeholder="Name of the new person"
+              autoComplete="off"
+              autoFocus
+              className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  confirmAddPerson();
+                }
+              }}
+            />
+            <button type="button" onClick={confirmAddPerson} className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">
+              Add
+            </button>
+            <button type="button" onClick={() => setNewPersonFor(null)} className="rounded-lg px-2 py-1.5 text-xs text-stone-400 hover:bg-stone-100">
+              Cancel
+            </button>
+          </div>
+        )}
         <div>
           <div className="mb-1 flex items-center gap-3 text-xs font-medium">
             <span>{preview.hasAlloc ? `Shared part (${money(Math.max(0, preview.pool))}) split between` : "Split between"}</span>
             {!isGuest && (
-              <button type="button" onClick={() => addPerson()} className="text-xs text-sky-600 underline">
+              <button type="button" onClick={() => setNewPersonFor("general")} className="text-xs text-sky-600 underline">
                 + Add person
               </button>
             )}
