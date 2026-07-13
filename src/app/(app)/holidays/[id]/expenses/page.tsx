@@ -35,7 +35,7 @@ export default async function TripExpensesPage({
     supabase.from("trip_participants").select("id, name, user_id, family_id").eq("trip_id", id).order("created_at"),
     supabase
       .from("trip_expenses")
-      .select("id, description, amount, spent_at, paid_by, receipt_photo_id, is_treat")
+      .select("id, description, amount, spent_at, paid_by, receipt_photo_id, is_treat, original_amount, original_currency")
       .eq("trip_id", id)
       .order("spent_at", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -208,6 +208,11 @@ export default async function TripExpensesPage({
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-right font-medium">
                         {formatMoney(Number(e.amount), currency)}
+                        {e.original_amount && e.original_currency && (
+                          <div className="text-[10px] font-normal text-stone-400">
+                            {e.original_currency} {Number(e.original_amount).toLocaleString()}
+                          </div>
+                        )}
                       </td>
                       {canEdit && (
                         <td className="px-2 py-2 text-right">
@@ -215,6 +220,7 @@ export default async function TripExpensesPage({
                             {!e.is_treat && (
                             <ExpenseSplitModal
                               expense={{ id: e.id, description: e.description, amount: Number(e.amount) }}
+                              receiptUrl={e.receipt_photo_id ? receiptUrl.get(e.receipt_photo_id) : undefined}
                               items={(itemsByExpense.get(e.id) ?? []).map((it) => ({
                                 id: it.id,
                                 description: it.description,

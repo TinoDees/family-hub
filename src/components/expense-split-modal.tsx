@@ -16,12 +16,14 @@ export function ExpenseSplitModal({
   participants,
   currentShareIds,
   currency,
+  receiptUrl,
 }: {
   expense: { id: string; description: string; amount: number };
   items: Item[];
   participants: Participant[];
   currentShareIds: string[];
   currency: string;
+  receiptUrl?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [alloc, setAlloc] = useState<Record<string, string>>(
@@ -82,6 +84,17 @@ export function ExpenseSplitModal({
               <button onClick={() => setOpen(false)} className="rounded-lg p-2 text-stone-400 hover:bg-stone-100">✕</button>
             </div>
 
+            {receiptUrl && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-sky-600">
+                  📄 Show receipt for cross-checking
+                </summary>
+                <a href={receiptUrl} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={receiptUrl} alt="Receipt" className="mt-2 max-h-96 rounded-lg border border-stone-200" />
+                </a>
+              </details>
+            )}
             {items.length === 0 ? (
               <p className="mt-4 rounded-lg bg-stone-50 px-3 py-4 text-center text-sm text-stone-400">
                 No line items on this expense — scan the receipt when adding to get them.

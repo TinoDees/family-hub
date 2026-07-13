@@ -55,6 +55,8 @@ export async function addGuestExpense(formData: FormData) {
       paid_by: me.id,
       receipt_photo_id: String(formData.get("receipt_photo_id") || "") || null,
       is_treat: formData.get("is_treat") === "on",
+      original_amount: parseFloat(String(formData.get("original_amount") || "")) || null,
+      original_currency: String(formData.get("original_currency") || "").trim().toUpperCase() || null,
     })
     .select("id")
     .single();

@@ -11,6 +11,9 @@ export type ScanResult = {
   total?: number | null;
   date?: string | null;
   items?: { description: string; amount: number }[];
+  originalTotal?: number | null;
+  originalCurrency?: string | null;
+  fxRate?: number | null;
 };
 
 /**
@@ -107,7 +110,7 @@ export async function scanReceipt(
               },
               {
                 type: "text",
-                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null, "items": [{"description": string, "qty": number, "unit_amount": number, "line_total": number}]}. "total" is the final amount paid including tax/tip. For each line item: qty = how many (1 if not stated), unit_amount = price for ONE, line_total = qty x unit_amount as printed. [] if unreadable.',
+                text: 'Read this receipt. Reply with ONLY a JSON object, no other text: {"merchant": string or null, "total": number or null, "date": "YYYY-MM-DD" or null, "currency": string, "items": [{"description": string, "qty": number, "unit_amount": number, "line_total": number}]}. "total" is the final amount paid including tax/tip. "currency" is the ISO 4217 code of the receipt (THB, AUD, EUR, USD…) judged from symbols/language/location. For each line item: qty = how many (1 if not stated), unit_amount = price for ONE, line_total = qty x unit_amount as printed. [] if unreadable.',
               },
             ],
           },
@@ -170,6 +173,59 @@ export async function scanReceipt(
       }
     }
     parsed.items = units;
+
+    // currency conversion: receipt currency -> household base currency
+    let originalTotal: number | null = null;
+    let originalCurrency: string | null = null;
+    let fxRate: number | null = null;
+    const receiptCurrency =
+      typeof parsed.currency === "string" && /^[A-Z]{3}$/.test(parsed.currency.toUpperCase())
+        ? parsed.currency.toUpperCase()
+        : null;
+    if (receiptCurrency) {
+      const { data: hh } = await supabase
+        .from("households")
+        .select("base_currency")
+        .eq("id", householdId)
+        .maybeSingle();
+      const base = (hh?.base_currency ?? "AUD").toUpperCase();
+      if (receiptCurrency !== base && typeof parsed.total === "number") {
+        try {
+          const fx = await fetch(
+            `https://api.frankfurter.app/latest?from=${receiptCurrency}&to=${base}`,
+            { signal: AbortSignal.timeout(8000) }
+          );
+          if (fx.ok) {
+            const fxData = await fx.json();
+            const rate = fxData?.rates?.[base];
+            if (typeof rate === "number" && rate > 0) {
+              originalTotal = parsed.total as number;
+              originalCurrency = receiptCurrency;
+              fxRate = rate;
+              parsed.total = Math.round((parsed.total as number) * rate * 100) / 100;
+              parsed.items = (parsed.items as { description: string; amount: number }[]).map((i) => ({
+                ...i,
+                amount: Math.round(i.amount * rate * 100) / 100,
+              }));
+            }
+          }
+        } catch {
+          /* no rate — leave amounts as printed, flag below */
+        }
+        if (!fxRate) {
+          return {
+            ok: true,
+            photoId: photo.id,
+            merchant: typeof parsed.merchant === "string" ? parsed.merchant : null,
+            total: typeof parsed.total === "number" ? parsed.total : null,
+            date: typeof parsed.date === "string" ? parsed.date : null,
+            items: parsed.items as { description: string; amount: number }[],
+            originalCurrency: receiptCurrency,
+            error: `This receipt is in ${receiptCurrency} but I couldn't fetch an exchange rate — amounts are unconverted, adjust manually.`,
+          };
+        }
+      }
+    }
     return {
       ...(itemWarning ? { error: itemWarning } : {}),
       ok: true,
@@ -178,6 +234,9 @@ export async function scanReceipt(
       total: typeof parsed.total === "number" ? parsed.total : null,
       date: typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null,
       items: parsed.items as { description: string; amount: number }[],
+      originalTotal,
+      originalCurrency,
+      fxRate,
     };
   } catch {
     return { ok: true, photoId: photo.id, error: "Receipt saved; AI reading failed — fill in manually." };

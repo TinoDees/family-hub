@@ -53,6 +53,8 @@ export function AddExpenseForm({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [receiptPhotoId, setReceiptPhotoId] = useState("");
+  const [originalAmount, setOriginalAmount] = useState("");
+  const [originalCurrency, setOriginalCurrency] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const [isTreat, setIsTreat] = useState(false);
   const [sharedWith, setSharedWith] = useState<Set<string>>(new Set(initialParticipants.map((p) => p.id)));
@@ -78,11 +80,22 @@ export function AddExpenseForm({
       if (res.merchant) setDescription(res.merchant);
       if (res.total) setAmount(String(res.total));
       if (res.date) setDate(res.date);
+      if (res.originalTotal && res.originalCurrency) {
+        setOriginalAmount(String(res.originalTotal));
+        setOriginalCurrency(res.originalCurrency);
+      } else {
+        setOriginalAmount("");
+        setOriginalCurrency(res.originalCurrency ?? "");
+      }
+      const fxNote =
+        res.originalTotal && res.originalCurrency && res.fxRate
+          ? ` Converted from ${res.originalCurrency} ${res.originalTotal} at ${res.fxRate.toFixed(4)}.`
+          : "";
       setScanMsg(
-        res.error ??
+        (res.error ??
           (res.items && res.items.length > 0
             ? `Receipt read — ${res.items.length} items below. Assign who had what (or leave shared) and add.`
-            : "Receipt read — check the details and add.")
+            : "Receipt read — check the details and add.")) + fxNote
       );
     } finally {
       setScanning(false);
@@ -347,6 +360,8 @@ export function AddExpenseForm({
 
         <input type="hidden" name="trip_id" value={tripId} />
         <input type="hidden" name="receipt_photo_id" value={receiptPhotoId} />
+      <input type="hidden" name="original_amount" value={originalAmount} />
+      <input type="hidden" name="original_currency" value={originalCurrency} />
         <input type="hidden" name="items_json" value={JSON.stringify(items)} />
         {preview.over && !isTreat ? (
           <button disabled className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white opacity-40">

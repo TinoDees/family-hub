@@ -12,11 +12,23 @@ import { createClient } from "@/lib/supabase/client";
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
 
 async function toBase64(file: File): Promise<{ data: string; mediaType: string }> {
-  const buf = await file.arrayBuffer();
-  let binary = "";
-  const arr = new Uint8Array(buf);
-  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
-  return { data: btoa(binary), mediaType: file.type || "image/jpeg" };
+  // resize first — full-resolution photos exceed the server action size limit
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/webp", 0.85);
+    return { data: dataUrl.split(",")[1], mediaType: "image/webp" };
+  } catch {
+    const buf = await file.arrayBuffer();
+    let binary = "";
+    const arr = new Uint8Array(buf);
+    for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
+    return { data: btoa(binary), mediaType: file.type || "image/jpeg" };
+  }
 }
 
 export function NewRecipeClient({
@@ -54,6 +66,8 @@ export function NewRecipeClient({
       setScanned(res);
       setVersion((v) => v + 1);
       setMsg(`Read "${res.name}" — check everything, then save.`);
+    } catch {
+      setMsg("Reading failed — try again.");
     } finally {
       setScanning(false);
     }
@@ -91,6 +105,8 @@ export function NewRecipeClient({
       const res = await recipeFromVideo(path);
       if (res.ok && res.video_path) setVideoPath(res.video_path);
       applyResult(res);
+    } catch {
+      setMsg("Reading failed — the video may be too large or the connection dropped. Try again.");
     } finally {
       setScanning(false);
     }
@@ -106,6 +122,8 @@ export function NewRecipeClient({
       const res = isYouTube ? await recipeFromYouTube(url) : await recipeFromUrl(url);
       if (res.ok) setSourceUrl(url);
       applyResult(res);
+    } catch {
+      setMsg("Reading failed — try again.");
     } finally {
       setScanning(false);
     }
@@ -122,6 +140,8 @@ export function NewRecipeClient({
           const res = await recipeFromVideo(initialVideoPath);
           if (res.ok && res.video_path) setVideoPath(res.video_path);
           applyResult(res);
+        } catch {
+          setMsg("Reading failed — try sharing the video again.");
         } finally {
           setScanning(false);
         }
@@ -145,6 +165,8 @@ export function NewRecipeClient({
       setScanned(res);
       setVersion((v) => v + 1);
       setMsg(`Read "${res.name}" — check everything, then save.`);
+    } catch {
+      setMsg("Reading failed — try again (smaller or sharper photo helps).");
     } finally {
       setScanning(false);
     }

@@ -65,8 +65,40 @@ export function RecipePhotoUploader({
     }
   };
 
+  const [dragOver, setDragOver] = useState(false);
+
+  const fromItems = (items: DataTransferItemList | null) => {
+    if (!items) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      const f = item.getAsFile?.();
+      if (f && f.type.startsWith("image/")) files.push(f);
+    }
+    if (files.length) {
+      const dt = new DataTransfer();
+      files.forEach((f) => dt.items.add(f));
+      upload(dt.files);
+    }
+  };
+
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (!busy) fromItems(e.dataTransfer.items);
+      }}
+      onPaste={(e) => {
+        if (!busy) fromItems(e.clipboardData?.items ?? null);
+      }}
+      tabIndex={0}
+      className={`rounded-lg outline-none ${dragOver ? "ring-2 ring-sky-300" : ""}`}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -77,12 +109,32 @@ export function RecipePhotoUploader({
         className="hidden"
         id="recipe-photo-input"
       />
-      <label
-        htmlFor="recipe-photo-input"
-        className={`inline-block cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium ${busy ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
-      >
-        {busy ? "Uploading…" : "📷 Add photos"}
-      </label>
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        disabled={busy}
+        onChange={(e) => e.target.files?.length && upload(e.target.files)}
+        className="hidden"
+        id="recipe-photo-camera"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <label
+          htmlFor="recipe-photo-input"
+          className={`inline-block cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium ${busy ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
+        >
+          {busy ? "Uploading…" : "🖼 Add photos"}
+        </label>
+        <label
+          htmlFor="recipe-photo-camera"
+          className={`inline-block cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-medium ${busy ? "border-stone-200 text-stone-400" : "border-stone-300 hover:bg-stone-100"}`}
+        >
+          📷 Take a picture
+        </label>
+        <span className="hidden text-xs text-stone-400 sm:inline">
+          or drag &amp; drop / click here and paste (Ctrl+V)
+        </span>
+      </div>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );

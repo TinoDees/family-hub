@@ -196,6 +196,8 @@ export async function addExpense(formData: FormData) {
       paid_by: paidBy,
       receipt_photo_id: String(formData.get("receipt_photo_id") || "") || null,
       is_treat: isTreat,
+      original_amount: parseFloat(String(formData.get("original_amount") || "")) || null,
+      original_currency: String(formData.get("original_currency") || "").trim().toUpperCase() || null,
       created_by: userId,
     })
     .select("id")
