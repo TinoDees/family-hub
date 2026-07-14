@@ -16,7 +16,7 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title || "Nestly", {
       body: data.body || "",
       icon: "/nestly-icon-192.png",
-      badge: "/nestly-icon-192.png",
+      badge: "/nestly-badge.png", // monochrome status-bar icon
       tag: data.tag || "nestly",
       data: { url: data.url || "/" },
     })
