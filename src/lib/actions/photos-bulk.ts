@@ -56,3 +56,18 @@ export async function setAlbumHero(photoId: string): Promise<{ ok: boolean; erro
   revalidatePath("/photos");
   return { ok: true };
 }
+
+export async function updatePhotoSection(
+  photoIds: string[],
+  section: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (photoIds.length === 0) return { ok: true };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("photos")
+    .update({ section: section.trim().slice(0, 100) || null })
+    .in("id", photoIds.slice(0, 200));
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/photos");
+  return { ok: true };
+}

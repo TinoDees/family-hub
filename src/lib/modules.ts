@@ -33,6 +33,15 @@ export const MODULES: ModuleDef[] = [
     defaults: { owner: "edit", adult: "edit", child: "view" },
   },
   {
+    slug: "messages",
+    name: "Messages",
+    icon: "💬",
+    description: "Family chat — and trip channels with your travel companions.",
+    planned: [],
+    status: "live",
+    defaults: { owner: "edit", adult: "edit", child: "edit" },
+  },
+  {
     slug: "finance",
     name: "Finance",
     icon: "💰",

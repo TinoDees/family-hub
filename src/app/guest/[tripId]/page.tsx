@@ -4,6 +4,8 @@ import { formatMoney } from "@/lib/finance";
 import { signOut } from "@/lib/actions/auth";
 import { AddExpenseForm } from "@/components/add-expense-form";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { ChatClient } from "@/components/chat-client";
+import { colorFor } from "@/lib/planner";
 import { createGuestTripAlbum } from "@/lib/actions/guest-trip";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +77,22 @@ export default async function GuestTripPage({
     .filter((s) => s.participant_id === me.id)
     .reduce((sum, s) => sum + Number(s.amount) * (expenseFactor.get(s.expense_id) ?? 1), 0);
   const net = Math.round((myPaid - myShare) * 100) / 100;
+
+  const { data: chatMessages } = await supabase
+    .from("chat_messages")
+    .select("id, sender, body, created_at")
+    .eq("channel_kind", "trip")
+    .eq("channel_id", tripId)
+    .order("created_at")
+    .limit(200);
+  const chatNames: Record<string, string> = {};
+  const chatColors: Record<string, string> = {};
+  (participants ?? []).forEach((p, i) => {
+    if (p.user_id) {
+      chatNames[p.user_id] = p.name;
+      chatColors[p.user_id] = colorFor(i);
+    }
+  });
 
   const { data: photos } = album
     ? await supabase
@@ -201,6 +219,18 @@ export default async function GuestTripPage({
             </table>
           )}
         </div>
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold">💬 Trip chat</h2>
+          <ChatClient
+            channelKind="trip"
+            channelId={trip.id}
+            initialMessages={chatMessages ?? []}
+            meId={user.id}
+            names={chatNames}
+            colors={chatColors}
+          />
+        </div>
+
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">📷 Trip photos</h2>

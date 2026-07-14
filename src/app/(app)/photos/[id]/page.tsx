@@ -25,7 +25,7 @@ export default async function AlbumPage({
       .maybeSingle(),
     supabase
       .from("photos")
-      .select("id, storage_path, caption")
+      .select("id, storage_path, caption, section")
       .eq("album_id", id)
       .order("created_at", { ascending: false }),
   ]);
@@ -75,6 +75,7 @@ export default async function AlbumPage({
           id: p.id,
           url: urlFor.get(p.storage_path) ?? null,
           caption: p.caption,
+          section: p.section,
           isReceipt: p.caption === "Receipt",
         }))}
       />
