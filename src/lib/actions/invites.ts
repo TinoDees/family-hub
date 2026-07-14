@@ -164,6 +164,13 @@ export async function acceptInviteNewUser(formData: FormData) {
   redirect("/dashboard");
 }
 
+export async function signOutToInvite(formData: FormData) {
+  const token = String(formData.get("token") ?? "");
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect(`/invite/${token}`);
+}
+
 export async function acceptInvite(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   const supabase = await createClient();

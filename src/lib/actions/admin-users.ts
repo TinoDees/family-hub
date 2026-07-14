@@ -17,13 +17,24 @@ async function requireOwnerAndTarget(userId: string, back: string) {
   const membership = await getMembership();
   if (!membership || membership.role !== "owner") redirect("/dashboard");
   const supabase = await createClient();
-  const { data: target } = await supabase
+  let { data: target } = await supabase
     .from("household_members")
     .select("user_id, role")
     .eq("household_id", membership.household_id)
     .eq("user_id", userId)
     .maybeSingle();
-  if (!target) redirect(`${back}?error=${encodeURIComponent("Not a member of this household")}`);
+  if (!target) {
+    // Not a family member — allow managing guests of this household's trips
+    const { data: guest } = await supabase
+      .from("trip_participants")
+      .select("user_id, trips!inner(household_id)")
+      .eq("user_id", userId)
+      .eq("trips.household_id", membership.household_id)
+      .limit(1)
+      .maybeSingle();
+    if (guest) target = { user_id: userId, role: "guest" };
+  }
+  if (!target) redirect(`${back}?error=${encodeURIComponent("Not a member or trip guest of this household")}`);
   const {
     data: { user },
   } = await supabase.auth.getUser();

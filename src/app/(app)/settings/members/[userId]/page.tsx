@@ -28,30 +28,44 @@ export default async function MemberPermissionsPage({
   const { saved, error } = await searchParams;
 
   const supabase = await createClient();
-  const { data: target } = await supabase
+  let { data: target } = await supabase
     .from("household_members")
     .select("user_id, role, display_name")
     .eq("household_id", membership.household_id)
     .eq("user_id", userId)
     .maybeSingle();
-  if (!target) notFound();
+  let isGuest = false;
+  if (!target) {
+    // trip guest of one of this household's trips
+    const { data: guestRows } = await supabase
+      .from("trip_participants")
+      .select("user_id, name, trips!inner(household_id)")
+      .eq("user_id", userId)
+      .eq("trips.household_id", membership.household_id)
+      .limit(1);
+    const g = guestRows?.[0];
+    if (!g) notFound();
+    isGuest = true;
+    target = { user_id: userId, role: "guest", display_name: g!.name };
+  }
+  target = target!;
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const isSelf = user?.id === target.user_id;
 
-  const [perms, account] = await Promise.all([
-    getPermissions(membership.household_id, target.user_id, target.role as MemberRole),
-    getAccountInfo(target.user_id),
-  ]);
+  const account = await getAccountInfo(target.user_id);
+  const perms = isGuest
+    ? []
+    : await getPermissions(membership.household_id, target.user_id, target.role as MemberRole);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <Link href="/settings/members" className="text-xs text-stone-400 hover:underline">
-            ← Members
+            ← People
           </Link>
           <h2 className="text-lg font-semibold">
             {target.display_name ?? "Member"}{" "}
@@ -75,12 +89,14 @@ export default async function MemberPermissionsPage({
             </p>
           )}
         </div>
-        <form action={resetPermissions}>
-          <input type="hidden" name="user_id" value={target.user_id} />
-          <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
-            Reset to role defaults
-          </button>
-        </form>
+        {!isGuest && (
+          <form action={resetPermissions}>
+            <input type="hidden" name="user_id" value={target.user_id} />
+            <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
+              Reset to role defaults
+            </button>
+          </form>
+        )}
       </div>
 
       {saved && (
@@ -90,17 +106,24 @@ export default async function MemberPermissionsPage({
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      <PermissionMatrix
-        targetUserId={target.user_id}
-        targetRole={target.role as MemberRole}
-        rows={perms.map((p) => ({
-          slug: p.module.slug,
-          name: p.module.name,
-          icon: p.module.icon,
-          access: p.access,
-          roleDefault: p.module.defaults[target.role as MemberRole],
-        }))}
-      />
+      {isGuest ? (
+        <p className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-500">
+          ✈️ Trip guest — they only see the trips they were invited to. Module permissions
+          don&apos;t apply to guests.
+        </p>
+      ) : (
+        <PermissionMatrix
+          targetUserId={target.user_id}
+          targetRole={target.role as MemberRole}
+          rows={perms.map((p) => ({
+            slug: p.module.slug,
+            name: p.module.name,
+            icon: p.module.icon,
+            access: p.access,
+            roleDefault: p.module.defaults[target.role as MemberRole],
+          }))}
+        />
+      )}
 
       <div className="rounded-xl border border-stone-200 bg-white p-6">
         <h3 className="text-sm font-semibold">Account</h3>

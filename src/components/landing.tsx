@@ -18,19 +18,34 @@ const features = [
     body: "Plan the week from your own recipe collection. Scale servings up or down and the quantities follow.",
   },
   {
-    emoji: "🏖️",
-    title: "Holidays & trips",
-    body: "One hub per trip: itinerary, photos, and every expense. Scan a receipt and Nestly reads it for you.",
+    emoji: "🗓️",
+    title: "Family planner",
+    body: "One shared calendar for school runs, sport, appointments and birthdays — so everyone knows what's on this week.",
   },
   {
-    emoji: "🧾",
-    title: "Split the bill, fairly",
-    body: "Travelling with another family or friends? Nestly tracks who paid what — down to individual items on a receipt — and settles up per family at the end.",
+    emoji: "🛒",
+    title: "Shopping lists",
+    body: "Shared lists the whole family can add to. Whoever's at the shop sees the same list, live.",
+  },
+  {
+    emoji: "🏖️",
+    title: "Holidays & trips",
+    body: "One hub per trip: itinerary, photos, and every expense. Scan a receipt, split the bill fairly, and settle up per family at the end.",
   },
   {
     emoji: "📸",
     title: "Shared photos",
     body: "Albums for your household and for each trip, with control over who sees what.",
+  },
+  {
+    emoji: "💬",
+    title: "Family messages",
+    body: "Your own private family chat — plans, photos and “who's picking up the kids?” without another group-chat app.",
+  },
+  {
+    emoji: "🧒",
+    title: "Kids welcome",
+    body: "Child accounts with parental controls — kids sign in with a simple username, no email address needed.",
   },
 ];
 
@@ -68,6 +83,12 @@ export default function Landing() {
           <span className="text-lg font-semibold tracking-tight">Nestly</span>
         </div>
         <nav className="flex items-center gap-3">
+          <Link
+            href="/pricing"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900"
+          >
+            Pricing
+          </Link>
           <Link
             href="/login"
             className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900"
@@ -109,7 +130,10 @@ export default function Landing() {
           </Link>
         </div>
         <p className="mt-4 text-sm text-stone-400">
-          Free while Nestly is in early access.
+          Free while Nestly is in early access.{" "}
+          <Link href="/pricing" className="underline hover:text-stone-600">
+            See pricing
+          </Link>
         </p>
       </section>
 
@@ -140,8 +164,27 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Holidays highlight */}
+      {/* What is Nestly */}
       <section className="border-t border-stone-200">
+        <div className="mx-auto max-w-3xl px-6 py-16 text-center">
+          <p className="text-sm font-semibold uppercase tracking-wide text-teal-600">
+            What is Nestly?
+          </p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            A private space for one household — not a social network
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl leading-relaxed text-stone-600">
+            Nestly is one shared home for your family&apos;s everyday life —
+            no feeds, no followers, no strangers. It was built by a dad for
+            his own family first, and it grows from what real households
+            actually need. It works on any phone straight from the browser,
+            and you can install it to your home screen like a normal app.
+          </p>
+        </div>
+      </section>
+
+      {/* Holidays highlight */}
+      <section className="border-t border-stone-200 bg-white">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <div>
@@ -168,7 +211,7 @@ export default function Landing() {
               ].map((line) => (
                 <li
                   key={line}
-                  className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-700"
+                  className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700"
                 >
                   <span className="mt-0.5 text-teal-600">✓</span>
                   {line}
@@ -180,7 +223,7 @@ export default function Landing() {
       </section>
 
       {/* Recipes highlight */}
-      <section className="border-t border-stone-200 bg-white">
+      <section className="border-t border-stone-200">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <ul className="order-2 space-y-3 lg:order-1">
@@ -192,7 +235,7 @@ export default function Landing() {
               ].map((line) => (
                 <li
                   key={line}
-                  className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700"
+                  className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-700"
                 >
                   <span className="mt-0.5 text-teal-600">✓</span>
                   {line}
@@ -217,7 +260,7 @@ export default function Landing() {
       </section>
 
       {/* How it works */}
-      <section className="border-t border-stone-200">
+      <section className="border-t border-stone-200 bg-white">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
             Up and running in minutes
@@ -245,7 +288,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-stone-200 bg-white">
+      <footer className="border-t border-stone-200 bg-stone-50">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
           <div className="flex items-center gap-2">
             <Image
@@ -260,6 +303,9 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-4 text-sm text-stone-500">
+            <Link href="/pricing" className="hover:text-stone-900">
+              Pricing
+            </Link>
             <Link href="/login" className="hover:text-stone-900">
               Log in
             </Link>

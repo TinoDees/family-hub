@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { acceptInvite, acceptInviteNewUser } from "@/lib/actions/invites";
+import { acceptInvite, acceptInviteNewUser, signOutToInvite } from "@/lib/actions/invites";
 import { AuthCard, buttonCls, inputCls } from "@/components/auth-card";
 
 export const dynamic = "force-dynamic";
@@ -71,11 +71,28 @@ export default async function InvitePage({
       subtitle={`${invite.inviter_name} invited you (${invite.email}) to join as ${invite.role}.`}
       error={error}
     >
-      {user ? (
+      {user && user.email?.toLowerCase() === invite.email.toLowerCase() ? (
         <form action={acceptInvite}>
           <input type="hidden" name="token" value={token} />
           <button className={buttonCls}>Join {invite.household_name}</button>
         </form>
+      ) : user ? (
+        <div className="space-y-3">
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            This invite is for <strong>{invite.email}</strong>, but you&apos;re signed in as{" "}
+            <strong>{user.email}</strong>.
+          </p>
+          <form action={signOutToInvite}>
+            <input type="hidden" name="token" value={token} />
+            <button className={buttonCls}>Sign out & accept as {invite.email}</button>
+          </form>
+          <form action={acceptInvite}>
+            <input type="hidden" name="token" value={token} />
+            <button className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-100">
+              No — add {user.email} to {invite.household_name} instead
+            </button>
+          </form>
+        </div>
       ) : (
         <div className="space-y-3">
           <form action={acceptInviteNewUser} className="space-y-3">

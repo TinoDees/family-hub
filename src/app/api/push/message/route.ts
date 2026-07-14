@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const body = record?.body;
   if (
     !kind ||
-    !["household", "trip"].includes(kind) ||
+    !["household", "trip", "dm"].includes(kind) ||
     typeof channelId !== "string" ||
     typeof senderId !== "string" ||
     typeof body !== "string" ||
@@ -44,7 +44,20 @@ export async function POST(req: Request) {
   // Resolve channel name + the household behind it
   let householdId = channelId;
   let channelName = "Family chat";
-  if (kind === "trip") {
+  let dmParticipantIds: string[] | null = null;
+  if (kind === "dm") {
+    const { data: conv } = await admin
+      .from("conversations")
+      .select("household_id, is_group, title, conversation_participants(user_id)")
+      .eq("id", channelId)
+      .maybeSingle();
+    if (!conv) return NextResponse.json({ ok: false }, { status: 404 });
+    householdId = conv.household_id;
+    channelName = conv.is_group ? (conv.title ?? "Group chat") : "Chat";
+    dmParticipantIds = (conv.conversation_participants ?? []).map(
+      (p: { user_id: string }) => p.user_id
+    );
+  } else if (kind === "trip") {
     const { data: trip } = await admin
       .from("trips")
       .select("name, household_id")
@@ -63,9 +76,23 @@ export async function POST(req: Request) {
     .select("user_id, display_name")
     .eq("household_id", householdId);
   const memberIds = new Set((members ?? []).map((m) => m.user_id));
-  const appUrl = `/messages/${kind}/${channelId}`;
-  const urlByUser = new Map<string, string>((members ?? []).map((m) => [m.user_id, appUrl]));
+  const appUrl = kind === "dm" ? `/messages/dm/${channelId}` : `/messages/${kind}/${channelId}`;
+  let urlByUser = new Map<string, string>((members ?? []).map((m) => [m.user_id, appUrl]));
   let senderName = (members ?? []).find((m) => m.user_id === senderId)?.display_name ?? null;
+
+  if (kind === "dm") {
+    // only actual participants get notified — not overseeing parents
+    urlByUser = new Map(dmParticipantIds!.map((uid) => [uid, appUrl]));
+    if (!senderName) {
+      const { data: sp } = await admin
+        .from("trip_participants")
+        .select("name")
+        .eq("user_id", senderId)
+        .limit(1)
+        .maybeSingle();
+      senderName = sp?.name ?? null;
+    }
+  }
 
   if (kind === "trip") {
     const { data: parts } = await admin

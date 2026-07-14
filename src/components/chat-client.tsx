@@ -17,6 +17,7 @@ export function ChatClient({
   meId,
   names,
   colors,
+  readOnly = false,
 }: {
   channelKind: string;
   channelId: string;
@@ -24,6 +25,7 @@ export function ChatClient({
   meId: string;
   names: Record<string, string>;
   colors: Record<string, string>;
+  readOnly?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
@@ -114,6 +116,11 @@ export function ChatClient({
         })}
         <div ref={bottomRef} />
       </div>
+      {readOnly ? (
+        <div className="border-t border-stone-100 p-3 text-center text-xs text-stone-400">
+          Read-only view
+        </div>
+      ) : (
       <div className="flex items-end gap-2 border-t border-stone-100 p-3">
         <textarea
           value={draft}
@@ -136,6 +143,7 @@ export function ChatClient({
           ➤
         </button>
       </div>
+      )}
     </div>
   );
 }
