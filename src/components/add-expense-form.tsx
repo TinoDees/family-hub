@@ -328,7 +328,7 @@ export function AddExpenseForm({
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
             {participants.map((p) => (
               <label key={p.id} className="flex items-center gap-1.5 text-sm">
                 <input
@@ -339,7 +339,7 @@ export function AddExpenseForm({
                   onChange={() => toggleShared(p.id)}
                   className="rounded border-stone-300"
                 />
-                {p.name}
+                <span className="truncate">{p.name}</span>
               </label>
             ))}
           </div>

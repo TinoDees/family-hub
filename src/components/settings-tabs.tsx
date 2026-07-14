@@ -7,6 +7,7 @@ const TABS = [
   { href: "/settings", label: "Household" },
   { href: "/settings/members", label: "Members" },
   { href: "/settings/invites", label: "Invites" },
+  { href: "/settings/activity", label: "Activity" },
 ];
 
 export function SettingsTabs() {

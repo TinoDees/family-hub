@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { acceptTripInvite } from "@/lib/actions/guest-trip";
 import { AuthCard, buttonCls } from "@/components/auth-card";
@@ -30,6 +31,17 @@ export default async function TripInvitePage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // already a participant (e.g. saved this page as a home-screen shortcut)? straight in.
+  if (user) {
+    const { data: mine } = await supabase
+      .from("trip_participants")
+      .select("trip_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (mine) redirect(`/guest/${mine.trip_id}`);
+  }
 
   if (invite.status !== "pending") {
     const reasons: Record<string, string> = {

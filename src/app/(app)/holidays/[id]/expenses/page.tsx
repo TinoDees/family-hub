@@ -202,25 +202,27 @@ export default async function TripExpensesPage({
             {(expenses ?? []).length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-stone-400">Nothing spent yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {(expenses ?? []).map((e, i) => (
-                    <tr key={e.id} className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}>
-                      <td className="whitespace-nowrap px-4 py-2 text-stone-500">
-                        {new Date(e.spent_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium">
-                          {e.description}
+              <ul className="divide-y divide-stone-100">
+                  {(expenses ?? []).map((e) => (
+                    <li key={e.id} className="flex items-start gap-3 px-4 py-3">
+                      <div className="w-14 shrink-0 pt-0.5 text-center">
+                        <div className="text-lg font-semibold leading-none">{new Date(e.spent_at).getDate()}</div>
+                        <div className="text-[10px] uppercase text-stone-400">
+                          {new Date(e.spent_at).toLocaleDateString("en-AU", { month: "short" })}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 font-medium">
+                          <span className="truncate">{e.description}</span>
                           {e.receipt_photo_id && receiptUrl.get(e.receipt_photo_id) && (
-                            <span className="ml-2 inline-flex items-center gap-1">
+                            <span className="inline-flex shrink-0 items-center gap-1">
                               <a
                                 href={receiptUrl.get(e.receipt_photo_id)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs text-sky-600 underline"
+                                className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700"
                               >
-                                receipt
+                                🧾 receipt
                               </a>
                               {canEdit && (
                                 <form action={removeReceipt} className="inline">
@@ -232,22 +234,22 @@ export default async function TripExpensesPage({
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-stone-400">
+                        <div className="mt-0.5 text-xs text-stone-400">
                           {e.is_treat ? (
                             <span className="text-amber-600">🎁 treat — {pName.get(e.paid_by)} covered it</span>
                           ) : (
                             <>{pName.get(e.paid_by)} paid · split {(sharesByExpense.get(e.id) ?? []).join(", ")}</>
                           )}
                         </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2 text-right">
+                      </div>
+                      <div className="shrink-0 text-right tabular-nums">
                         {(() => {
                           const f = expenseFactor.get(e.id) ?? 1;
                           const effective = Number(e.amount) * f;
                           const hasAgreed = Math.abs(f - 1) > 0.0001;
                           return (
                             <>
-                              <div className="font-medium">{formatMoney(effective, currency)}</div>
+                              <div className="font-semibold">{formatMoney(effective, currency)}</div>
                               {e.original_amount && e.original_currency && (
                                 <div className="text-[10px] font-normal text-stone-400">
                                   {e.original_currency} {Number(e.original_amount).toLocaleString()}
@@ -257,10 +259,9 @@ export default async function TripExpensesPage({
                             </>
                           );
                         })()}
-                      </td>
+                      </div>
                       {canEdit && (
-                        <td className="px-2 py-2 text-right">
-                          <div className="inline-flex items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                             {!e.is_treat && (
                             <ExpenseSplitModal
                               expense={{ id: e.id, description: e.description, amount: Number(e.amount) }}
@@ -283,13 +284,11 @@ export default async function TripExpensesPage({
                               <input type="hidden" name="trip_id" value={trip.id} />
                               <button className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600">✕</button>
                             </form>
-                          </div>
-                        </td>
+                        </div>
                       )}
-                    </tr>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+              </ul>
             )}
           </div>
         </div>
