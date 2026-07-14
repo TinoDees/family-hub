@@ -130,8 +130,8 @@ export default async function PlannerPage({
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">📆 Family Planner</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-lg border border-stone-300 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 overflow-hidden rounded-lg border border-stone-300 text-sm">
             {(["week", "month", "list"] as const).map((v) => (
               <Link
                 key={v}
@@ -151,7 +151,7 @@ export default async function PlannerPage({
           )}
           <Link
             href={`/planner?view=${view}&d=${iso(anchor)}${mineOnly ? "" : "&mine=1"}`}
-            className={`rounded-lg border px-3 py-1.5 text-sm ${mineOnly ? "border-sky-400 bg-sky-50 text-sky-700" : "border-stone-300 hover:bg-stone-100"}`}
+            className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm ${mineOnly ? "border-sky-400 bg-sky-50 text-sky-700" : "border-stone-300 hover:bg-stone-100"}`}
           >
             {mineOnly ? "My week ✓" : "My week"}
           </Link>
@@ -182,15 +182,15 @@ export default async function PlannerPage({
               </div>
               <div className="col-span-2 sm:col-span-3">
                 <label className="mb-1 block text-xs font-medium">Date</label>
-                <input name="event_date" type="date" required defaultValue={todayIso} className={inputCls} />
+                <input name="event_date" type="date" required defaultValue={todayIso} className={`${inputCls} h-10 min-w-0 appearance-none`} />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">From</label>
-                <input name="start_time" type="time" className={inputCls} />
+                <input name="start_time" type="time" className={`${inputCls} h-10 min-w-0 appearance-none`} />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">To</label>
-                <input name="end_time" type="time" className={inputCls} />
+                <input name="end_time" type="time" className={`${inputCls} h-10 min-w-0 appearance-none`} />
               </div>
               <div className="col-span-2 sm:col-span-4">
                 <label className="mb-1 block text-xs font-medium">Location</label>

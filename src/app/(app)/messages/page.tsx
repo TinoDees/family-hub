@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
+import { PushToggle } from "@/components/push-toggle";
 
 export default async function MessagesPage() {
   const { membership } = await requireModule("messages", "view");
@@ -20,6 +21,7 @@ export default async function MessagesPage() {
         Everyone in the family sees the family channel — including parents. Trip channels
         include your travel companions from other families.
       </p>
+      <PushToggle />
 
       <div className="space-y-2">
         <Link

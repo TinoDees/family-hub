@@ -70,6 +70,12 @@ export function ChatClient({
       .single();
     if (!error && data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      // fire-and-forget: push notifications to everyone else's devices
+      fetch("/api/push/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: channelKind, channelId, body }),
+      }).catch(() => undefined);
     } else if (error) {
       setDraft(body);
       alert(error.message);

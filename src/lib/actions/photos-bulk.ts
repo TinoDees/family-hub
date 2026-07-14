@@ -65,9 +65,16 @@ export async function updatePhotoSection(
   if (photoIds.length === 0) return { ok: true };
   const supabase = await createClient();
   const cleanDate = sectionDate && /^\d{4}-\d{2}-\d{2}$/.test(sectionDate) ? sectionDate : null;
+  const cleanName = section.trim().slice(0, 100) || null;
+  // Blank name + a date = keep the existing section name, just set the date.
+  // Blank name + blank date = remove from section entirely.
+  const patch =
+    cleanName === null && cleanDate !== null
+      ? { section_date: cleanDate }
+      : { section: cleanName, section_date: cleanDate };
   const { error } = await supabase
     .from("photos")
-    .update({ section: section.trim().slice(0, 100) || null, section_date: cleanDate })
+    .update(patch)
     .in("id", photoIds.slice(0, 200));
   if (error) return { ok: false, error: error.message };
   revalidatePath("/photos");

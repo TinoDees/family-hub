@@ -5,6 +5,7 @@ import { signOut } from "@/lib/actions/auth";
 import { AddExpenseForm } from "@/components/add-expense-form";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { ChatClient } from "@/components/chat-client";
+import { PushToggle } from "@/components/push-toggle";
 import { colorFor } from "@/lib/planner";
 import { createGuestTripAlbum } from "@/lib/actions/guest-trip";
 
@@ -221,6 +222,7 @@ export default async function GuestTripPage({
         </div>
         <div className="space-y-3">
           <h2 className="text-sm font-semibold">💬 Trip chat</h2>
+          <PushToggle />
           <ChatClient
             channelKind="trip"
             channelId={trip.id}

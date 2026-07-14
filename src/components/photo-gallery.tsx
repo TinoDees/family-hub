@@ -32,6 +32,10 @@ export function PhotoGallery({
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [sectionDate, setSectionDate] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "name">("date");
+  // Section-header editing (rename / re-date a whole section without selecting photos)
+  const [editSection, setEditSection] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDate, setEditDate] = useState("");
 
   const normal = photos.filter((p) => !p.isReceipt);
   const receipts = photos.filter((p) => p.isReceipt);
@@ -203,7 +207,17 @@ export function PhotoGallery({
               <button
                 type="button"
                 disabled={selected.size === 0}
-                onClick={() => setInputMode(inputMode === "section" ? null : "section")}
+                onClick={() => {
+                  if (inputMode === "section") {
+                    setInputMode(null);
+                    return;
+                  }
+                  // Prefill from the first selected photo so editing doesn't wipe the name
+                  const first = photos.find((p) => selected.has(p.id));
+                  setInputValue(first?.section ?? "");
+                  setSectionDate(first?.section_date ?? "");
+                  setInputMode("section");
+                }}
                 className="rounded-lg border border-stone-300 px-3 py-1 text-xs font-medium hover:bg-stone-100 disabled:opacity-40"
               >
                 📂 Section
@@ -239,7 +253,7 @@ export function PhotoGallery({
             placeholder={
               inputMode === "caption"
                 ? "Caption / story for the selected photos…"
-                : 'Section name, e.g. "Trip to Phuket Markets" (empty = remove from section)'
+                : 'Section name, e.g. "Trip to Phuket Markets" (clear name + date = remove from section)'
             }
             autoFocus
             className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm"
@@ -283,13 +297,82 @@ export function PhotoGallery({
         <details key={name || "__default"} open className="rounded-xl border border-stone-200 bg-white">
           <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
             <span>{name || "📷 Photos"}</span>
-            {dateOf(sectionPhotos) && (
+            {name !== "" && dateOf(sectionPhotos) && (
               <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-normal text-stone-500">
                 {new Date(`${dateOf(sectionPhotos)}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (editSection === name) {
+                    setEditSection(null);
+                    return;
+                  }
+                  setEditSection(name);
+                  setEditName(name);
+                  setEditDate(dateOf(sectionPhotos) ?? "");
+                }}
+                title={name ? "Rename section / change date" : "Group these photos into a section"}
+                className="rounded px-1.5 py-0.5 text-xs font-normal text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                ✎
+              </button>
+            )}
             <span className="ml-auto text-xs font-normal text-stone-400">{sectionPhotos.length}</span>
           </summary>
+          {editSection === name && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 bg-sky-50 p-3">
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder='Section name, e.g. "Teppanyaki Dinner"'
+                autoFocus
+                className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm"
+              />
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                title="Section date (for sorting)"
+                className="h-9 rounded-lg border border-stone-300 bg-white px-2 text-sm"
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await updatePhotoSection(
+                      sectionPhotos.map((p) => p.id),
+                      editName,
+                      editDate || null
+                    );
+                    setMsg(res.ok ? "Section updated." : (res.error ?? "Failed"));
+                    setEditSection(null);
+                    router.refresh();
+                  })
+                }
+                className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              >
+                {pending ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditSection(null)}
+                className="rounded-lg px-2 py-1 text-xs text-stone-400 hover:bg-stone-100"
+              >
+                Cancel
+              </button>
+              {name !== "" && (
+                <p className="w-full text-[11px] text-stone-500">
+                  Renames the section for all {sectionPhotos.length} photos in it. Clear both fields to ungroup.
+                </p>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 border-t border-stone-100 p-4 sm:grid-cols-3 md:grid-cols-4">
             {sectionPhotos.map((p) => (
               <Tile key={p.id} p={p} />
