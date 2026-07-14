@@ -91,8 +91,8 @@ export const MODULES: ModuleDef[] = [
     name: "Parental Controls",
     icon: "🛡️",
     description: "Per-child permissions, screen time and approval queue.",
-    planned: ["Per-child module permissions", "Screen-time windows", "Approval queue for requests"],
-    status: "placeholder",
+    planned: ["Family chat", "Approval queue", "Screen-time windows for Nestly"],
+    status: "live",
     defaults: { owner: "edit", adult: "edit", child: "none" },
   },
   {

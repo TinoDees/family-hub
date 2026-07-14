@@ -6,7 +6,7 @@ export type Membership = {
   household_id: string;
   role: MemberRole;
   display_name: string | null;
-  household: { id: string; name: string; invite_code: string; base_currency: string; receipt_retention_days: number | null };
+  household: { id: string; name: string; invite_code: string; base_currency: string; receipt_retention_days: number | null; device_safety_service: string | null };
 };
 
 /** Current user's membership (first household), or null. Memoized per request. */
@@ -20,7 +20,7 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   const { data } = await supabase
     .from("household_members")
     .select(
-      "household_id, role, display_name, household:households(id, name, invite_code, base_currency, receipt_retention_days)"
+      "household_id, role, display_name, household:households(id, name, invite_code, base_currency, receipt_retention_days, device_safety_service)"
     )
     .eq("user_id", user.id)
     .limit(1)

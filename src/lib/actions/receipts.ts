@@ -197,8 +197,15 @@ export async function scanReceipt(
       const base = (hh?.base_currency ?? "AUD").toUpperCase();
       if (receiptCurrency !== base && typeof parsed.total === "number") {
         try {
+          // use the rate of the day the money was actually spent (falls back to latest)
+          const receiptDate =
+            typeof parsed.date === "string" &&
+            /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) &&
+            parsed.date <= new Date().toISOString().slice(0, 10)
+              ? parsed.date
+              : "latest";
           const fx = await fetch(
-            `https://api.frankfurter.app/latest?from=${receiptCurrency}&to=${base}`,
+            `https://api.frankfurter.app/${receiptDate}?from=${receiptCurrency}&to=${base}`,
             { signal: AbortSignal.timeout(8000) }
           );
           if (fx.ok) {
