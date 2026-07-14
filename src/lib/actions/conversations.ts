@@ -79,24 +79,18 @@ export async function startConversation(formData: FormData) {
     }
   }
 
-  const { data: conv, error } = await supabase
-    .from("conversations")
-    .insert({
-      household_id: membership.household_id,
-      is_group: isGroup,
-      title,
-      created_by: me,
-    })
-    .select("id")
-    .single();
-  if (error || !conv)
+  // atomic create via RPC — INSERT..RETURNING would trip the participant-based
+  // SELECT policy before participants exist (mig 031)
+  const { data: convId, error } = await supabase.rpc("create_conversation", {
+    p_household: membership.household_id,
+    p_is_group: isGroup,
+    p_title: title ?? "",
+    p_participants: others,
+  });
+  if (error || !convId)
     redirect(`/messages/new?error=${encodeURIComponent(error?.message ?? "Could not start chat")}`);
 
-  const rows = [me, ...others].map((uid) => ({ conversation_id: conv.id, user_id: uid }));
-  const { error: pErr } = await supabase.from("conversation_participants").insert(rows);
-  if (pErr) redirect(`/messages/new?error=${encodeURIComponent(pErr.message)}`);
-
-  redirect(`/messages/dm/${conv.id}`);
+  redirect(`/messages/dm/${convId}`);
 }
 
 export async function markConversationRead(conversationId: string) {
