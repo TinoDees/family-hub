@@ -33,8 +33,10 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic =
     path === "/" ||
+    path.startsWith("/api/") || // API routes guard themselves (push secret, cron secret, session checks)
     path === "/login" ||
     path === "/signup" ||
+    path === "/pricing" ||
     path.startsWith("/auth") ||
     path.startsWith("/invite") ||
     path.startsWith("/trip-invite");
