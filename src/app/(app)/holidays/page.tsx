@@ -21,7 +21,10 @@ export default async function HolidaysPage({
   const currency = membership.household.base_currency;
 
   const supabase = await createClient();
-  const [{ data: trips }, { data: totals }, { data: albums }] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const [{ data: trips }, { data: totals }, { data: albums }, { data: guestParts }] = await Promise.all([
     supabase
       .from("trips")
       .select("id, name, destination, start_date, end_date, status")
@@ -36,7 +39,15 @@ export default async function HolidaysPage({
       .select("trip_id, hero:photos!albums_hero_photo_id_fkey(storage_path)")
       .eq("household_id", membership.household_id)
       .not("trip_id", "is", null),
+    supabase
+      .from("trip_participants")
+      .select("trip_id, trips!inner(id, name, destination, start_date, end_date, household_id)")
+      .eq("user_id", user!.id)
+      .neq("trips.household_id", membership.household_id),
   ]);
+  const guestTrips = (guestParts ?? [])
+    .map((g) => g.trips as unknown as { id: string; name: string; destination: string | null })
+    .filter(Boolean);
 
   const heroPathByTrip = new Map<string, string>();
   for (const a of albums ?? []) {
@@ -57,6 +68,26 @@ export default async function HolidaysPage({
     <div className="mx-auto max-w-4xl space-y-6">
       <h1 className="text-2xl font-semibold">✈️ Holiday Planner</h1>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {guestTrips.length > 0 && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+          <h2 className="text-sm font-semibold text-sky-900">🧳 Trips you&apos;re invited to</h2>
+          <div className="mt-2 space-y-1.5">
+            {guestTrips.map((t) => (
+              <Link
+                key={t.id}
+                href={`/guest/${t.id}`}
+                className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm shadow-sm hover:shadow"
+              >
+                <span>✈️</span>
+                <span className="font-medium">{t.name}</span>
+                {t.destination && <span className="text-stone-400">· {t.destination}</span>}
+                <span className="ml-auto text-xs text-sky-600">Open →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {access === "edit" && (
         <form action={createTrip} className="flex flex-wrap items-end gap-3 rounded-xl border border-stone-200 bg-white p-5">
