@@ -1,41 +1,43 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWebPush, pushConfigured } from "@/lib/web-push";
 
 export const runtime = "nodejs";
 
 /**
- * Fired (fire-and-forget) by the chat client after a message is inserted.
- * Verifies the caller may chat in the channel, then pushes to every other
- * participant's subscribed devices. Guests get deep links to their guest page.
+ * Called by the Supabase DB webhook (trigger on chat_messages insert, mig 027)
+ * with an x-push-secret header. The DB is the trigger — not the sender's
+ * browser — so pushes fire no matter how old the sender's tab is.
+ * RLS already vetted the insert; here we only fan out notifications.
  */
 export async function POST(req: Request) {
   if (!pushConfigured()) return NextResponse.json({ ok: false, reason: "push not configured" });
 
-  let kind: string, channelId: string, body: string;
+  const secret = process.env.PUSH_WEBHOOK_SECRET;
+  if (!secret || req.headers.get("x-push-secret") !== secret) {
+    return NextResponse.json({ ok: false }, { status: 401 });
+  }
+
+  let record: { channel_kind?: string; channel_id?: string; sender?: string; body?: string };
   try {
-    ({ kind, channelId, body } = await req.json());
+    ({ record } = await req.json());
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
+  const kind = record?.channel_kind;
+  const channelId = record?.channel_id;
+  const senderId = record?.sender;
+  const body = record?.body;
   if (
+    !kind ||
     !["household", "trip"].includes(kind) ||
     typeof channelId !== "string" ||
+    typeof senderId !== "string" ||
     typeof body !== "string" ||
     !body.trim()
   ) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false }, { status: 401 });
-
-  const { data: allowed } = await supabase.rpc("can_chat", { p_kind: kind, p_channel: channelId });
-  if (!allowed) return NextResponse.json({ ok: false }, { status: 403 });
 
   const admin = createAdminClient();
 
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
   const memberIds = new Set((members ?? []).map((m) => m.user_id));
   const appUrl = `/messages/${kind}/${channelId}`;
   const urlByUser = new Map<string, string>((members ?? []).map((m) => [m.user_id, appUrl]));
-  let senderName = (members ?? []).find((m) => m.user_id === user.id)?.display_name ?? null;
+  let senderName = (members ?? []).find((m) => m.user_id === senderId)?.display_name ?? null;
 
   if (kind === "trip") {
     const { data: parts } = await admin
@@ -74,11 +76,11 @@ export async function POST(req: Request) {
     for (const p of parts ?? []) {
       if (!p.user_id) continue;
       if (!memberIds.has(p.user_id)) urlByUser.set(p.user_id, `/guest/${channelId}`); // guests land on their page
-      if (p.user_id === user.id && !senderName) senderName = p.name;
+      if (p.user_id === senderId && !senderName) senderName = p.name;
     }
   }
 
-  urlByUser.delete(user.id); // never notify the sender
+  urlByUser.delete(senderId); // never notify the sender (any of their devices)
   const recipientIds = [...urlByUser.keys()];
   if (recipientIds.length === 0) return NextResponse.json({ ok: true, sent: 0 });
 

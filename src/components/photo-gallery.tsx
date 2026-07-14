@@ -36,6 +36,7 @@ export function PhotoGallery({
   const [editSection, setEditSection] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [dragOver, setDragOver] = useState<string | null>(null);
 
   const normal = photos.filter((p) => !p.isReceipt);
   const receipts = photos.filter((p) => p.isReceipt);
@@ -90,8 +91,33 @@ export function PhotoGallery({
     setInputValue("");
   };
 
+  const moveDropped = (e: React.DragEvent, targetName: string, targetDate: string | null) => {
+    e.preventDefault();
+    setDragOver(null);
+    const id = e.dataTransfer.getData("text/nestly-photo");
+    if (!id || pending) return;
+    const ids = selected.has(id) ? [...selected] : [id];
+    startTransition(async () => {
+      const res = await updatePhotoSection(ids, targetName, targetName ? targetDate : null);
+      setMsg(
+        res.ok
+          ? targetName
+            ? `Moved ${ids.length} photo${ids.length === 1 ? "" : "s"} to "${targetName}".`
+            : `Removed ${ids.length} photo${ids.length === 1 ? "" : "s"} from their section.`
+          : (res.error ?? "Move failed")
+      );
+      exitSelect();
+      router.refresh();
+    });
+  };
+
   const Tile = ({ p }: { p: GalleryPhoto }) => (
     <div
+      draggable={canEdit && !p.isReceipt}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/nestly-photo", p.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onClick={() => {
         if (selecting) toggle(p.id);
         else if (p.url && !p.isReceipt) setLightbox(viewable.findIndex((v) => v.id === p.id));
@@ -246,7 +272,7 @@ export function PhotoGallery({
       )}
 
       {selecting && inputMode && (
-        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2">
           <input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
@@ -285,6 +311,26 @@ export function PhotoGallery({
           >
             Save
           </button>
+          {inputMode === "section" && orderedSections.some(([n]) => n !== "") && (
+            <div className="flex w-full flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] text-stone-500">Move to:</span>
+              {orderedSections
+                .filter(([n]) => n !== "")
+                .map(([n, ph]) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => {
+                      setInputValue(n);
+                      setSectionDate(dateOf(ph) ?? "");
+                    }}
+                    className="rounded-full border border-stone-300 bg-white px-2.5 py-0.5 text-[11px] hover:bg-stone-100"
+                  >
+                    {n}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -294,7 +340,19 @@ export function PhotoGallery({
         </div>
       )}
       {orderedSections.map(([name, sectionPhotos]) => (
-        <details key={name || "__default"} open className="rounded-xl border border-stone-200 bg-white">
+        <details
+          key={name || "__default"}
+          open
+          onDragOver={(e) => {
+            if (!canEdit) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDragOver(name);
+          }}
+          onDragLeave={() => setDragOver((d) => (d === name ? null : d))}
+          onDrop={(e) => canEdit && moveDropped(e, name, dateOf(sectionPhotos))}
+          className={`rounded-xl border bg-white ${dragOver === name ? "border-sky-400 ring-2 ring-sky-200" : "border-stone-200"}`}
+        >
           <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
             <span>{name || "📷 Photos"}</span>
             {name !== "" && dateOf(sectionPhotos) && (
