@@ -80,18 +80,18 @@ export default async function TransactionsPage({
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-600">
             + Add manual transaction
           </summary>
-          <form action={addTransaction} className="flex flex-wrap items-end gap-3 border-t border-stone-100 p-4">
+          <form action={addTransaction} className="grid grid-cols-2 items-end gap-3 border-t border-stone-100 p-4 sm:grid-cols-4">
             <div>
               <label className="mb-1 block text-xs font-medium">Date</label>
               <input name="posted_at" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className={inputCls} />
             </div>
-            <div className="min-w-48 flex-1">
+            <div className="sm:col-span-3">
               <label className="mb-1 block text-xs font-medium">Description</label>
               <input name="description" required placeholder="e.g. School excursion" className={inputCls} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium">Amount</label>
-              <input name="amount" type="number" step="0.01" min="0" required placeholder="0.00" className={`${inputCls} w-28`} />
+              <input name="amount" type="number" step="0.01" min="0" required placeholder="0.00" className={`${inputCls} w-full`} />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium">Type</label>

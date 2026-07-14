@@ -52,7 +52,10 @@ export function PhotoUploader({
         try {
           blob = await resizeImage(file);
         } catch {
-          blob = file; // HEIC etc. the canvas can't decode — upload original
+          // browsers can't decode/display HEIC — uploading it would give blank tiles
+          throw new Error(
+            `"${file.name}" is in a format browsers can't show (probably HEIC). Set the camera to 'Most compatible' (JPEG), or screenshot the photo and upload that.`
+          );
         }
         const path = `${householdId}/${albumId}/${crypto.randomUUID()}.webp`;
         const { error: upErr } = await supabase.storage

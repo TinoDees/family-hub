@@ -31,7 +31,7 @@ export default async function TripPhotosPage({
   const { data: photos } = album
     ? await supabase
         .from("photos")
-        .select("id, storage_path, caption, section")
+        .select("id, storage_path, caption, section, section_date")
         .eq("album_id", album.id)
         .order("created_at", { ascending: false })
     : { data: [] };
@@ -84,6 +84,7 @@ export default async function TripPhotosPage({
               url: urlFor.get(p.storage_path) ?? null,
               caption: p.caption,
               section: p.section,
+              section_date: p.section_date,
               isReceipt: p.caption === "Receipt",
             }))}
           />

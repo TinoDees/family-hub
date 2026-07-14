@@ -175,12 +175,12 @@ export default async function PlannerPage({
           <form action={addEvent} className="space-y-3 border-t border-stone-100 p-4">
             <input type="hidden" name="view" value={view} />
             <input type="hidden" name="d" value={iso(anchor)} />
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-48 flex-1">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+              <div className="col-span-2 sm:col-span-3">
                 <label className="mb-1 block text-xs font-medium">Title</label>
                 <input name="title" required placeholder="e.g. Soccer training" className={inputCls} />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="mb-1 block text-xs font-medium">Date</label>
                 <input name="event_date" type="date" required defaultValue={todayIso} className={inputCls} />
               </div>
@@ -192,7 +192,7 @@ export default async function PlannerPage({
                 <label className="mb-1 block text-xs font-medium">To</label>
                 <input name="end_time" type="time" className={inputCls} />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-4">
                 <label className="mb-1 block text-xs font-medium">Location</label>
                 <input name="location" placeholder="optional" className={inputCls} />
               </div>
@@ -224,7 +224,37 @@ export default async function PlannerPage({
       )}
 
       {view === "week" && (
-        <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+        <div className="space-y-2 md:hidden">
+          {days.map((day) => {
+            const key = iso(day);
+            const dayMeals = mealsByDate.get(key) ?? [];
+            const dayEvents = byDate.get(key) ?? [];
+            return (
+              <div key={key} className={`rounded-xl border bg-white ${key === todayIso ? "border-amber-300" : "border-stone-200"}`}>
+                <div className={`border-b border-stone-100 px-3 py-2 text-sm font-semibold ${key === todayIso ? "text-amber-700" : "text-stone-600"}`}>
+                  {day.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "short" })}
+                  {key === todayIso && " · today"}
+                </div>
+                <div className="space-y-1 p-2">
+                  {dayMeals.map((m) => (
+                    <Link key={m.id} href="/meals" className="block truncate rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-800">
+                      🍽 {(m.recipe as unknown as { name: string } | null)?.name ?? m.custom_text}
+                    </Link>
+                  ))}
+                  {dayEvents.length === 0 && dayMeals.length === 0 && (
+                    <p className="px-2 py-1 text-xs text-stone-300">—</p>
+                  )}
+                  {dayEvents.map((o) => (
+                    <EventChip key={`${o.id}-${o.occurs_on}`} o={o} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {view === "week" && (
+        <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white md:block">
           <div className="grid min-w-[56rem] grid-cols-7 divide-x divide-stone-100">
             {days.map((day) => {
               const key = iso(day);

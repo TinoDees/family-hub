@@ -59,13 +59,15 @@ export async function setAlbumHero(photoId: string): Promise<{ ok: boolean; erro
 
 export async function updatePhotoSection(
   photoIds: string[],
-  section: string
+  section: string,
+  sectionDate?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   if (photoIds.length === 0) return { ok: true };
   const supabase = await createClient();
+  const cleanDate = sectionDate && /^\d{4}-\d{2}-\d{2}$/.test(sectionDate) ? sectionDate : null;
   const { error } = await supabase
     .from("photos")
-    .update({ section: section.trim().slice(0, 100) || null })
+    .update({ section: section.trim().slice(0, 100) || null, section_date: cleanDate })
     .in("id", photoIds.slice(0, 200));
   if (error) return { ok: false, error: error.message };
   revalidatePath("/photos");

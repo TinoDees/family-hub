@@ -10,6 +10,7 @@ export type GalleryPhoto = {
   caption: string | null;
   isReceipt: boolean;
   section?: string | null;
+  section_date?: string | null;
 };
 
 export function PhotoGallery({
@@ -29,6 +30,8 @@ export function PhotoGallery({
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [sectionDate, setSectionDate] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "name">("date");
 
   const normal = photos.filter((p) => !p.isReceipt);
   const receipts = photos.filter((p) => p.isReceipt);
@@ -40,9 +43,21 @@ export function PhotoGallery({
     const key = p.section?.trim() || "";
     sections.set(key, [...(sections.get(key) ?? []), p]);
   }
-  const orderedSections = [...sections.entries()].sort(([a], [b]) =>
-    a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)
-  );
+  const dateOf = (photos: GalleryPhoto[]) =>
+    photos.map((p) => p.section_date).find(Boolean) ?? null;
+  const orderedSections = [...sections.entries()].sort(([a, pa], [b, pb]) => {
+    if (a === "") return 1;
+    if (b === "") return -1;
+    if (sortBy === "date") {
+      const da = dateOf(pa);
+      const db = dateOf(pb);
+      if (da && db && da !== db) return da.localeCompare(db);
+      if (da && !db) return -1;
+      if (!da && db) return 1;
+    }
+    return a.localeCompare(b);
+  });
+  const hasNamedSections = orderedSections.some(([n]) => n !== "");
 
   // lightbox keyboard nav
   useEffect(() => {
@@ -86,12 +101,20 @@ export function PhotoGallery({
             : "border-stone-200"
       }`}
     >
-      {p.url ? (
+      <div className="absolute inset-0 flex items-center justify-center text-2xl text-stone-300">📷</div>
+      {p.url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={p.url} alt={p.caption ?? ""} className="aspect-square w-full object-cover" loading="lazy" />
-      ) : (
-        <div className="flex aspect-square items-center justify-center text-stone-300">📷</div>
+        <img
+          src={p.url}
+          alt={p.caption ?? ""}
+          className="relative aspect-square w-full object-cover"
+          loading="lazy"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+          }}
+        />
       )}
+      {!p.url && <div className="aspect-square w-full" />}
       {p.id === heroPhotoId && !selecting && (
         <span className="absolute left-1.5 top-1.5 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-white">
           ★ hero
@@ -191,6 +214,20 @@ export function PhotoGallery({
             </>
           )}
           {msg && <span className="text-xs text-stone-500">{msg}</span>}
+          {hasNamedSections && (
+            <span className="ml-auto flex overflow-hidden rounded-lg border border-stone-300 text-xs">
+              {(["date", "name"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setSortBy(k)}
+                  className={`px-2.5 py-1 ${sortBy === k ? "bg-stone-900 text-white" : "hover:bg-stone-100"}`}
+                >
+                  {k === "date" ? "📅 Date" : "A–Z"}
+                </button>
+              ))}
+            </span>
+          )}
         </div>
       )}
 
@@ -205,8 +242,17 @@ export function PhotoGallery({
                 : 'Section name, e.g. "Trip to Phuket Markets" (empty = remove from section)'
             }
             autoFocus
-            className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm"
+            className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm"
           />
+          {inputMode === "section" && (
+            <input
+              type="date"
+              value={sectionDate}
+              onChange={(e) => setSectionDate(e.target.value)}
+              title="Section date (for sorting)"
+              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm"
+            />
+          )}
           <button
             type="button"
             disabled={pending}
@@ -215,7 +261,7 @@ export function PhotoGallery({
                 const res =
                   inputMode === "caption"
                     ? await updatePhotoCaptions([...selected], inputValue)
-                    : await updatePhotoSection([...selected], inputValue);
+                    : await updatePhotoSection([...selected], inputValue, sectionDate || null);
                 setMsg(res.ok ? (inputMode === "caption" ? "Caption saved." : "Section saved.") : (res.error ?? "Failed"));
                 exitSelect();
                 router.refresh();
@@ -234,14 +280,22 @@ export function PhotoGallery({
         </div>
       )}
       {orderedSections.map(([name, sectionPhotos]) => (
-        <div key={name || "__default"} className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold">{name || "📷 Photos"}</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <details key={name || "__default"} open className="rounded-xl border border-stone-200 bg-white">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
+            <span>{name || "📷 Photos"}</span>
+            {dateOf(sectionPhotos) && (
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-normal text-stone-500">
+                {new Date(`${dateOf(sectionPhotos)}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+              </span>
+            )}
+            <span className="ml-auto text-xs font-normal text-stone-400">{sectionPhotos.length}</span>
+          </summary>
+          <div className="grid grid-cols-2 gap-3 border-t border-stone-100 p-4 sm:grid-cols-3 md:grid-cols-4">
             {sectionPhotos.map((p) => (
               <Tile key={p.id} p={p} />
             ))}
           </div>
-        </div>
+        </details>
       ))}
 
       {receipts.length > 0 && (
