@@ -65,6 +65,10 @@ export default async function FinanceSetupPage({
             <label className="mb-1 block text-xs font-medium">Institution</label>
             <input name="institution" placeholder="NAB" className={`${inputCls} w-32`} />
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Opening balance</label>
+            <input name="opening_balance" type="number" step="0.01" placeholder="0.00" className={`${inputCls} w-32`} />
+          </div>
           <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">Add</button>
         </form>
       </div>

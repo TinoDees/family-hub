@@ -19,6 +19,7 @@ export async function addAccount(formData: FormData) {
     type: String(formData.get("type") ?? "bank"),
     institution: String(formData.get("institution") ?? "").trim() || null,
     currency: membership.household.base_currency,
+    opening_balance: parseFloat(String(formData.get("opening_balance") ?? "0")) || 0,
   });
   redirect(error ? `/finance/setup?error=${enc(error.message)}` : "/finance/setup?saved=1");
 }
@@ -174,4 +175,36 @@ export async function importTransactions(
   const inserted = data?.length ?? 0;
   revalidatePath("/finance");
   return { ok: true, inserted, skipped: rows.length - inserted };
+}
+
+export async function updateAccount(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("finance_accounts")
+    .update({
+      name: String(formData.get("name") ?? "").trim(),
+      opening_balance: parseFloat(String(formData.get("opening_balance") ?? "0")) || 0,
+    })
+    .eq("id", String(formData.get("account_id")))
+    .eq("household_id", membership.household_id);
+  redirect(error ? `/finance/accounts?error=${enc(error.message)}` : "/finance/accounts?saved=1");
+}
+
+export async function deleteAccount(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const accountId = String(formData.get("account_id"));
+  const { count } = await supabase
+    .from("finance_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId);
+  if ((count ?? 0) > 0)
+    redirect(`/finance/accounts?error=${enc(`This account has ${count} transactions — deleting it would delete them too. Move or delete those first.`)}`);
+  await supabase
+    .from("finance_accounts")
+    .delete()
+    .eq("id", accountId)
+    .eq("household_id", membership.household_id);
+  redirect("/finance/accounts?saved=1");
 }

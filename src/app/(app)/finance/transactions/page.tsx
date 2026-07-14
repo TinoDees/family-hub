@@ -11,10 +11,10 @@ import { inputCls } from "@/components/auth-card";
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; error?: string; saved?: string; filter?: string }>;
+  searchParams: Promise<{ m?: string; error?: string; saved?: string; filter?: string; account?: string }>;
 }) {
   const { membership, access } = await requireFinance("view");
-  const { m, error, saved, filter } = await searchParams;
+  const { m, error, saved, filter, account } = await searchParams;
   const month = monthBounds(m);
   const currency = membership.household.base_currency;
   const canEdit = access === "edit";
@@ -42,9 +42,9 @@ export default async function TransactionsPage({
   ]);
 
   const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]));
-  const rows = (txns ?? []).filter((t) =>
-    filter === "uncategorised" ? !t.category_id : true
-  );
+  const rows = (txns ?? [])
+    .filter((t) => (filter === "uncategorised" ? !t.category_id : true))
+    .filter((t) => (account ? t.account_id === account : true));
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -62,6 +62,12 @@ export default async function TransactionsPage({
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {saved && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved.</p>}
+      {account && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-700">
+          Showing {accountName.get(account) ?? "one account"} only.{" "}
+          <Link href={`/finance/transactions?m=${month.key}`} className="underline">Show all</Link>
+        </p>
+      )}
       {filter === "uncategorised" && (
         <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-700">
           Showing uncategorised only.{" "}

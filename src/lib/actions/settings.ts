@@ -20,9 +20,15 @@ export async function updateHousehold(formData: FormData) {
   const retention = retentionRaw ? Math.max(1, parseInt(retentionRaw)) || null : null;
 
   const supabase = await createClient();
+  const safety = String(formData.get("device_safety_service") ?? "");
   const { error } = await supabase
     .from("households")
-    .update({ name, base_currency: baseCurrency, receipt_retention_days: retention })
+    .update({
+      name,
+      base_currency: baseCurrency,
+      receipt_retention_days: retention,
+      device_safety_service: ["google", "apple", "life360"].includes(safety) ? safety : null,
+    })
     .eq("id", membership.household_id);
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
 

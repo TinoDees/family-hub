@@ -246,17 +246,36 @@ export default async function TripExpensesPage({
                         {(() => {
                           const f = expenseFactor.get(e.id) ?? 1;
                           const effective = Number(e.amount) * f;
-                          const hasAgreed = Math.abs(f - 1) > 0.0001;
+                          const hasFx = Boolean(e.original_amount && e.original_currency);
+                          const hasAgreed = hasFx && Math.abs(f - 1) > 0.0001;
+                          if (!hasFx) return <div className="font-semibold">{formatMoney(effective, currency)}</div>;
                           return (
-                            <>
-                              <div className="font-semibold">{formatMoney(effective, currency)}</div>
-                              {e.original_amount && e.original_currency && (
-                                <div className="text-[10px] font-normal text-stone-400">
-                                  {e.original_currency} {Number(e.original_amount).toLocaleString()}
-                                  {hasAgreed && <> · mkt {formatMoney(Number(e.amount), currency)}</>}
+                            <div className="space-y-0.5">
+                              <div className="flex items-baseline justify-end gap-1.5">
+                                <span className="rounded bg-stone-100 px-1 text-[9px] uppercase tracking-wide text-stone-500">
+                                  {e.original_currency}
+                                </span>
+                                <span className="text-sm font-medium text-stone-600">
+                                  {Number(e.original_amount).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex items-baseline justify-end gap-1.5">
+                                <span className="rounded bg-stone-100 px-1 text-[9px] uppercase tracking-wide text-stone-500">
+                                  official
+                                </span>
+                                <span className={`text-sm ${hasAgreed ? "text-stone-500" : "font-semibold"}`}>
+                                  {formatMoney(Number(e.amount), currency)}
+                                </span>
+                              </div>
+                              {hasAgreed && (
+                                <div className="flex items-baseline justify-end gap-1.5">
+                                  <span className="rounded bg-emerald-100 px-1 text-[9px] uppercase tracking-wide text-emerald-700">
+                                    agreed
+                                  </span>
+                                  <span className="font-semibold">{formatMoney(effective, currency)}</span>
                                 </div>
                               )}
-                            </>
+                            </div>
                           );
                         })()}
                       </div>

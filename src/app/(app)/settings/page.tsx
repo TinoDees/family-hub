@@ -67,6 +67,23 @@ export default async function HouseholdSettingsPage({
             Leave empty to keep receipts forever.
           </p>
         </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Device safety service</label>
+          <select
+            name="device_safety_service"
+            defaultValue={(membership.household as unknown as { device_safety_service?: string | null }).device_safety_service ?? ""}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">— none —</option>
+            <option value="google">Google Family Link (Android)</option>
+            <option value="apple">Apple Screen Time (iPhone/iPad)</option>
+            <option value="life360">Life360</option>
+          </select>
+          <p className="mt-1 text-xs text-stone-400">
+            Shown as quick links on the Parental Controls page — Nestly manages what kids see
+            in the app; these services manage the devices themselves.
+          </p>
+        </div>
         <button className={`${buttonCls} w-auto px-6`}>Save</button>
       </form>
 

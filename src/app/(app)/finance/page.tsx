@@ -73,6 +73,9 @@ export default async function FinanceOverview({
               <Link href="/finance/import" className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-700">
                 Import bank CSV
               </Link>
+              <Link href="/finance/accounts" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
+                Accounts
+              </Link>
               <Link href="/finance/setup" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
                 Setup
               </Link>
