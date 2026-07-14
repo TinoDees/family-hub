@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/finance";
@@ -269,6 +270,19 @@ export default async function GuestTripPage({
               )}
             </>
           )}
+          <div className="rounded-xl border border-teal-200 bg-teal-50 p-4">
+            <h2 className="text-sm font-semibold text-teal-900">🪺 Enjoying Nestly?</h2>
+            <p className="mt-1 text-sm text-teal-800">
+              Create your own family household — planner, recipes, finances, photos and trips for
+              your family. You keep your access to this trip either way.
+            </p>
+            <Link
+              href="/onboarding"
+              className="mt-3 inline-block rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            >
+              Create my family on Nestly
+            </Link>
+          </div>
         </div>
       </main>
     </div>

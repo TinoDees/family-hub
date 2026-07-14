@@ -41,10 +41,17 @@ export async function signup(formData: FormData) {
       data: { display_name: String(formData.get("name") ?? "") },
     },
   });
-  if (error)
+  if (error) {
+    if (/already registered/i.test(error.message))
+      redirect(
+        `/login?message=${encodeURIComponent(
+          "You already have a Nestly account with this email (maybe from a trip invite). Sign in — you can create your own family from there."
+        )}&next=${encodeURIComponent("/onboarding")}`
+      );
     redirect(
       `/signup?error=${encodeURIComponent(error.message)}${next ? `&next=${encodeURIComponent(next)}` : ""}`
     );
+  }
   if (!data.session)
     redirect("/login?message=Check+your+email+to+confirm+your+account");
   revalidatePath("/", "layout");
