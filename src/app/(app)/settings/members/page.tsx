@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { setMemberRole, removeMember } from "@/lib/actions/members";
+import { setMemberRole, removeMember, createChildAccount } from "@/lib/actions/members";
+import { inputCls } from "@/components/auth-card";
 import type { MemberRole } from "@/lib/modules";
 
 const ROLES: MemberRole[] = ["owner", "adult", "child"];
@@ -107,6 +108,30 @@ export default async function MembersPage({
           </tbody>
         </table>
       </div>
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <h3 className="text-sm font-semibold">Add a child account (no email needed)</h3>
+        <p className="mt-1 text-xs text-stone-400">
+          Kids sign in with just a username and password — perfect for a Wi-Fi-only phone or tablet.
+        </p>
+        <form action={createChildAccount} className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="w-40">
+            <label className="mb-1 block text-xs font-medium">Name</label>
+            <input name="name" required placeholder="Rosie" autoComplete="off" className={inputCls} />
+          </div>
+          <div className="w-40">
+            <label className="mb-1 block text-xs font-medium">Username</label>
+            <input name="username" required minLength={3} placeholder="rosie" autoComplete="off" className={`${inputCls} lowercase`} />
+          </div>
+          <div className="w-48">
+            <label className="mb-1 block text-xs font-medium">Password</label>
+            <input name="password" type="text" required minLength={6} placeholder="min 6 characters" autoComplete="off" className={inputCls} />
+          </div>
+          <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
+            Create child account
+          </button>
+        </form>
+      </div>
+
       <p className="text-xs text-stone-400">
         Role sets the default access for every module; per-member overrides live under
         Permissions. A household always keeps at least one owner.

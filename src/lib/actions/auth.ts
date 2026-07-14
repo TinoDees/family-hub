@@ -13,8 +13,13 @@ function safeNext(raw: FormDataEntryValue | null): string | null {
 export async function login(formData: FormData) {
   const supabase = await createClient();
   const next = safeNext(formData.get("next"));
+  let identifier = String(formData.get("email") ?? "").trim();
+  // child accounts sign in with a plain username
+  if (identifier && !identifier.includes("@")) {
+    identifier = `${identifier.toLowerCase()}@kids.nestly.internal`;
+  }
   const { error } = await supabase.auth.signInWithPassword({
-    email: String(formData.get("email") ?? ""),
+    email: identifier,
     password: String(formData.get("password") ?? ""),
   });
   if (error)

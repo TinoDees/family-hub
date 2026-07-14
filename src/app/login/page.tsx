@@ -12,7 +12,7 @@ export default async function LoginPage({
     <AuthCard title="Nestly" subtitle="Sign in to your household" error={error} message={message}>
       <form action={login} className="space-y-3">
         {next && <input type="hidden" name="next" value={next} />}
-        <input name="email" type="email" required placeholder="Email" className={inputCls} />
+        <input name="email" type="text" required placeholder="Email or username" autoComplete="username" className={inputCls} />
         <input name="password" type="password" required placeholder="Password" className={inputCls} />
         <button className={buttonCls}>Sign in</button>
       </form>
