@@ -25,19 +25,29 @@ export const getPermissions = cache(async (
   role: MemberRole
 ): Promise<ModuleAccess[]> => {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("module_permissions")
-    .select("module_slug, access")
-    .eq("household_id", householdId)
-    .eq("user_id", userId);
+  const [{ data }, { data: flags }] = await Promise.all([
+    supabase
+      .from("module_permissions")
+      .select("module_slug, access")
+      .eq("household_id", householdId)
+      .eq("user_id", userId),
+    supabase
+      .from("household_module_flags")
+      .select("module_id, enabled")
+      .eq("household_id", householdId),
+  ]);
 
   const overrides = new Map(
     (data ?? []).map((r) => [r.module_slug as string, r.access as Access])
   );
+  const disabled = new Set(
+    (flags ?? []).filter((f) => !f.enabled).map((f) => f.module_id as string)
+  );
 
   return MODULES.map((m) => ({
     module: m,
-    access: overrides.get(m.slug) ?? m.defaults[role],
+    // platform kill switch beats everything
+    access: disabled.has(m.slug) ? "none" : (overrides.get(m.slug) ?? m.defaults[role]),
     overridden: overrides.has(m.slug),
   }));
 });

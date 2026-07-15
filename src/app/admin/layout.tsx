@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
+import { createClient } from "@/lib/supabase/server";
 
 const NAV = [
   { href: "/admin", label: "Overview" },
@@ -15,6 +16,17 @@ export default async function AdminLayout({
 }) {
   const admin = await getPlatformAdmin();
   if (!admin) redirect("/dashboard");
+
+  // Admin requires two-factor: a TOTP factor must exist AND this session
+  // must have passed a code check (AAL2).
+  const supabase = await createClient();
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal) {
+    if (aal.nextLevel === "aal2" && aal.currentLevel !== "aal2")
+      redirect("/account/security?next=/admin"); // enrolled — enter code
+    if (aal.currentLevel === "aal1" && aal.nextLevel === "aal1")
+      redirect("/account/security?next=/admin"); // not enrolled — set up 2FA
+  }
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
