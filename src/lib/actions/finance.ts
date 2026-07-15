@@ -167,9 +167,46 @@ export async function addTransaction(formData: FormData) {
 export async function setTransactionCategory(formData: FormData) {
   const { membership } = await requireFinance("edit");
   const supabase = await createClient();
+
+  // typed name: match an existing category (case-insensitive) or create it
+  const typed = String(formData.get("category_name") ?? "").trim();
+  let categoryId: string | null = String(formData.get("category_id") || "") || null;
+  if (formData.has("category_name")) {
+    if (!typed) {
+      categoryId = null;
+    } else {
+      const { data: cats } = await supabase
+        .from("finance_categories")
+        .select("id, name")
+        .eq("household_id", membership.household_id);
+      const hit = (cats ?? []).find((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
+      if (hit) categoryId = hit.id;
+      else {
+        const { data: txn } = await supabase
+          .from("finance_transactions")
+          .select("amount")
+          .eq("id", String(formData.get("txn_id")))
+          .maybeSingle();
+        const { data: created, error } = await supabase
+          .from("finance_categories")
+          .insert({
+            household_id: membership.household_id,
+            name: typed.slice(0, 60),
+            kind: Number(txn?.amount ?? -1) > 0 ? "income" : "expense",
+            icon: null,
+          })
+          .select("id")
+          .single();
+        if (error || !created)
+          redirect(`/finance/transactions?m=${formData.get("m") ?? ""}&error=${enc(error?.message ?? "Could not create category")}`);
+        categoryId = created!.id;
+      }
+    }
+  }
+
   await supabase
     .from("finance_transactions")
-    .update({ category_id: String(formData.get("category_id") || "") || null })
+    .update({ category_id: categoryId })
     .eq("id", String(formData.get("txn_id")))
     .eq("household_id", membership.household_id);
   revalidatePath("/finance");

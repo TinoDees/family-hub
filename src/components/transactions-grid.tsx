@@ -121,6 +121,11 @@ export function TransactionsGrid({
 
   return (
     <div className="space-y-3">
+      <datalist id="nestly-category-options">
+        {categories.map((c) => (
+          <option key={c.id} value={c.name}>{c.icon ? `${c.icon} ${c.name}` : c.name}</option>
+        ))}
+      </datalist>
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-stone-200 bg-white p-3">
         <input
           value={q}
@@ -187,17 +192,20 @@ export function TransactionsGrid({
                       <form action={setCategoryAction} className="flex items-center gap-1">
                         <input type="hidden" name="txn_id" value={t.id} />
                         <input type="hidden" name="m" value={monthKey} />
-                        <select
-                          name="category_id"
-                          defaultValue={t.category_id ?? ""}
-                          className={`rounded-lg border px-2 py-1 text-xs ${t.category_id ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"}`}
+                        <input
+                          name="category_name"
+                          list="nestly-category-options"
+                          defaultValue={t.category_id ? (categories.find((c) => c.id === t.category_id)?.name ?? "") : ""}
+                          placeholder="type to search or create…"
+                          autoComplete="off"
+                          className={`w-40 rounded-lg border px-2 py-1 text-xs ${t.category_id ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"}`}
+                        />
+                        <button
+                          className="rounded border border-stone-200 px-1.5 py-1 text-[10px] text-stone-500 hover:bg-stone-100"
+                          title="Apply — creates the category if it's new"
                         >
-                          <option value="">— none —</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                          ))}
-                        </select>
-                        <button className="rounded border border-stone-200 px-1.5 py-1 text-[10px] text-stone-500 hover:bg-stone-100">✓</button>
+                          ✓
+                        </button>
                       </form>
                     ) : (
                       <span className="text-stone-500">{t.category_id ? catName.get(t.category_id) : "—"}</span>
