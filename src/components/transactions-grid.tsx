@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Row = {
   id: string;
@@ -121,11 +121,6 @@ export function TransactionsGrid({
 
   return (
     <div className="space-y-3">
-      <datalist id="nestly-category-options">
-        {categories.map((c) => (
-          <option key={c.id} value={c.name}>{c.icon ? `${c.icon} ${c.name}` : c.name}</option>
-        ))}
-      </datalist>
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-stone-200 bg-white p-3">
         <input
           value={q}
@@ -189,24 +184,14 @@ export function TransactionsGrid({
                   <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
                   <td className="px-3 py-2">
                     {canEdit ? (
-                      <form action={setCategoryAction} className="flex items-center gap-1">
-                        <input type="hidden" name="txn_id" value={t.id} />
-                        <input type="hidden" name="m" value={monthKey} />
-                        <input
-                          name="category_name"
-                          list="nestly-category-options"
-                          defaultValue={t.category_id ? (categories.find((c) => c.id === t.category_id)?.name ?? "") : ""}
-                          placeholder="type to search or create…"
-                          autoComplete="off"
-                          className={`w-40 rounded-lg border px-2 py-1 text-xs ${t.category_id ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"}`}
-                        />
-                        <button
-                          className="rounded border border-stone-200 px-1.5 py-1 text-[10px] text-stone-500 hover:bg-stone-100"
-                          title="Apply — creates the category if it's new"
-                        >
-                          ✓
-                        </button>
-                      </form>
+                      <CategoryPicker
+                        txnId={t.id}
+                        monthKey={monthKey}
+                        current={t.category_id ? (categories.find((c) => c.id === t.category_id)?.name ?? "") : ""}
+                        categorised={Boolean(t.category_id)}
+                        categories={categories}
+                        action={setCategoryAction}
+                      />
                     ) : (
                       <span className="text-stone-500">{t.category_id ? catName.get(t.category_id) : "—"}</span>
                     )}
@@ -243,5 +228,104 @@ export function TransactionsGrid({
         )}
       </div>
     </div>
+  );
+}
+
+function CategoryPicker({
+  txnId,
+  monthKey,
+  current,
+  categorised,
+  categories,
+  action,
+}: {
+  txnId: string;
+  monthKey: string;
+  current: string;
+  categorised: boolean;
+  categories: Cat[];
+  action: (formData: FormData) => void;
+}) {
+  const [q, setQ] = useState(current);
+  const [open, setOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const needle = q.trim().toLowerCase();
+  const filtered = needle
+    ? categories.filter((c) => c.name.toLowerCase().includes(needle))
+    : categories;
+  const exact = categories.some((c) => c.name.trim().toLowerCase() === needle);
+
+  const choose = (value: string) => {
+    setQ(value);
+    setOpen(false);
+    requestAnimationFrame(() => formRef.current?.requestSubmit());
+  };
+
+  return (
+    <form action={action} ref={formRef} className="relative">
+      <input type="hidden" name="txn_id" value={txnId} />
+      <input type="hidden" name="m" value={monthKey} />
+      <input type="hidden" name="category_name" value={q} />
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="category…"
+        autoComplete="off"
+        className={`w-40 rounded-lg border px-2 py-1 text-xs outline-none focus:border-stone-500 ${
+          categorised ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"
+        }`}
+      />
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg">
+          <div className="max-h-52 overflow-y-auto py-1">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                choose("");
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-stone-400 hover:bg-stone-50"
+            >
+              — no category —
+            </button>
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(c.name);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-stone-50"
+              >
+                <span>{c.icon ?? "🏷️"}</span>
+                <span className="truncate">{c.name}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && !needle && (
+              <p className="px-3 py-2 text-xs text-stone-400">No categories yet.</p>
+            )}
+          </div>
+          {needle && !exact && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                choose(q.trim());
+              }}
+              className="flex w-full items-center gap-2 border-t border-stone-100 bg-teal-50 px-3 py-2 text-left text-xs font-medium text-teal-700 hover:bg-teal-100"
+            >
+              ＋ Create &ldquo;{q.trim()}&rdquo;
+            </button>
+          )}
+        </div>
+      )}
+    </form>
   );
 }
