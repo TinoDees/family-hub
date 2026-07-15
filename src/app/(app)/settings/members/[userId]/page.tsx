@@ -8,6 +8,7 @@ import {
   adminSetPassword,
   adminSetBlocked,
   adminDeleteUser,
+  adminSendReset,
   getAccountInfo,
 } from "@/lib/actions/admin-users";
 import { PermissionMatrix } from "@/components/permission-matrix";
@@ -135,6 +136,23 @@ export default async function MemberPermissionsPage({
           </p>
         ) : (
           <div className="mt-4 space-y-5">
+            {account.email && !account.email.endsWith("@kids.nestly.internal") && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-teal-200 bg-teal-50 p-3">
+                <div className="min-w-56 flex-1">
+                  <p className="text-sm font-medium text-teal-900">📧 Email a password reset</p>
+                  <p className="text-xs text-teal-700">
+                    Sends a sign-in link to {account.email} — they click it and choose a new
+                    password. Their old password stops working immediately.
+                  </p>
+                </div>
+                <form action={adminSendReset}>
+                  <input type="hidden" name="user_id" value={target.user_id} />
+                  <button className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+                    Send reset email
+                  </button>
+                </form>
+              </div>
+            )}
             <form action={adminSetPassword} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="user_id" value={target.user_id} />
               <div className="min-w-64 flex-1">

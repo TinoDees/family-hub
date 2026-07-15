@@ -33,6 +33,8 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic =
     path === "/" ||
+    path === "/manifest.webmanifest" || // browsers fetch these without cookies —
+    path === "/sw.js" ||                // blocking them breaks PWA install + push
     path.startsWith("/api/") || // API routes guard themselves (push secret, cron secret, session checks)
     path === "/login" ||
     path === "/signup" ||

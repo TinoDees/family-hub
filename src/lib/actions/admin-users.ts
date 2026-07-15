@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,4 +126,44 @@ export async function getAccountInfo(userId: string): Promise<{
     blocked: Boolean(u.banned_until && new Date(u.banned_until) > new Date()),
     lastSignIn: u.last_sign_in_at ?? null,
   };
+}
+
+/** Tracey-style reset: temp password + emailed sign-in link → set-password page. */
+export async function adminSendReset(formData: FormData) {
+  const userId = String(formData.get("user_id"));
+  const back = `/settings/members/${userId}`;
+  if (!hasServiceKey()) redirect(`${back}?error=${encodeURIComponent(NO_KEY_MSG)}`);
+  await requireOwnerAndTarget(userId, back);
+
+  const admin = createAdminClient();
+  const { data: acc } = await admin.auth.admin.getUserById(userId);
+  const email = acc?.user?.email;
+  if (!email) redirect(`${back}?error=${encodeURIComponent("No email on this account")}`);
+  if (email!.endsWith("@kids.nestly.internal"))
+    redirect(
+      `${back}?error=${encodeURIComponent("Child accounts sign in with a username — use Set password instead and tell them the new one")}`
+    );
+
+  const rand = () => Math.random().toString(36).slice(2, 6);
+  const temp = `Nestly-${rand()}-${rand()}`;
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    password: temp,
+    user_metadata: { force_password_change: true },
+  });
+  if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}`);
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "nestlyapp.co";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const loginUrl = `${proto}://${host}/auth/temp?email=${encodeURIComponent(email!)}&tmp=${encodeURIComponent(temp)}`;
+
+  const name =
+    acc?.user?.user_metadata?.display_name ?? email!.split("@")[0];
+  const { sendLoginLinkEmail } = await import("@/lib/email");
+  const result = await sendLoginLinkEmail({ to: email!, name, loginUrl });
+  redirect(
+    result.sent
+      ? `${back}?saved=${encodeURIComponent("Reset email sent — their old password no longer works")}`
+      : `${back}?error=${encodeURIComponent(`Email failed (${result.reason}) — you can still set a password manually below`)}`
+  );
 }

@@ -69,3 +69,37 @@ export async function sendInviteEmail({
   if (!res.ok) return { sent: false, reason: await res.text() };
   return { sent: true };
 }
+
+export async function sendLoginLinkEmail({
+  to,
+  name,
+  loginUrl,
+}: {
+  to: string;
+  name: string;
+  loginUrl: string;
+}): Promise<{ sent: boolean; reason?: string }> {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!key || !from) return { sent: false, reason: "email-not-configured" };
+
+  const html = emailShell({
+    title: "Your new Nestly sign-in",
+    bodyHtml: `
+      <p>Hi ${name},</p>
+      <p>A new sign-in was set up for your Nestly account. Click the button below —
+      you'll be signed in and asked to choose your own password.</p>
+      <p style="margin:24px 0;">
+        <a href="${loginUrl}" style="background:#0d9488;color:#ffffff;padding:10px 20px;border-radius:8px;text-decoration:none;display:inline-block;">Sign in &amp; set your password</a>
+      </p>
+      <p style="color:#a8a29e;">If you didn't ask for this, you can ignore this email — your old password no longer works, so ask your family owner to send a fresh link.</p>`,
+  });
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject: "Set your new Nestly password", html }),
+  });
+  if (!res.ok) return { sent: false, reason: await res.text() };
+  return { sent: true };
+}
