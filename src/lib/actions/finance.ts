@@ -59,8 +59,13 @@ export async function updateCategory(formData: FormData) {
     .from("finance_categories")
     .update({
       name: String(formData.get("name") ?? "").trim(),
-      icon: String(formData.get("icon_custom") ?? "").trim() || null,
       kind: String(formData.get("kind") ?? "expense"),
+      ...((): { icon?: string } => {
+        const icon =
+          String(formData.get("icon_custom") ?? "").trim() ||
+          String(formData.get("icon") ?? "").trim();
+        return icon ? { icon } : {}; // untouched = keep the current emoji
+      })(),
     })
     .eq("id", String(formData.get("category_id")))
     .eq("household_id", membership.household_id);

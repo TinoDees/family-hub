@@ -7,6 +7,7 @@ import {
   deleteTransaction,
 } from "@/lib/actions/finance";
 import { inputCls } from "@/components/auth-card";
+import { TransactionsGrid } from "@/components/transactions-grid";
 
 export default async function TransactionsPage({
   searchParams,
@@ -123,80 +124,25 @@ export default async function TransactionsPage({
         </details>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        {rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-stone-400">
-            No transactions for {month.label}.{" "}
-            {canEdit && (
-              <Link href="/finance/import" className="underline">Import a bank CSV</Link>
-            )}
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-900 text-left text-white">
-                <th className="px-3 py-2.5 font-medium">Date</th>
-                <th className="px-3 py-2.5 font-medium">Description</th>
-                <th className="px-3 py-2.5 font-medium">Account</th>
-                <th className="px-3 py-2.5 font-medium">Category</th>
-                <th className="px-3 py-2.5 text-right font-medium">Amount</th>
-                {canEdit && <th className="px-3 py-2.5" />}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t, i) => (
-                <tr key={t.id} className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}>
-                  <td className="whitespace-nowrap px-3 py-2 text-stone-500">
-                    {new Date(t.posted_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })}
-                  </td>
-                  <td className="max-w-72 truncate px-3 py-2" title={t.description}>
-                    {t.merchant ?? t.description}
-                    {t.source !== "manual" && (
-                      <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] uppercase text-stone-400">{t.source}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-stone-500">{t.account_id ? accountName.get(t.account_id) : "—"}</td>
-                  <td className="px-3 py-2">
-                    {canEdit ? (
-                      <form action={setTransactionCategory} className="flex items-center gap-1">
-                        <input type="hidden" name="txn_id" value={t.id} />
-                        <input type="hidden" name="m" value={month.key} />
-                        <select
-                          name="category_id"
-                          defaultValue={t.category_id ?? ""}
-                          className={`rounded-lg border px-2 py-1 text-xs ${t.category_id ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"}`}
-                        >
-                          <option value="">— none —</option>
-                          {(categories ?? []).map((c) => (
-                            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                          ))}
-                        </select>
-                        <button className="rounded border border-stone-200 px-1.5 py-1 text-[10px] text-stone-500 hover:bg-stone-100">✓</button>
-                      </form>
-                    ) : (
-                      <span className="text-stone-500">
-                        {(categories ?? []).find((c) => c.id === t.category_id)?.name ?? "—"}
-                      </span>
-                    )}
-                  </td>
-                  <td className={`whitespace-nowrap px-3 py-2 text-right font-medium ${Number(t.amount) < 0 ? "text-stone-800" : "text-emerald-600"}`}>
-                    {formatMoney(Number(t.amount), currency)}
-                  </td>
-                  {canEdit && (
-                    <td className="px-2 py-2 text-right">
-                      <form action={deleteTransaction}>
-                        <input type="hidden" name="txn_id" value={t.id} />
-                        <input type="hidden" name="m" value={month.key} />
-                        <button className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600" title="Delete">✕</button>
-                      </form>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <TransactionsGrid
+        rows={rows.map((t) => ({
+          id: t.id,
+          posted_at: t.posted_at,
+          description: t.description,
+          merchant: t.merchant,
+          amount: Number(t.amount),
+          category_id: t.category_id,
+          source: t.source,
+          account_id: t.account_id,
+        }))}
+        categories={categories ?? []}
+        accounts={accounts ?? []}
+        canEdit={canEdit}
+        currency={currency}
+        monthKey={month.key}
+        setCategoryAction={setTransactionCategory}
+        deleteAction={deleteTransaction}
+      />
     </div>
   );
 }

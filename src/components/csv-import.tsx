@@ -82,10 +82,17 @@ function guessColumns(rows: string[][]) {
   const probe = body[0] ?? [];
 
   const find = (re: RegExp) => (header ? header.findIndex((c) => re.test(c)) : -1);
+  const findFirst = (res: RegExp[]) => {
+    for (const re of res) {
+      const i = find(re);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
   let date = find(/date/);
-  let amount = find(/^amount|debit|value/);
-  let description = find(/details|description|narrative|transaction/);
-  const merchant = find(/merchant/);
+  let amount = findFirst([/^amount/, /debit/, /value/]);
+  let description = findFirst([/detail/, /description/, /narrative/, /memo/]);
+  const merchant = findFirst([/merchant/, /payee/]);
 
   if (date < 0) date = probe.findIndex((c) => parseDate(c) !== null);
   if (amount < 0)
@@ -94,7 +101,7 @@ function guessColumns(rows: string[][]) {
     description = probe.findIndex(
       (c, i) => i !== date && i !== amount && c.trim().length > 3 && parseAmount(c) === null
     );
-  return { date, amount, description, merchant, body };
+  return { date, amount, description, merchant, body, header };
 }
 
 export function CsvImport({ accounts }: { accounts: Account[] }) {
@@ -103,6 +110,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [cols, setCols] = useState<{ date: number; amount: number; description: number; merchant: number }>({ date: -1, amount: -1, description: -1, merchant: -1 });
   const [body, setBody] = useState<string[][]>([]);
+  const [header, setHeader] = useState<string[] | null>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
 
@@ -112,6 +120,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
     const guess = guessColumns(rows);
     setRaw(rows);
     setBody(guess.body);
+    setHeader(guess.header);
     setCols({ date: guess.date, amount: guess.amount, description: guess.description, merchant: guess.merchant });
     setFileName(f.name);
     setResult(null);
@@ -184,7 +193,12 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
                 >
                   <option value={-1}>—</option>
                   {colOptions.map((i) => (
-                    <option key={i} value={i}>col {i + 1}</option>
+                    <option key={i} value={i}>
+                      {header?.[i]?.trim()
+                        ? header[i].trim().replace(/\b\w/g, (ch) => ch.toUpperCase())
+                        : `col ${i + 1}`}
+                      {body[0]?.[i] ? ` — e.g. "${String(body[0][i]).slice(0, 16)}"` : ""}
+                    </option>
                   ))}
                 </select>
               </div>

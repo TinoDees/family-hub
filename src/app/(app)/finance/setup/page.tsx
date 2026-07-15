@@ -106,9 +106,21 @@ export default async function FinanceSetupPage({
                 <div className="flex flex-wrap items-end gap-2 p-2">
                   <form action={updateCategory} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="category_id" value={c.id} />
-                    <div>
-                      <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Emoji</label>
-                      <input name="icon_custom" defaultValue={c.icon ?? ""} className={`${inputCls} w-16 text-center`} />
+                    <div className="w-full">
+                      <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">
+                        Emoji — current: {c.icon ?? "none"}
+                      </label>
+                      <div className="flex flex-wrap gap-1">
+                        {["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕"].map((e) => (
+                          <label key={e} className="cursor-pointer">
+                            <input type="radio" name="icon" value={e} className="peer sr-only" />
+                            <span className="inline-block rounded-lg border border-stone-200 bg-white px-1.5 py-0.5 text-base peer-checked:border-stone-900 peer-checked:ring-1 peer-checked:ring-stone-900">
+                              {e}
+                            </span>
+                          </label>
+                        ))}
+                        <input name="icon_custom" placeholder="…or any emoji" className={`${inputCls} w-32`} />
+                      </div>
                     </div>
                     <div className="min-w-36">
                       <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Name</label>
@@ -141,9 +153,9 @@ export default async function FinanceSetupPage({
           <div>
             <label className="mb-1 block text-xs font-medium">Pick an icon</label>
             <div className="flex flex-wrap gap-1">
-              {["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕"].map((e, i) => (
+              {["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕"].map((e) => (
                 <label key={e} className="cursor-pointer">
-                  <input type="radio" name="icon" value={e} defaultChecked={i === 0} className="peer sr-only" />
+                  <input type="radio" name="icon" value={e} className="peer sr-only" />
                   <span className="inline-block rounded-lg border border-stone-200 px-2 py-1 text-lg peer-checked:border-stone-900 peer-checked:bg-stone-900/5 peer-checked:ring-1 peer-checked:ring-stone-900">
                     {e}
                   </span>
