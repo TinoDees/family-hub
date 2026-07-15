@@ -52,6 +52,52 @@ export async function addCategory(formData: FormData) {
   );
 }
 
+export async function updateCategory(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("finance_categories")
+    .update({
+      name: String(formData.get("name") ?? "").trim(),
+      icon: String(formData.get("icon_custom") ?? "").trim() || null,
+      kind: String(formData.get("kind") ?? "expense"),
+    })
+    .eq("id", String(formData.get("category_id")))
+    .eq("household_id", membership.household_id);
+  redirect(
+    error
+      ? `/finance/setup?error=${enc(friendly(error.message))}&sec=categories#categories`
+      : "/finance/setup?saved=1&sec=categories#categories"
+  );
+}
+
+export async function deleteCategory(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const categoryId = String(formData.get("category_id"));
+  // keep the transactions, just unlink them; drop any budget for it
+  await supabase
+    .from("finance_transactions")
+    .update({ category_id: null })
+    .eq("category_id", categoryId)
+    .eq("household_id", membership.household_id);
+  await supabase
+    .from("finance_budgets")
+    .delete()
+    .eq("category_id", categoryId)
+    .eq("household_id", membership.household_id);
+  const { error } = await supabase
+    .from("finance_categories")
+    .delete()
+    .eq("id", categoryId)
+    .eq("household_id", membership.household_id);
+  redirect(
+    error
+      ? `/finance/setup?error=${enc(error.message)}&sec=categories#categories`
+      : "/finance/setup?saved=1&sec=categories#categories"
+  );
+}
+
 export async function seedCategories() {
   const { membership } = await requireFinance("edit");
   const supabase = await createClient();

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, formatMoney } from "@/lib/finance";
-import { addAccount, addCategory, seedCategories, setBudget } from "@/lib/actions/finance";
+import { addAccount, addCategory, updateCategory, deleteCategory, seedCategories, setBudget } from "@/lib/actions/finance";
+import { ConfirmSubmit } from "@/components/confirm-submit";
 import { inputCls } from "@/components/auth-card";
 
 export default async function FinanceSetupPage({
@@ -93,11 +94,45 @@ export default async function FinanceSetupPage({
           )}
         </div>
         {(categories ?? []).length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 space-y-1.5">
+            <p className="text-xs text-stone-400">Tap a category to rename it, change its emoji, or delete it.</p>
             {(categories ?? []).map((c) => (
-              <span key={c.id} className={`rounded-full px-2.5 py-1 text-xs ${c.kind === "income" ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-600"}`}>
-                {c.icon} {c.name}
-              </span>
+              <details key={c.id} className="rounded-lg border border-transparent open:border-stone-200 open:bg-stone-50">
+                <summary className="inline-flex cursor-pointer list-none">
+                  <span className={`rounded-full px-2.5 py-1 text-xs ${c.kind === "income" ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-600"}`}>
+                    {c.icon} {c.name} <span className="text-stone-400">▾</span>
+                  </span>
+                </summary>
+                <div className="flex flex-wrap items-end gap-2 p-2">
+                  <form action={updateCategory} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="category_id" value={c.id} />
+                    <div>
+                      <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Emoji</label>
+                      <input name="icon_custom" defaultValue={c.icon ?? ""} className={`${inputCls} w-16 text-center`} />
+                    </div>
+                    <div className="min-w-36">
+                      <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Name</label>
+                      <input name="name" defaultValue={c.name} required className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Kind</label>
+                      <select name="kind" defaultValue={c.kind} className="rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm">
+                        <option value="expense">expense</option>
+                        <option value="income">income</option>
+                      </select>
+                    </div>
+                    <button className="rounded-lg bg-stone-900 px-3 py-2 text-xs font-medium text-white hover:bg-stone-700">Save</button>
+                  </form>
+                  <form action={deleteCategory}>
+                    <input type="hidden" name="category_id" value={c.id} />
+                    <ConfirmSubmit
+                      label="Delete"
+                      confirmMessage={`Delete "${c.name}"? Transactions keep their history but lose this label; any budget for it is removed.`}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                    />
+                  </form>
+                </div>
+              </details>
             ))}
           </div>
         )}
