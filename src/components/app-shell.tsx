@@ -50,6 +50,9 @@ function NavLinks({
             <span>⚙️</span> Settings
           </Link>
         )}
+        <Link href="/help" className={linkCls(pathname.startsWith("/help"))}>
+          <span>❓</span> Help & guides
+        </Link>
         <InstallButton />
       </div>
     </>

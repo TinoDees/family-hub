@@ -272,6 +272,13 @@ export default async function PeoplePage({
         </section>
       )}
 
+      <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        💡 <strong>Adding family:</strong> adults get an <Link href="/settings/invites" className="underline">email invite</Link> and
+        set their own password. Children don&apos;t need email — create their account below,
+        then they sign in with just the username and password.{" "}
+        <Link href="/help" className="underline">Full guide →</Link>
+      </div>
+
       <section className="rounded-xl border border-stone-200 bg-white p-5">
         <h3 className="text-sm font-semibold">Add a child account (no email needed)</h3>
         <p className="mt-1 text-xs text-stone-400">
