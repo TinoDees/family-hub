@@ -28,7 +28,25 @@ export default async function ImportPage() {
       )}
       <p className="text-xs text-stone-400">
         Re-importing the same file is safe — duplicates are detected and skipped automatically.
+        The balance column isn&apos;t needed: Nestly works balances out itself. If your bank&apos;s
+        CSV has a category column, matching categories are applied automatically.
       </p>
+
+      <div className="rounded-xl border border-teal-200 bg-teal-50 p-4">
+        <h2 className="text-sm font-semibold text-teal-900">⚡ Want automatic feeds instead of CSVs?</h2>
+        <p className="mt-1 text-sm text-teal-800">
+          <a href="https://redbark.com" target="_blank" rel="noreferrer" className="font-medium underline">Redbark</a>{" "}
+          connects your Australian banks through the government&apos;s Consumer Data Right and syncs
+          transactions automatically (their subscription, 7-day free trial). Set it up with Google
+          Sheets as the destination — Nestly&apos;s automatic ingestion of that feed is coming soon,
+          and until then you can export from the sheet and import here.
+        </p>
+        <ol className="mt-2 list-decimal pl-5 text-sm text-teal-800">
+          <li>Create a Redbark account and connect your bank + cards (takes minutes)</li>
+          <li>Choose Google Sheets as the destination</li>
+          <li>Weekly: download the sheet as CSV → import it here (duplicates auto-skip)</li>
+        </ol>
+      </div>
     </div>
   );
 }

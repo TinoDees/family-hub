@@ -93,6 +93,8 @@ function guessColumns(rows: string[][]) {
   let amount = findFirst([/^amount/, /debit/, /value/]);
   let description = findFirst([/detail/, /description/, /narrative/, /memo/]);
   const merchant = findFirst([/merchant/, /payee/]);
+  const bankCategory = find(/categor/);
+  const txnType = findFirst([/transaction type/, /^type$/]);
 
   if (date < 0) date = probe.findIndex((c) => parseDate(c) !== null);
   if (amount < 0)
@@ -101,14 +103,14 @@ function guessColumns(rows: string[][]) {
     description = probe.findIndex(
       (c, i) => i !== date && i !== amount && c.trim().length > 3 && parseAmount(c) === null
     );
-  return { date, amount, description, merchant, body, header };
+  return { date, amount, description, merchant, bankCategory, txnType, body, header };
 }
 
 export function CsvImport({ accounts }: { accounts: Account[] }) {
   const [raw, setRaw] = useState<string[][] | null>(null);
   const [fileName, setFileName] = useState("");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [cols, setCols] = useState<{ date: number; amount: number; description: number; merchant: number }>({ date: -1, amount: -1, description: -1, merchant: -1 });
+  const [cols, setCols] = useState<{ date: number; amount: number; description: number; merchant: number; bankCategory: number; txnType: number }>({ date: -1, amount: -1, description: -1, merchant: -1, bankCategory: -1, txnType: -1 });
   const [body, setBody] = useState<string[][]>([]);
   const [header, setHeader] = useState<string[] | null>(null);
   const [pending, startTransition] = useTransition();
@@ -121,7 +123,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
     setRaw(rows);
     setBody(guess.body);
     setHeader(guess.header);
-    setCols({ date: guess.date, amount: guess.amount, description: guess.description, merchant: guess.merchant });
+    setCols({ date: guess.date, amount: guess.amount, description: guess.description, merchant: guess.merchant, bankCategory: guess.bankCategory, txnType: guess.txnType });
     setFileName(f.name);
     setResult(null);
   };
@@ -139,6 +141,8 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
         amount,
         description,
         merchant: cols.merchant >= 0 ? (r[cols.merchant] ?? "").trim() || undefined : undefined,
+        bankCategory: cols.bankCategory >= 0 ? (r[cols.bankCategory] ?? "").trim() || undefined : undefined,
+        txnType: cols.txnType >= 0 ? (r[cols.txnType] ?? "").trim() || undefined : undefined,
       });
     }
     return out;
@@ -183,9 +187,12 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
                 ))}
               </select>
             </div>
-            {(["date", "amount", "description", "merchant"] as const).map((key) => (
+            {(["date", "amount", "description", "merchant", "bankCategory", "txnType"] as const).map((key) => (
               <div key={key}>
-                <label className="mb-1 block text-xs font-medium capitalize">{key} column</label>
+                <label className="mb-1 block text-xs font-medium">
+                  {{ date: "Date", amount: "Amount", description: "Description", merchant: "Merchant (optional)", bankCategory: "Bank category (optional)", txnType: "Transaction type (optional)" }[key]}{" "}
+                  column
+                </label>
                 <select
                   value={cols[key]}
                   onChange={(e) => setCol(key, Number(e.target.value))}

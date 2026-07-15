@@ -193,6 +193,8 @@ export type ImportRow = {
   amount: number; // signed
   description: string;
   merchant?: string;
+  bankCategory?: string;
+  txnType?: string;
 };
 
 export async function importTransactions(
@@ -206,6 +208,13 @@ export async function importTransactions(
     return { ok: false, inserted: 0, skipped: 0, error: "Too many rows in one import (max 5000)" };
 
   const supabase = await createClient();
+  // auto-categorise: if the bank's category name matches one of ours, use it
+  const { data: cats } = await supabase
+    .from("finance_categories")
+    .select("id, name")
+    .eq("household_id", membership.household_id);
+  const catByName = new Map((cats ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
+
   const records = rows.map((r) => ({
     household_id: membership.household_id,
     account_id: accountId,
@@ -215,6 +224,11 @@ export async function importTransactions(
     amount: r.amount,
     currency: membership.household.base_currency,
     source: "import" as const,
+    bank_category: r.bankCategory?.slice(0, 100) || null,
+    txn_type: r.txnType?.slice(0, 100) || null,
+    category_id: r.bankCategory
+      ? (catByName.get(r.bankCategory.trim().toLowerCase()) ?? null)
+      : null,
     import_hash: createHash("sha256")
       .update(
         `${membership.household_id}|${accountId}|${r.date}|${r.amount.toFixed(2)}|${r.description.trim().toLowerCase()}`
