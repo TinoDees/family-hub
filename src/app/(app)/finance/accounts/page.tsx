@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, formatMoney } from "@/lib/finance";
+import { refreshBankBalances } from "@/lib/redbark";
 import { updateAccount, deleteAccount, requestAccountDeletion, cancelAccountDeletion } from "@/lib/actions/finance";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { inputCls } from "@/components/auth-card";
@@ -25,10 +26,32 @@ export default async function AccountsPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
+
+  // refresh live bank balances when they're older than 10 minutes (best-effort)
+  const { data: staleCheck } = await supabase
+    .from("finance_accounts")
+    .select("balance_synced_at")
+    .eq("household_id", membership.household_id)
+    .not("external_id", "is", null)
+    .order("balance_synced_at", { ascending: true, nullsFirst: true })
+    .limit(1)
+    .maybeSingle();
+  if (
+    staleCheck &&
+    (!staleCheck.balance_synced_at ||
+      Date.now() - new Date(staleCheck.balance_synced_at).getTime() > 10 * 60 * 1000)
+  ) {
+    try {
+      await refreshBankBalances(membership.household_id);
+    } catch {
+      /* keep old values */
+    }
+  }
+
   const [{ data: accounts }, { data: sums }] = await Promise.all([
     supabase
       .from("finance_accounts")
-      .select("id, name, type, institution, opening_balance, deletion_requested_by, deletion_requested_at")
+      .select("id, name, type, institution, opening_balance, deletion_requested_by, deletion_requested_at, external_id, bank_balance, bank_available, balance_synced_at")
       .eq("household_id", membership.household_id)
       .order("type")
       .order("name"),
@@ -48,7 +71,12 @@ export default async function AccountsPage({
 
   const withBalance = (accounts ?? []).map((a) => ({
     ...a,
-    balance: Number(a.opening_balance) + (txnSum.get(a.id) ?? 0),
+    balance:
+      a.bank_balance !== null && a.bank_balance !== undefined
+        ? Number(a.bank_balance)
+        : Number(a.opening_balance) + (txnSum.get(a.id) ?? 0),
+    live: a.bank_balance !== null && a.bank_balance !== undefined,
+    available: a.bank_available !== null && a.bank_available !== undefined ? Number(a.bank_available) : null,
     txns: txnCount.get(a.id) ?? 0,
     meta: TYPE_META[a.type] ?? TYPE_META.other,
   }));
@@ -102,8 +130,20 @@ export default async function AccountsPage({
                   </div>
                   {a.institution && <div className="text-xs text-stone-400">{a.institution}</div>}
                 </div>
-                <div className={`text-right text-xl font-semibold tabular-nums ${a.balance < 0 ? "text-red-600" : ""}`}>
-                  {formatMoney(a.balance, currency)}
+                <div className="text-right">
+                  <div className={`text-xl font-semibold tabular-nums ${a.balance < 0 ? "text-red-600" : ""}`}>
+                    {formatMoney(a.balance, currency)}
+                  </div>
+                  {a.available !== null && (
+                    <div className="text-xs font-medium text-emerald-600">
+                      available {formatMoney(a.available, currency)}
+                    </div>
+                  )}
+                  {a.live && (
+                    <div className="text-[10px] text-stone-400" title={a.balance_synced_at ? new Date(a.balance_synced_at).toLocaleString("en-AU") : ""}>
+                      🏦 live from bank
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-stone-400">
