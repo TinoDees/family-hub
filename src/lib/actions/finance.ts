@@ -213,6 +213,56 @@ export async function setTransactionCategory(formData: FormData) {
   redirect(`/finance/transactions?m=${formData.get("m") ?? ""}`);
 }
 
+/** Inline (no-redirect) helpers for the transactions grid — smooth UX, no reloads. */
+export async function createCategoryInline(
+  name: string,
+  icon: string,
+  kind: string
+): Promise<{ ok: boolean; error?: string; category?: { id: string; name: string; icon: string | null; kind: string } }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const clean = name.trim().slice(0, 60);
+  if (!clean) return { ok: false, error: "Give the category a name" };
+  const { data, error } = await supabase
+    .from("finance_categories")
+    .insert({
+      household_id: membership.household_id,
+      name: clean,
+      icon: icon.trim().slice(0, 8) || null,
+      kind: kind === "income" ? "income" : "expense",
+    })
+    .select("id, name, icon, kind")
+    .single();
+  if (error || !data)
+    return { ok: false, error: /duplicate/i.test(error?.message ?? "") ? "That category already exists" : (error?.message ?? "Failed") };
+  return { ok: true, category: data };
+}
+
+export async function assignCategoryInline(
+  txnId: string,
+  categoryId: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("finance_transactions")
+    .update({ category_id: categoryId })
+    .eq("id", txnId)
+    .eq("household_id", membership.household_id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function deleteTransactionInline(txnId: string): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("finance_transactions")
+    .delete()
+    .eq("id", txnId)
+    .eq("household_id", membership.household_id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
 export async function deleteTransaction(formData: FormData) {
   const { membership } = await requireFinance("edit");
   const supabase = await createClient();

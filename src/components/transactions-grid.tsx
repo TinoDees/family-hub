@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  createCategoryInline,
+  assignCategoryInline,
+  deleteTransactionInline,
+} from "@/lib/actions/finance";
 
 type Row = {
   id: string;
@@ -12,9 +17,11 @@ type Row = {
   source: string;
   account_id: string | null;
 };
-type Cat = { id: string; name: string; icon: string | null };
+type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Acc = { id: string; name: string };
 type SortKey = "date" | "desc" | "account" | "category" | "amount";
+
+const EMOJIS = ["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕","🎰","🏦","💳","🧾"];
 
 export function TransactionsGrid({
   rows,
@@ -23,8 +30,6 @@ export function TransactionsGrid({
   canEdit,
   currency,
   monthKey,
-  setCategoryAction,
-  deleteAction,
 }: {
   rows: Row[];
   categories: Cat[];
@@ -32,9 +37,12 @@ export function TransactionsGrid({
   canEdit: boolean;
   currency: string;
   monthKey: string;
-  setCategoryAction: (formData: FormData) => void;
-  deleteAction: (formData: FormData) => void;
 }) {
+  const [data, setData] = useState(rows);
+  const [cats, setCats] = useState(categories);
+  useEffect(() => setData(rows), [rows]);
+  useEffect(() => setCats(categories), [categories]);
+
   const [q, setQ] = useState("");
   const [acc, setAcc] = useState("");
   const [cat, setCat] = useState("");
@@ -42,15 +50,42 @@ export function TransactionsGrid({
   const [to, setTo] = useState("");
   const [sort, setSort] = useState<SortKey>("date");
   const [dir, setDir] = useState<1 | -1>(-1);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ txnId: string; name: string } | null>(null);
+  const [, startTransition] = useTransition();
 
-  const catName = useMemo(() => new Map(categories.map((c) => [c.id, `${c.icon ?? ""} ${c.name}`.trim()])), [categories]);
+  const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
   const accName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
-  const fmt = (n: number) =>
-    new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
+  const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
+
+  const applyCategory = (txnId: string, category: Cat | null) => {
+    const prev = data;
+    setData((d) => d.map((r) => (r.id === txnId ? { ...r, category_id: category?.id ?? null } : r)));
+    startTransition(async () => {
+      const res = await assignCategoryInline(txnId, category?.id ?? null);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not save category");
+      }
+    });
+  };
+
+  const removeRow = (txnId: string) => {
+    if (!window.confirm("Delete this transaction?")) return;
+    const prev = data;
+    setData((d) => d.filter((r) => r.id !== txnId));
+    startTransition(async () => {
+      const res = await deleteTransactionInline(txnId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not delete");
+      }
+    });
+  };
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const list = rows.filter((r) => {
+    const list = data.filter((r) => {
       if (needle && !`${r.description} ${r.merchant ?? ""}`.toLowerCase().includes(needle)) return false;
       if (acc && r.account_id !== acc) return false;
       if (cat === "none" && r.category_id) return false;
@@ -64,7 +99,7 @@ export function TransactionsGrid({
         case "date": return r.posted_at;
         case "desc": return (r.merchant ?? r.description).toLowerCase();
         case "account": return r.account_id ? (accName.get(r.account_id) ?? "") : "";
-        case "category": return r.category_id ? (catName.get(r.category_id) ?? "") : "";
+        case "category": return r.category_id ? (catById.get(r.category_id)?.name ?? "") : "";
         case "amount": return r.amount;
       }
     };
@@ -72,7 +107,7 @@ export function TransactionsGrid({
       const ka = key(a), kb = key(b);
       return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
     });
-  }, [rows, q, acc, cat, from, to, sort, dir, accName, catName]);
+  }, [data, q, acc, cat, from, to, sort, dir, accName, catById]);
 
   const totals = useMemo(() => {
     let inn = 0, out = 0;
@@ -97,7 +132,7 @@ export function TransactionsGrid({
         `"${r.description.replaceAll('"', '""')}"`,
         `"${(r.merchant ?? "").replaceAll('"', '""')}"`,
         `"${r.account_id ? (accName.get(r.account_id) ?? "") : ""}"`,
-        `"${r.category_id ? (catName.get(r.category_id) ?? "") : ""}"`,
+        `"${r.category_id ? (catById.get(r.category_id)?.name ?? "") : ""}"`,
         r.amount,
       ].join(",")
     );
@@ -121,6 +156,12 @@ export function TransactionsGrid({
 
   return (
     <div className="space-y-3">
+      {msg && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {msg}{" "}
+          <button className="underline" onClick={() => setMsg(null)}>dismiss</button>
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-stone-200 bg-white p-3">
         <input
           value={q}
@@ -137,7 +178,7 @@ export function TransactionsGrid({
         <select value={cat} onChange={(e) => setCat(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
           <option value="">All categories</option>
           <option value="none">Uncategorised</option>
-          {categories.map((c) => (
+          {cats.map((c) => (
             <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
           ))}
         </select>
@@ -185,15 +226,15 @@ export function TransactionsGrid({
                   <td className="px-3 py-2">
                     {canEdit ? (
                       <CategoryPicker
-                        txnId={t.id}
-                        monthKey={monthKey}
-                        current={t.category_id ? (categories.find((c) => c.id === t.category_id)?.name ?? "") : ""}
-                        categorised={Boolean(t.category_id)}
-                        categories={categories}
-                        action={setCategoryAction}
+                        current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
+                        categories={cats}
+                        onPick={(c) => applyCategory(t.id, c)}
+                        onCreate={(name) => setModal({ txnId: t.id, name })}
                       />
                     ) : (
-                      <span className="text-stone-500">{t.category_id ? catName.get(t.category_id) : "—"}</span>
+                      <span className="text-stone-500">
+                        {t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? "—"}` : "—"}
+                      </span>
                     )}
                   </td>
                   <td className={`whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums ${t.amount < 0 ? "text-stone-800" : "text-emerald-600"}`}>
@@ -201,11 +242,14 @@ export function TransactionsGrid({
                   </td>
                   {canEdit && (
                     <td className="px-2 py-2 text-right">
-                      <form action={deleteAction}>
-                        <input type="hidden" name="txn_id" value={t.id} />
-                        <input type="hidden" name="m" value={monthKey} />
-                        <button className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600" title="Delete">✕</button>
-                      </form>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(t.id)}
+                        className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600"
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -227,46 +271,43 @@ export function TransactionsGrid({
           </table>
         )}
       </div>
+
+      {modal && (
+        <NewCategoryModal
+          initialName={modal.name}
+          onClose={() => setModal(null)}
+          onCreated={(category) => {
+            setCats((c) => [...c, category].sort((a, b) => a.name.localeCompare(b.name)));
+            applyCategory(modal.txnId, category);
+            setModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function CategoryPicker({
-  txnId,
-  monthKey,
   current,
-  categorised,
   categories,
-  action,
+  onPick,
+  onCreate,
 }: {
-  txnId: string;
-  monthKey: string;
-  current: string;
-  categorised: boolean;
+  current: Cat | null;
   categories: Cat[];
-  action: (formData: FormData) => void;
+  onPick: (c: Cat | null) => void;
+  onCreate: (typedName: string) => void;
 }) {
-  const [q, setQ] = useState(current);
+  const [q, setQ] = useState(current?.name ?? "");
   const [open, setOpen] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => setQ(current?.name ?? ""), [current]);
 
   const needle = q.trim().toLowerCase();
-  const filtered = needle
-    ? categories.filter((c) => c.name.toLowerCase().includes(needle))
-    : categories;
-  const exact = categories.some((c) => c.name.trim().toLowerCase() === needle);
-
-  const choose = (value: string) => {
-    setQ(value);
-    setOpen(false);
-    requestAnimationFrame(() => formRef.current?.requestSubmit());
-  };
+  const filtered = needle ? categories.filter((c) => c.name.toLowerCase().includes(needle)) : categories;
+  const exact = categories.find((c) => c.name.trim().toLowerCase() === needle) ?? null;
 
   return (
-    <form action={action} ref={formRef} className="relative">
-      <input type="hidden" name="txn_id" value={txnId} />
-      <input type="hidden" name="m" value={monthKey} />
-      <input type="hidden" name="category_name" value={q} />
+    <div className="relative">
       <input
         value={q}
         onChange={(e) => {
@@ -275,10 +316,18 @@ function CategoryPicker({
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (exact) onPick(exact);
+            else if (needle) onCreate(q.trim());
+            setOpen(false);
+          }
+        }}
         placeholder="category…"
         autoComplete="off"
         className={`w-40 rounded-lg border px-2 py-1 text-xs outline-none focus:border-stone-500 ${
-          categorised ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"
+          current ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"
         }`}
       />
       {open && (
@@ -288,7 +337,9 @@ function CategoryPicker({
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                choose("");
+                onPick(null);
+                setQ("");
+                setOpen(false);
               }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-stone-400 hover:bg-stone-50"
             >
@@ -300,7 +351,9 @@ function CategoryPicker({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  choose(c.name);
+                  onPick(c);
+                  setQ(c.name);
+                  setOpen(false);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-stone-50"
               >
@@ -308,24 +361,133 @@ function CategoryPicker({
                 <span className="truncate">{c.name}</span>
               </button>
             ))}
-            {filtered.length === 0 && !needle && (
-              <p className="px-3 py-2 text-xs text-stone-400">No categories yet.</p>
-            )}
           </div>
-          {needle && !exact && (
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                choose(q.trim());
-              }}
-              className="flex w-full items-center gap-2 border-t border-stone-100 bg-teal-50 px-3 py-2 text-left text-xs font-medium text-teal-700 hover:bg-teal-100"
-            >
-              ＋ Create &ldquo;{q.trim()}&rdquo;
-            </button>
-          )}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onCreate(needle && !exact ? q.trim() : "");
+              setOpen(false);
+            }}
+            className="flex w-full items-center gap-2 border-t border-stone-100 bg-teal-50 px-3 py-2 text-left text-xs font-medium text-teal-700 hover:bg-teal-100"
+          >
+            ＋ New category{needle && !exact ? ` “${q.trim()}”` : "…"}
+          </button>
         </div>
       )}
-    </form>
+    </div>
+  );
+}
+
+function NewCategoryModal({
+  initialName,
+  onClose,
+  onCreated,
+}: {
+  initialName: string;
+  onClose: () => void;
+  onCreated: (c: Cat) => void;
+}) {
+  const [name, setName] = useState(initialName);
+  const [icon, setIcon] = useState("");
+  const [custom, setCustom] = useState("");
+  const [kind, setKind] = useState("expense");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await createCategoryInline(name, custom.trim() || icon, kind);
+    setBusy(false);
+    if (!res.ok || !res.category) {
+      setError(res.error ?? "Could not create category");
+      return;
+    }
+    onCreated(res.category as Cat);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold">＋ New category</h2>
+        {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium">Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              placeholder="e.g. Lotto"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Pick an emoji</label>
+            <div className="flex flex-wrap gap-1">
+              {EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => {
+                    setIcon(e);
+                    setCustom("");
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-lg ${
+                    icon === e && !custom ? "border-stone-900 ring-1 ring-stone-900" : "border-stone-200 hover:bg-stone-50"
+                  }`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <input
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="…or type any emoji"
+              className="mt-2 w-40 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Kind</label>
+            <div className="flex gap-2">
+              {(["expense", "income"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm capitalize ${
+                    kind === k ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || !name.trim()}
+            onClick={save}
+            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
+          >
+            {busy ? "Creating…" : "Create & apply"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -140,8 +140,6 @@ export default async function TransactionsPage({
         canEdit={canEdit}
         currency={currency}
         monthKey={month.key}
-        setCategoryAction={setTransactionCategory}
-        deleteAction={deleteTransaction}
       />
     </div>
   );
