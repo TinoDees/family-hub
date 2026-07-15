@@ -7,6 +7,7 @@ import { AddExpenseForm } from "@/components/add-expense-form";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { ChatClient } from "@/components/chat-client";
 import { PushToggle } from "@/components/push-toggle";
+import { RefreshButton } from "@/components/refresh-button";
 import { colorFor } from "@/lib/planner";
 import { createGuestTripAlbum } from "@/lib/actions/guest-trip";
 
@@ -134,7 +135,8 @@ export default async function GuestTripPage({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-stone-500">{me.name}</span>
-          <form action={signOut}>
+          <RefreshButton />
+            <form action={signOut}>
             <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
               Sign out
             </button>

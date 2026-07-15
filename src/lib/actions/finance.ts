@@ -207,20 +207,79 @@ export async function updateAccount(formData: FormData) {
   redirect(error ? `/finance/accounts?error=${enc(error.message)}` : "/finance/accounts?saved=1");
 }
 
+/** Owner deletes directly (transactions cascade). Non-owners must request. */
 export async function deleteAccount(formData: FormData) {
   const { membership } = await requireFinance("edit");
+  if (membership.role !== "owner")
+    redirect(`/finance/accounts?error=${enc("Only the household owner can delete accounts — use Request deletion instead")}`);
   const supabase = await createClient();
   const accountId = String(formData.get("account_id"));
-  const { count } = await supabase
-    .from("finance_transactions")
-    .select("id", { count: "exact", head: true })
-    .eq("account_id", accountId);
-  if ((count ?? 0) > 0)
-    redirect(`/finance/accounts?error=${enc(`This account has ${count} transactions — deleting it would delete them too. Move or delete those first.`)}`);
   await supabase
     .from("finance_accounts")
     .delete()
     .eq("id", accountId)
     .eq("household_id", membership.household_id);
-  redirect("/finance/accounts?saved=1");
+  redirect(`/finance/accounts?saved=${enc("Account and its transactions deleted")}`);
+}
+
+/** Tracey-PO-style: a member asks, the owner approves. */
+export async function requestAccountDeletion(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const accountId = String(formData.get("account_id"));
+  const { data: acc } = await supabase
+    .from("finance_accounts")
+    .update({ deletion_requested_by: user!.id, deletion_requested_at: new Date().toISOString() })
+    .eq("id", accountId)
+    .eq("household_id", membership.household_id)
+    .select("name")
+    .maybeSingle();
+
+  // nudge the owner's devices
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { sendWebPush, pushConfigured } = await import("@/lib/web-push");
+    if (pushConfigured() && acc) {
+      const admin = createAdminClient();
+      const { data: owners } = await admin
+        .from("household_members")
+        .select("user_id")
+        .eq("household_id", membership.household_id)
+        .eq("role", "owner");
+      const ownerIds = (owners ?? []).map((o) => o.user_id).filter((id) => id !== user!.id);
+      if (ownerIds.length > 0) {
+        const { data: subs } = await admin
+          .from("push_subscriptions")
+          .select("endpoint, p256dh, auth")
+          .in("user_id", ownerIds);
+        await Promise.allSettled(
+          (subs ?? []).map((sub) =>
+            sendWebPush(sub, {
+              title: "Deletion request",
+              body: `${membership.display_name ?? "A member"} asked to delete the account "${acc.name}"`,
+              url: "/finance/accounts",
+              tag: "nestly-account-deletion",
+            })
+          )
+        );
+      }
+    }
+  } catch {
+    /* best effort */
+  }
+  redirect(`/finance/accounts?saved=${enc("Deletion requested — the owner has been notified")}`);
+}
+
+export async function cancelAccountDeletion(formData: FormData) {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  await supabase
+    .from("finance_accounts")
+    .update({ deletion_requested_by: null, deletion_requested_at: null })
+    .eq("id", String(formData.get("account_id")))
+    .eq("household_id", membership.household_id);
+  redirect(`/finance/accounts?saved=${enc("Request dismissed")}`);
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, formatMoney } from "@/lib/finance";
-import { updateAccount, deleteAccount } from "@/lib/actions/finance";
+import { updateAccount, deleteAccount, requestAccountDeletion, cancelAccountDeletion } from "@/lib/actions/finance";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { inputCls } from "@/components/auth-card";
 
@@ -19,6 +19,7 @@ export default async function AccountsPage({
   searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const { membership, access } = await requireFinance("view");
+  const isOwner = membership.role === "owner";
   const { error, saved } = await searchParams;
   const currency = membership.household.base_currency;
   const canEdit = access === "edit";
@@ -27,7 +28,7 @@ export default async function AccountsPage({
   const [{ data: accounts }, { data: sums }] = await Promise.all([
     supabase
       .from("finance_accounts")
-      .select("id, name, type, institution, opening_balance")
+      .select("id, name, type, institution, opening_balance, deletion_requested_by, deletion_requested_at")
       .eq("household_id", membership.household_id)
       .order("type")
       .order("name"),
@@ -126,14 +127,35 @@ export default async function AccountsPage({
                     </div>
                     <button className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium hover:bg-stone-100">Save</button>
                   </form>
+                  {a.deletion_requested_by && (
+                    <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      🗑️ Deletion requested {a.deletion_requested_at && `on ${new Date(a.deletion_requested_at).toLocaleDateString("en-AU")}`}
+                      {isOwner ? " — approve below or dismiss." : " — waiting for the owner to approve."}
+                      <form action={cancelAccountDeletion} className="mt-1 inline">
+                        <input type="hidden" name="account_id" value={a.id} />
+                        <button className="text-xs underline">Dismiss request</button>
+                      </form>
+                    </div>
+                  )}
+                  {isOwner ? (
                   <form action={deleteAccount} className="mt-2">
                     <input type="hidden" name="account_id" value={a.id} />
                     <ConfirmSubmit
-                      label="Delete account"
-                      confirmMessage={`Delete "${a.name}"? Only possible when it has no transactions.`}
+                      label={a.deletion_requested_by ? "Approve — delete account" : "Delete account"}
+                      confirmMessage={`Delete "${a.name}" and ALL ${a.txns} of its transactions? This cannot be undone.`}
                       className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
                     />
                   </form>
+                  ) : !a.deletion_requested_by ? (
+                    <form action={requestAccountDeletion} className="mt-2">
+                      <input type="hidden" name="account_id" value={a.id} />
+                      <ConfirmSubmit
+                        label="Request deletion"
+                        confirmMessage={`Ask the owner to delete "${a.name}"? They'll get a notification and decide.`}
+                        className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                      />
+                    </form>
+                  ) : null}
                 </details>
               )}
             </div>

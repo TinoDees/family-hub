@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { FormGuard } from "@/components/form-guard";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -42,6 +43,7 @@ export default function RootLayout({
             window.dispatchEvent(new Event('nestly-install-done'));
           });
         `}</Script>
+        <FormGuard />
         {children}
       </body>
     </html>
