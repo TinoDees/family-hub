@@ -6,15 +6,21 @@ import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
 import { MODULES, type Access, type MemberRole } from "@/lib/modules";
 
-async function requireOwner() {
+async function requireManager() {
   const membership = await getMembership();
-  if (!membership || membership.role !== "owner")
-    redirect("/dashboard");
+  if (!membership) redirect("/dashboard");
+  if (membership.role !== "owner") {
+    const supabase = await createClient();
+    const { data: canManage } = await supabase.rpc("can_manage_people", {
+      hid: membership.household_id,
+    });
+    if (!canManage) redirect("/dashboard");
+  }
   return membership;
 }
 
 export async function setMemberRole(formData: FormData) {
-  const membership = await requireOwner();
+  const membership = await requireManager();
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_member_role", {
     p_household: membership.household_id,
@@ -30,7 +36,7 @@ export async function setMemberRole(formData: FormData) {
 }
 
 export async function removeMember(formData: FormData) {
-  const membership = await requireOwner();
+  const membership = await requireManager();
   const supabase = await createClient();
   const { error } = await supabase.rpc("remove_member", {
     p_household: membership.household_id,
@@ -55,8 +61,16 @@ export async function savePermissions(
   entries: Record<string, Access>
 ): Promise<{ ok: boolean; error?: string }> {
   const membership = await getMembership();
-  if (!membership || membership.role !== "owner")
-    return { ok: false, error: "Only the owner can change permissions" };
+  if (!membership) return { ok: false, error: "Not signed in" };
+  if (membership.role !== "owner") {
+    const sb = await createClient();
+    const { data: canManage } = await sb.rpc("can_manage_people", {
+      hid: membership.household_id,
+    });
+    if (!canManage) return { ok: false, error: "You do not have permission to manage people" };
+    if (targetRole === "owner")
+      return { ok: false, error: "Only the owner can change their own permissions" };
+  }
 
   const supabase = await createClient();
   const toUpsert: {
@@ -109,7 +123,7 @@ export async function savePermissions(
 }
 
 export async function resetPermissions(formData: FormData) {
-  const membership = await requireOwner();
+  const membership = await requireManager();
   const supabase = await createClient();
   await supabase
     .from("module_permissions")
@@ -124,7 +138,7 @@ const KID_DOMAIN = "kids.nestly.internal";
 
 /** Create a child account with username + password — no email needed. */
 export async function createChildAccount(formData: FormData) {
-  const membership = await requireOwner();
+  const membership = await requireManager();
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
     redirect("/settings/members?error=Needs+SUPABASE_SERVICE_ROLE_KEY");
 

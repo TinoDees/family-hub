@@ -64,6 +64,7 @@ export default async function PeoplePage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const viewerIsOwner = membership.role === "owner";
 
   const memberIds = new Set((members ?? []).map((m) => m.user_id));
   // one row per guest account (a guest can be on several trips)
@@ -137,23 +138,29 @@ export default async function PeoplePage({
                     </td>
                     <td className="px-4 py-2.5 text-stone-500">{email ?? "—"}</td>
                     <td className="px-4 py-2.5">
-                      <form action={setMemberRole} className="inline-flex items-center gap-2">
-                        <input type="hidden" name="user_id" value={m.user_id} />
-                        <select
-                          name="role"
-                          defaultValue={m.role}
-                          className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm capitalize"
-                        >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="rounded-lg border border-stone-300 px-2 py-1 text-xs hover:bg-stone-100">
-                          Set
-                        </button>
-                      </form>
+                      {m.role === "owner" && m.user_id !== user?.id ? (
+                        <span className="rounded-full bg-stone-900 px-2.5 py-1 text-xs font-medium capitalize text-white">
+                          owner
+                        </span>
+                      ) : (
+                        <form action={setMemberRole} className="inline-flex items-center gap-2">
+                          <input type="hidden" name="user_id" value={m.user_id} />
+                          <select
+                            name="role"
+                            defaultValue={m.role}
+                            className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm capitalize"
+                          >
+                            {ROLES.filter((r) => r !== "owner" || viewerIsOwner).map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="rounded-lg border border-stone-300 px-2 py-1 text-xs hover:bg-stone-100">
+                            Set
+                          </button>
+                        </form>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
                       <StatusPill blocked={acc?.blocked} />

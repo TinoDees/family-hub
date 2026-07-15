@@ -34,8 +34,11 @@ function NavLinks({
         {modules.map((m) => (
           <Link
             key={m.slug}
-            href={`/${m.slug}`}
-            className={linkCls(pathname === `/${m.slug}` || pathname.startsWith(`/${m.slug}/`))}
+            href={m.href ?? `/${m.slug}`}
+            className={linkCls(
+              pathname === (m.href ?? `/${m.slug}`) ||
+                pathname.startsWith(`${m.href ?? `/${m.slug}`}/`)
+            )}
           >
             <span>{m.icon}</span> {m.name}
           </Link>

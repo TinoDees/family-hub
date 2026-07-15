@@ -4,17 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { href: "/settings", label: "Household" },
-  { href: "/settings/members", label: "People" },
-  { href: "/settings/invites", label: "Invites" },
-  { href: "/settings/activity", label: "Activity" },
+  { href: "/settings", label: "Household", ownerOnly: true },
+  { href: "/settings/members", label: "People", ownerOnly: false },
+  { href: "/settings/invites", label: "Invites", ownerOnly: false },
+  { href: "/settings/activity", label: "Activity", ownerOnly: true },
 ];
 
-export function SettingsTabs() {
+export function SettingsTabs({ isOwner = true }: { isOwner?: boolean }) {
   const pathname = usePathname();
   return (
     <div className="mt-6 flex gap-1 border-b border-stone-200">
-      {TABS.map((t) => {
+      {TABS.filter((t) => isOwner || !t.ownerOnly).map((t) => {
         const active =
           t.href === "/settings"
             ? pathname === "/settings"

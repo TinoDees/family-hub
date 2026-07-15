@@ -15,10 +15,23 @@ async function baseUrl() {
   return `${proto}://${host}`;
 }
 
-export async function createInvite(formData: FormData) {
+async function requireInviteManager(errBack: string) {
   const membership = await getMembership();
-  if (!membership || membership.role !== "owner")
-    redirect("/settings/invites?error=Only+the+owner+can+invite+members");
+  if (!membership) redirect(errBack);
+  if (membership.role !== "owner") {
+    const supabase = await createClient();
+    const { data: canManage } = await supabase.rpc("can_manage_people", {
+      hid: membership.household_id,
+    });
+    if (!canManage) redirect(errBack);
+  }
+  return membership;
+}
+
+export async function createInvite(formData: FormData) {
+  const membership = await requireInviteManager(
+    "/settings/invites?error=You+do+not+have+permission+to+invite+members"
+  );
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "adult") as MemberRole;
@@ -61,8 +74,7 @@ export async function createInvite(formData: FormData) {
 }
 
 export async function resendInvite(formData: FormData) {
-  const membership = await getMembership();
-  if (!membership || membership.role !== "owner") redirect("/dashboard");
+  const membership = await requireInviteManager("/dashboard");
 
   const supabase = await createClient();
   const { data: old } = await supabase
@@ -103,8 +115,7 @@ export async function resendInvite(formData: FormData) {
 }
 
 export async function deleteInvite(formData: FormData) {
-  const membership = await getMembership();
-  if (!membership || membership.role !== "owner") redirect("/dashboard");
+  const membership = await requireInviteManager("/dashboard");
 
   const supabase = await createClient();
   await supabase

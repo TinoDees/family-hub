@@ -9,6 +9,7 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [show, setShow] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +42,7 @@ export default function SetPasswordPage() {
         )}
         <form onSubmit={submit} className="mt-4 space-y-3">
           <input
-            type="password"
+            type={show ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -51,7 +52,7 @@ export default function SetPasswordPage() {
             className={inputCls}
           />
           <input
-            type="password"
+            type={show ? "text" : "password"}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             required
@@ -59,6 +60,15 @@ export default function SetPasswordPage() {
             placeholder="Confirm password"
             className={inputCls}
           />
+          <label className="flex items-center gap-2 text-sm text-stone-600">
+            <input
+              type="checkbox"
+              checked={show}
+              onChange={(e) => setShow(e.target.checked)}
+              className="rounded border-stone-300"
+            />
+            Show passwords
+          </label>
           <button disabled={busy} className={buttonCls}>
             {busy ? "Saving…" : "Set password & continue"}
           </button>

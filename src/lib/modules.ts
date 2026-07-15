@@ -20,9 +20,21 @@ export type ModuleDef = {
   status: "placeholder" | "live";
   /** Default access per role; overridable per member in Settings. */
   defaults: Record<MemberRole, Access>;
+  /** Where the module lives if not /{slug} (e.g. inside Settings). */
+  href?: string;
 };
 
 export const MODULES: ModuleDef[] = [
+  {
+    slug: "people",
+    name: "Manage People",
+    icon: "🧑‍🤝‍🧑",
+    description: "Members, guests, invites, roles and permissions.",
+    planned: [],
+    status: "live",
+    defaults: { owner: "edit", adult: "none", child: "none" },
+    href: "/settings/members",
+  },
   {
     slug: "planner",
     name: "Family Planner",

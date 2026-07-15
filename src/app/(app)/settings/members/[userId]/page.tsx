@@ -55,6 +55,8 @@ export default async function MemberPermissionsPage({
     data: { user },
   } = await supabase.auth.getUser();
   const isSelf = user?.id === target.user_id;
+  const viewerIsOwner = membership.role === "owner";
+  const lockedOwnerTarget = target.role === "owner" && !isSelf;
 
   const account = await getAccountInfo(target.user_id);
   const perms = isGuest
@@ -134,6 +136,10 @@ export default async function MemberPermissionsPage({
             SUPABASE_SERVICE_ROLE_KEY environment variable. Add it in Vercel and
             .env.local, then redeploy.
           </p>
+        ) : lockedOwnerTarget ? (
+          <p className="mt-2 rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-500">
+            👑 This is the household owner — only they can manage their own account.
+          </p>
         ) : (
           <div className="mt-4 space-y-5">
             {account.email && !account.email.endsWith("@kids.nestly.internal") && (
@@ -190,6 +196,7 @@ export default async function MemberPermissionsPage({
                     {account.blocked ? "Unblock — allow sign-in" : "Block — prevent sign-in"}
                   </button>
                 </form>
+                {viewerIsOwner && (
                 <form action={adminDeleteUser}>
                   <input type="hidden" name="user_id" value={target.user_id} />
                   <ConfirmSubmit
@@ -198,6 +205,7 @@ export default async function MemberPermissionsPage({
                     className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
                   />
                 </form>
+                )}
               </div>
             )}
           </div>

@@ -14,10 +14,18 @@ function hasServiceKey() {
   return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-async function requireOwnerAndTarget(userId: string, back: string) {
+async function requireOwnerAndTarget(userId: string, back: string, ownerOnly = false) {
   const membership = await getMembership();
-  if (!membership || membership.role !== "owner") redirect("/dashboard");
+  if (!membership) redirect("/dashboard");
   const supabase = await createClient();
+  if (membership.role !== "owner") {
+    if (ownerOnly)
+      redirect(`${back}?error=${encodeURIComponent("Only the household owner can do this")}`);
+    const { data: canManage } = await supabase.rpc("can_manage_people", {
+      hid: membership.household_id,
+    });
+    if (!canManage) redirect("/dashboard");
+  }
   let { data: target } = await supabase
     .from("household_members")
     .select("user_id, role")
@@ -39,6 +47,9 @@ async function requireOwnerAndTarget(userId: string, back: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // iron rule: nobody manages an owner's account but that owner themself
+  if (target!.role === "owner" && user!.id !== userId)
+    redirect(`${back}?error=${encodeURIComponent("Only the owner can manage their own account")}`);
   return { membership, target: target!, selfId: user!.id };
 }
 
@@ -86,7 +97,7 @@ export async function adminDeleteUser(formData: FormData) {
   const userId = String(formData.get("user_id"));
   const back = `/settings/members/${userId}`;
   if (!hasServiceKey()) redirect(`${back}?error=${encodeURIComponent(NO_KEY_MSG)}`);
-  const { membership, selfId } = await requireOwnerAndTarget(userId, back);
+  const { membership, selfId } = await requireOwnerAndTarget(userId, back, true); // deleting is the owner's alone
   if (userId === selfId)
     redirect(`${back}?error=${encodeURIComponent("You cannot delete your own account here")}`);
 

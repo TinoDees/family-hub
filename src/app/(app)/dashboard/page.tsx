@@ -63,7 +63,7 @@ export default async function DashboardPage() {
         {visible.map(({ module: m, access }) => (
           <Link
             key={m.slug}
-            href={`/${m.slug}`}
+            href={m.href ?? `/${m.slug}`}
             className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
           >
             <div className="flex items-start justify-between">
