@@ -83,7 +83,7 @@ export function ChatClient({
   let lastDay = "";
 
   return (
-    <div className="flex h-[70vh] flex-col rounded-xl border border-stone-200 bg-white">
+    <div className="flex h-[70vh] flex-col rounded-xl border border-stone-200 bg-white supports-[height:1dvh]:h-[70dvh]">
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-stone-400">No messages yet — say hi! 👋</p>

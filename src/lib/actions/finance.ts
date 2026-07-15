@@ -21,7 +21,16 @@ export async function addAccount(formData: FormData) {
     currency: membership.household.base_currency,
     opening_balance: parseFloat(String(formData.get("opening_balance") ?? "0")) || 0,
   });
-  redirect(error ? `/finance/setup?error=${enc(error.message)}` : "/finance/setup?saved=1");
+  redirect(
+    error
+      ? `/finance/setup?error=${enc(friendly(error.message))}&sec=accounts#accounts`
+      : "/finance/setup?saved=1&sec=accounts#accounts"
+  );
+}
+
+function friendly(msg: string): string {
+  if (/duplicate key/i.test(msg)) return "That name already exists — pick a different one.";
+  return msg;
 }
 
 export async function addCategory(formData: FormData) {
@@ -30,10 +39,17 @@ export async function addCategory(formData: FormData) {
   const { error } = await supabase.from("finance_categories").insert({
     household_id: membership.household_id,
     name: String(formData.get("name") ?? "").trim(),
-    icon: String(formData.get("icon") ?? "").trim() || null,
+    icon:
+      String(formData.get("icon_custom") ?? "").trim() ||
+      String(formData.get("icon") ?? "").trim() ||
+      null,
     kind: String(formData.get("kind") ?? "expense"),
   });
-  redirect(error ? `/finance/setup?error=${enc(error.message)}` : "/finance/setup?saved=1");
+  redirect(
+    error
+      ? `/finance/setup?error=${enc(friendly(error.message))}&sec=categories#categories`
+      : "/finance/setup?saved=1&sec=categories#categories"
+  );
 }
 
 export async function seedCategories() {

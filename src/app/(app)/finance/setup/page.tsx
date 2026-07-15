@@ -7,10 +7,17 @@ import { inputCls } from "@/components/auth-card";
 export default async function FinanceSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; sec?: string }>;
 }) {
   const { membership } = await requireFinance("edit");
-  const { error, saved } = await searchParams;
+  const { error, saved, sec } = await searchParams;
+  const banner = (section: string) =>
+    sec === section ? (
+      <>
+        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {saved && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">✅ Saved.</p>}
+      </>
+    ) : null;
   const currency = membership.household.base_currency;
 
   const supabase = await createClient();
@@ -29,11 +36,12 @@ export default async function FinanceSetupPage({
         <h1 className="text-2xl font-semibold">Finance setup</h1>
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {saved && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved.</p>}
+      {!sec && error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {!sec && saved && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Saved.</p>}
 
-      <div className="rounded-xl border border-stone-200 bg-white p-6">
+      <div id="accounts" className="scroll-mt-6 rounded-xl border border-stone-200 bg-white p-6">
         <h2 className="text-sm font-semibold">Accounts</h2>
+        {banner("accounts")}
         <p className="mt-1 text-xs text-stone-400">One per bank account / card you&apos;ll import transactions for.</p>
         {(accounts ?? []).length > 0 && (
           <ul className="mt-3 space-y-1">
@@ -73,7 +81,7 @@ export default async function FinanceSetupPage({
         </form>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-6">
+      <div id="categories" className="scroll-mt-6 rounded-xl border border-stone-200 bg-white p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Categories</h2>
           {(categories ?? []).length === 0 && (
@@ -93,11 +101,27 @@ export default async function FinanceSetupPage({
             ))}
           </div>
         )}
-        <form action={addCategory} className="mt-4 flex flex-wrap items-end gap-3">
+        {banner("categories")}
+        <form action={addCategory} className="mt-4 space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium">Icon</label>
-            <input name="icon" placeholder="🐾" className={`${inputCls} w-16 text-center`} />
+            <label className="mb-1 block text-xs font-medium">Pick an icon</label>
+            <div className="flex flex-wrap gap-1">
+              {["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕"].map((e, i) => (
+                <label key={e} className="cursor-pointer">
+                  <input type="radio" name="icon" value={e} defaultChecked={i === 0} className="peer sr-only" />
+                  <span className="inline-block rounded-lg border border-stone-200 px-2 py-1 text-lg peer-checked:border-stone-900 peer-checked:bg-stone-900/5 peer-checked:ring-1 peer-checked:ring-stone-900">
+                    {e}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <input
+              name="icon_custom"
+              placeholder="…or type any emoji here"
+              className={`${inputCls} mt-2 w-52`}
+            />
           </div>
+          <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-44 flex-1">
             <label className="mb-1 block text-xs font-medium">Name</label>
             <input name="name" required placeholder="e.g. Pets" className={inputCls} />
@@ -109,11 +133,12 @@ export default async function FinanceSetupPage({
               <option value="income">income</option>
             </select>
           </div>
-          <button className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-100">Add</button>
+          <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">Add category</button>
+          </div>
         </form>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-6">
+      <div id="budgets" className="scroll-mt-6 rounded-xl border border-stone-200 bg-white p-6">
         <h2 className="text-sm font-semibold">Monthly budgets</h2>
         <p className="mt-1 text-xs text-stone-400">Set to 0 to remove a budget. Shown on the Finance overview.</p>
         {expenseCats.length === 0 ? (

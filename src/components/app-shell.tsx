@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ModuleDef } from "@/lib/modules";
 import { InstallButton } from "@/components/install-button";
+import { RefreshButton } from "@/components/refresh-button";
+import { BackButton } from "@/components/back-button";
 
 function NavLinks({
   modules,
@@ -131,6 +133,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 md:px-6">
+          <BackButton />
           <button
             onClick={() => setOpen(true)}
             className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm md:hidden"
@@ -142,6 +145,7 @@ export function AppShell({
             {householdName}
           </span>
           <div className="flex items-center gap-3">
+            <RefreshButton />
             <span className="hidden text-sm text-stone-500 sm:inline">
               {userLabel}
               <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs capitalize text-stone-500">
