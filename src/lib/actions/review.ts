@@ -74,6 +74,7 @@ export async function generateReview(
       .select("amount, category_id")
       .eq("household_id", hid)
       .eq("is_transfer", false)
+      .eq("scope", "household") // personal spending is the member's own business
       .gte("posted_at", month.start)
       .lte("posted_at", month.end),
     supabase
@@ -81,6 +82,7 @@ export async function generateReview(
       .select("amount, category_id")
       .eq("household_id", hid)
       .eq("is_transfer", false)
+      .eq("scope", "household")
       .gte("posted_at", prev.start)
       .lte("posted_at", prev.end),
     supabase
@@ -88,6 +90,7 @@ export async function generateReview(
       .select("amount, payee_id, category_id, posted_at")
       .eq("household_id", hid)
       .eq("is_transfer", false)
+      .eq("scope", "household")
       .not("payee_id", "is", null)
       .lt("amount", 0)
       .gte("posted_at", windowStart)

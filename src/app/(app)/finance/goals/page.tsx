@@ -82,6 +82,7 @@ export default async function GoalsPage({
       .select("amount")
       .eq("household_id", membership.household_id)
       .eq("is_transfer", false)
+      .eq("scope", "household") // goal maths runs on the family's money, not personal spending
       .gte("posted_at", windowStart)
       .lte("posted_at", windowEnd),
   ]);

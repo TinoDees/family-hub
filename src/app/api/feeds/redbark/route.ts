@@ -104,10 +104,12 @@ export async function POST(req: Request) {
   // --- map Redbark accounts → Nestly accounts (create on first sight) ---
   const { data: accounts } = await admin
     .from("finance_accounts")
-    .select("id, name, external_id")
+    .select("id, name, external_id, visibility")
     .eq("household_id", householdId);
   const byExternal = new Map((accounts ?? []).filter((a) => a.external_id).map((a) => [a.external_id!, a.id]));
   const byName = new Map((accounts ?? []).map((a) => [a.name.trim().toLowerCase(), a]));
+  // split finances: rows on a private account default to 'personal' scope
+  const visById = new Map((accounts ?? []).map((a) => [a.id, a.visibility as string]));
 
   const accountIdFor = new Map<string, string>();
   for (const t of incoming) {
@@ -146,6 +148,7 @@ export async function POST(req: Request) {
     if (created) {
       accountIdFor.set(t.account_id, created.id);
       byExternal.set(t.account_id, created.id);
+      visById.set(created.id, "shared"); // new accounts start shared
     }
   }
 
@@ -158,6 +161,18 @@ export async function POST(req: Request) {
 
   // --- payees: find-or-create per merchant; a learned payee default beats the bank's label ---
   const payees = await resolvePayees(admin, householdId, incoming.map((t) => t.merchant_name));
+
+  // scope memory: a payee's last household/personal choice wins for new rows;
+  // otherwise rows on a private account default to 'personal'
+  const payeeIds = [...new Set([...payees.values()].map((p) => p.id))];
+  const scopeByPayee = new Map<string, string | null>();
+  if (payeeIds.length > 0) {
+    const { data: payeeScopes } = await admin
+      .from("finance_payees")
+      .select("id, default_scope")
+      .in("id", payeeIds);
+    for (const p of payeeScopes ?? []) scopeByPayee.set(p.id, p.default_scope);
+  }
 
   const records = incoming
     .map((t) => {
@@ -182,6 +197,9 @@ export async function POST(req: Request) {
         txn_type: t.class?.slice(0, 100) ?? null,
         payee_id: payee?.id ?? null,
         category_id: categoryId,
+        scope:
+          (payee ? scopeByPayee.get(payee.id) : null) ??
+          (visById.get(accountId) === "private" ? "personal" : "household"),
         suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
         external_id: t.id,
         import_hash: createHash("sha256").update(`redbark|${t.id}`).digest("hex"),

@@ -16,7 +16,7 @@ const TYPE_ICON: Record<string, string> = {
 };
 
 const TXN_FIELDS =
-  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer";
+  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope";
 
 type Txn = {
   id: string;
@@ -29,6 +29,7 @@ type Txn = {
   source: string;
   account_id: string | null;
   is_transfer: boolean;
+  scope: "household" | "personal";
 };
 
 function syncedAgo(iso: string) {
@@ -122,6 +123,7 @@ export default async function AccountDetailPage({
     suggested_category_id: t.suggested_category_id,
     source: t.source,
     is_transfer: t.is_transfer,
+    scope: t.scope,
     account_id: t.account_id,
   }));
 

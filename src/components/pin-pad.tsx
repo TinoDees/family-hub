@@ -110,16 +110,17 @@ export default function PinPad({
           ⌫
         </button>
       </div>
-      {pin.length >= 4 && pin.length < 6 && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onSubmit(pin)}
-          className="mt-3 w-full rounded-lg bg-teal-600 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
-        >
-          Unlock with {pin.length}-digit PIN
-        </button>
-      )}
+      {/* always rendered so the pad never jumps when it appears */}
+      <button
+        type="button"
+        disabled={busy || pin.length < 4 || pin.length >= 6}
+        onClick={() => onSubmit(pin)}
+        style={{ visibility: pin.length >= 4 && pin.length < 6 ? "visible" : "hidden" }}
+        tabIndex={pin.length >= 4 && pin.length < 6 ? 0 : -1}
+        className="mt-3 w-full rounded-lg bg-teal-600 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+      >
+        Unlock with {Math.min(pin.length, 6) || 4}-digit PIN
+      </button>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   acceptAllSuggestions,
 } from "@/lib/actions/classify";
 import { findTransfersInline, setTransferInline } from "@/lib/actions/transfers";
+import { setScopeInline } from "@/lib/actions/scope";
 
 type Row = {
   id: string;
@@ -24,6 +25,7 @@ type Row = {
   suggested_category_id: string | null;
   source: string;
   is_transfer: boolean;
+  scope: "household" | "personal";
   account_id: string | null;
 };
 type Cat = { id: string; name: string; icon: string | null; kind: string };
@@ -49,6 +51,7 @@ const STATUS_OPTIONS = [
   { value: "unsorted", label: "To sort" },
   { value: "sorted", label: "Sorted" },
   { value: "transfer", label: "Transfers" },
+  { value: "personal", label: "👤 Personal" },
 ];
 
 // ── MultiSelectFilter — compact checkbox popover for toolbar filters ─────────
@@ -271,7 +274,7 @@ export function TransactionsGrid({
       : baseCols;
     // The actions column (transfer / delete) is pinned last and never moves.
     return canEdit
-      ? [...cols, { key: "actions", label: "", width: 64, minWidth: 56, align: "right", sortable: false, movable: false } as ColDef]
+      ? [...cols, { key: "actions", label: "", width: 92, minWidth: 84, align: "right", sortable: false, movable: false } as ColDef]
       : cols;
   }, [baseCols, colOrder, canEdit]);
 
@@ -449,6 +452,19 @@ export function TransactionsGrid({
     });
   };
 
+  /** Split finances: flip a row between household and personal. Optimistic. */
+  const toggleScope = (txnId: string, scope: "household" | "personal") => {
+    const prev = data;
+    setData((d) => d.map((r) => (r.id === txnId ? { ...r, scope } : r)));
+    startTransition(async () => {
+      const res = await setScopeInline(txnId, scope);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not update");
+      }
+    });
+  };
+
   const runFindTransfers = () => {
     setTransferBusy(true);
     startTransition(async () => {
@@ -491,8 +507,14 @@ export function TransactionsGrid({
         if (!catMatch) return false;
       }
       if (statusSel.size > 0) {
-        const status = r.is_transfer ? "transfer" : r.category_id ? "sorted" : "unsorted";
-        if (!statusSel.has(status)) return false;
+        // "Personal" is a scope, not a sorting state — it narrows (ANDs with)
+        // whatever other statuses are ticked instead of ORing alongside them.
+        if (statusSel.has("personal") && r.scope !== "personal") return false;
+        const others = [...statusSel].filter((v) => v !== "personal");
+        if (others.length > 0) {
+          const status = r.is_transfer ? "transfer" : r.category_id ? "sorted" : "unsorted";
+          if (!others.includes(status)) return false;
+        }
       }
       if (from && r.posted_at < from) return false;
       if (to && r.posted_at > to) return false;
@@ -556,7 +578,7 @@ export function TransactionsGrid({
   };
 
   const exportCsv = () => {
-    const head = "Date,Description,Merchant,Account,Category,Amount";
+    const head = "Date,Description,Merchant,Account,Category,Scope,Amount";
     const lines = filtered.map((r) =>
       [
         r.posted_at,
@@ -564,6 +586,7 @@ export function TransactionsGrid({
         `"${(r.merchant ?? "").replaceAll('"', '""')}"`,
         `"${r.account_id ? (accName.get(r.account_id) ?? "") : ""}"`,
         `"${r.category_id ? (catById.get(r.category_id)?.name ?? "") : ""}"`,
+        r.scope,
         r.amount,
       ].join(",")
     );
@@ -794,6 +817,17 @@ export function TransactionsGrid({
                 {t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? "—"}` : "—"}
               </span>
             )}
+            {!t.is_transfer && t.scope === "personal" && (
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => canEdit && toggleScope(t.id, "household")}
+                title={canEdit ? "Personal — not counted in household budgets. Click to count it for the family again." : "Personal — not counted in household budgets"}
+                className="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500 enabled:hover:bg-stone-200"
+              >
+                👤 personal
+              </button>
+            )}
           </td>
         );
       case "amount":
@@ -816,6 +850,16 @@ export function TransactionsGrid({
                 title="This is a transfer between our own accounts"
               >
                 🔁
+              </button>
+            )}
+            {!t.is_transfer && (
+              <button
+                type="button"
+                onClick={() => toggleScope(t.id, t.scope === "personal" ? "household" : "personal")}
+                className={`rounded px-1.5 py-1 text-xs ${t.scope === "personal" ? "bg-stone-100 text-stone-600" : "text-stone-300"} hover:bg-stone-100 hover:text-stone-600`}
+                title={t.scope === "personal" ? "Personal — click to count this for the family again" : "Count this as personal, not household"}
+              >
+                {t.scope === "personal" ? "🏠" : "👤"}
               </button>
             )}
             <button
@@ -981,6 +1025,17 @@ export function TransactionsGrid({
                           {cat ? `${cat.icon ?? ""} ${cat.name}` : "—"}
                         </span>
                       )}
+                      {!t.is_transfer && t.scope === "personal" && (
+                        <button
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={() => canEdit && toggleScope(t.id, "household")}
+                          title="Personal — not counted in household budgets"
+                          className="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500"
+                        >
+                          👤 personal
+                        </button>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {statusPill && (
@@ -990,6 +1045,9 @@ export function TransactionsGrid({
                       )}
                       {canEdit && !t.is_transfer && (
                         <button type="button" onClick={() => toggleTransfer(t.id, true)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-sky-50 hover:text-sky-600" title="Transfer between our accounts">🔁</button>
+                      )}
+                      {canEdit && !t.is_transfer && (
+                        <button type="button" onClick={() => toggleScope(t.id, t.scope === "personal" ? "household" : "personal")} className={`rounded-lg px-2 py-1.5 text-sm ${t.scope === "personal" ? "bg-stone-100 text-stone-600" : "text-stone-300"} hover:bg-stone-100 hover:text-stone-600`} title={t.scope === "personal" ? "Count this for the family again" : "Count this as personal, not household"}>{t.scope === "personal" ? "🏠" : "👤"}</button>
                       )}
                       {canEdit && (
                         <button type="button" onClick={() => removeRow(t.id)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-red-50 hover:text-red-600" title="Delete">✕</button>

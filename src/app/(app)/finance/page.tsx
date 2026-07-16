@@ -72,6 +72,7 @@ export default async function FinanceDashboard({
       .select("amount, category_id")
       .eq("household_id", membership.household_id)
       .eq("is_transfer", false) // internal transfers are neither income nor spending
+      .eq("scope", "household") // personal spending stays out of the family's stats
       .gte("posted_at", month.start)
       .lte("posted_at", month.end),
     supabase
@@ -98,7 +99,7 @@ export default async function FinanceDashboard({
       .maybeSingle(),
     supabase
       .from("finance_transactions")
-      .select("id, posted_at, description, merchant, amount, category_id, is_transfer")
+      .select("id, posted_at, description, merchant, amount, category_id, is_transfer, scope")
       .eq("household_id", membership.household_id)
       .order("posted_at", { ascending: false })
       .order("created_at", { ascending: false })
@@ -378,6 +379,9 @@ export default async function FinanceDashboard({
               <li key={t.id} className="flex items-center gap-3 py-2 text-sm">
                 <span className="w-14 shrink-0 text-stone-400">{fmtDay(t.posted_at)}</span>
                 <span className="min-w-0 flex-1 truncate">{t.merchant ?? t.description}</span>
+                {t.scope === "personal" && !t.is_transfer && (
+                  <span className="shrink-0 text-xs" title="Personal — not counted in household stats">👤</span>
+                )}
                 <span className="hidden shrink-0 text-xs text-stone-400 sm:inline">
                   {t.is_transfer ? "🔁 Transfer" : t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? ""}` : "—"}
                 </span>

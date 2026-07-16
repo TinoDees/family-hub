@@ -317,6 +317,26 @@ export async function importTransactions(
   const catByName = new Map((cats ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
   const payees = await resolvePayees(supabase, membership.household_id, rows.map((r) => r.merchant));
 
+  // split finances: default scope per row — the payee's learned choice wins,
+  // else rows on a private account are 'personal', otherwise 'household'
+  const { data: destAccount } = await supabase
+    .from("finance_accounts")
+    .select("visibility")
+    .eq("id", accountId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!destAccount) return { ok: false, inserted: 0, skipped: 0, error: "That account doesn't exist (or isn't yours to see)" };
+  const accountScope = destAccount.visibility === "private" ? "personal" : "household";
+  const payeeIds = [...new Set([...payees.values()].map((p) => p.id))];
+  const scopeByPayee = new Map<string, string | null>();
+  if (payeeIds.length > 0) {
+    const { data: payeeScopes } = await supabase
+      .from("finance_payees")
+      .select("id, default_scope")
+      .in("id", payeeIds);
+    for (const p of payeeScopes ?? []) scopeByPayee.set(p.id, p.default_scope);
+  }
+
   const records = rows.map((r) => {
     const matchKey = payeeMatchKey(r.merchant);
     const payee = matchKey ? payees.get(matchKey) : undefined;
@@ -336,6 +356,7 @@ export async function importTransactions(
     txn_type: r.txnType?.slice(0, 100) || null,
     payee_id: payee?.id ?? null,
     category_id: categoryId,
+    scope: (payee ? scopeByPayee.get(payee.id) : null) ?? accountScope,
     suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
     import_hash: createHash("sha256")
       .update(
@@ -378,6 +399,49 @@ export async function updateAccount(formData: FormData) {
     })
     .eq("id", String(formData.get("account_id")))
     .eq("household_id", membership.household_id);
+  redirect(error ? `/finance/accounts?error=${enc(error.message)}` : "/finance/accounts?saved=1");
+}
+
+/**
+ * Split finances: who an account belongs to and who can see it.
+ * Only the household owner or the account's current owner may change this.
+ * RLS backs it up: a private account is invisible (and untouchable) to
+ * everyone except its owner, so once handed over it's truly theirs.
+ */
+export async function setAccountOwnership(formData: FormData) {
+  const { membership, userId } = await requireFinance("edit");
+  const supabase = await createClient();
+  const accountId = String(formData.get("account_id"));
+  const ownerUserId = String(formData.get("owner_user_id") || "") || null; // "" = whole family
+  const visibility = String(formData.get("visibility")) === "private" ? "private" : "shared";
+
+  const { data: acc } = await supabase
+    .from("finance_accounts")
+    .select("owner_user_id")
+    .eq("id", accountId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!acc) redirect(`/finance/accounts?error=${enc("Account not found")}`);
+  if (membership.role !== "owner" && acc!.owner_user_id !== userId)
+    redirect(`/finance/accounts?error=${enc("Only the household owner or the account's owner can change this")}`);
+  if (visibility === "private" && !ownerUserId)
+    redirect(`/finance/accounts?error=${enc("A private account needs an owner — pick whose it is first")}`);
+  if (ownerUserId) {
+    const { data: member } = await supabase
+      .from("household_members")
+      .select("user_id")
+      .eq("household_id", membership.household_id)
+      .eq("user_id", ownerUserId)
+      .maybeSingle();
+    if (!member) redirect(`/finance/accounts?error=${enc("That person isn't a member of this household")}`);
+  }
+
+  const { error } = await supabase
+    .from("finance_accounts")
+    .update({ owner_user_id: ownerUserId, visibility })
+    .eq("id", accountId)
+    .eq("household_id", membership.household_id);
+  revalidatePath("/finance");
   redirect(error ? `/finance/accounts?error=${enc(error.message)}` : "/finance/accounts?saved=1");
 }
 

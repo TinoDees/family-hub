@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, formatMoney } from "@/lib/finance";
 import { refreshBankBalances } from "@/lib/redbark";
-import { updateAccount, deleteAccount, requestAccountDeletion, cancelAccountDeletion } from "@/lib/actions/finance";
+import { updateAccount, deleteAccount, requestAccountDeletion, cancelAccountDeletion, setAccountOwnership } from "@/lib/actions/finance";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { inputCls } from "@/components/auth-card";
 
@@ -19,7 +19,7 @@ export default async function AccountsPage({
 }: {
   searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
-  const { membership, access } = await requireFinance("view");
+  const { membership, access, userId } = await requireFinance("view");
   const isOwner = membership.role === "owner";
   const { error, saved } = await searchParams;
   const currency = membership.household.base_currency;
@@ -48,10 +48,10 @@ export default async function AccountsPage({
     }
   }
 
-  const [{ data: accounts }, { data: sums }] = await Promise.all([
+  const [{ data: accounts }, { data: sums }, { data: members }] = await Promise.all([
     supabase
       .from("finance_accounts")
-      .select("id, name, type, institution, opening_balance, deletion_requested_by, deletion_requested_at, external_id, bank_balance, bank_available, balance_synced_at")
+      .select("id, name, type, institution, opening_balance, deletion_requested_by, deletion_requested_at, external_id, bank_balance, bank_available, balance_synced_at, owner_user_id, visibility")
       .eq("household_id", membership.household_id)
       .order("type")
       .order("name"),
@@ -60,7 +60,14 @@ export default async function AccountsPage({
       .select("account_id, amount")
       .eq("household_id", membership.household_id)
       .not("account_id", "is", null),
+    supabase
+      .from("household_members")
+      .select("user_id, display_name")
+      .eq("household_id", membership.household_id)
+      .order("joined_at"),
   ]);
+
+  const memberName = new Map((members ?? []).map((m) => [m.user_id, m.display_name ?? "Member"]));
 
   const txnSum = new Map<string, number>();
   const txnCount = new Map<string, number>();
@@ -127,6 +134,16 @@ export default async function AccountsPage({
                     <span className={`rounded-full px-2 py-0.5 text-xs ${a.meta.liability ? "bg-red-50 text-red-600" : "bg-stone-100 text-stone-500"}`}>
                       {a.meta.label}
                     </span>
+                    {a.owner_user_id && (
+                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-500" title="Whose account this is">
+                        👤 {memberName.get(a.owner_user_id) ?? "Member"}
+                      </span>
+                    )}
+                    {a.visibility === "private" && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700" title="Only the owner can see this account and its transactions">
+                        🔒 Private
+                      </span>
+                    )}
                   </div>
                   {a.institution && <div className="text-xs text-stone-400">{a.institution}</div>}
                 </div>
@@ -167,6 +184,33 @@ export default async function AccountsPage({
                     </div>
                     <button className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium hover:bg-stone-100">Save</button>
                   </form>
+                  {(isOwner || a.owner_user_id === userId) && (
+                    <div className="mt-3 border-t border-stone-100 pt-2">
+                      <form action={setAccountOwnership} className="flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="account_id" value={a.id} />
+                        <div className="min-w-36 flex-1">
+                          <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Whose account</label>
+                          <select name="owner_user_id" defaultValue={a.owner_user_id ?? ""} className={inputCls}>
+                            <option value="">Whole family</option>
+                            {(members ?? []).map((m) => (
+                              <option key={m.user_id} value={m.user_id}>{m.display_name ?? "Member"}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="min-w-36 flex-1">
+                          <label className="mb-1 block text-[10px] font-medium uppercase text-stone-400">Who can see it</label>
+                          <select name="visibility" defaultValue={a.visibility} className={inputCls}>
+                            <option value="shared">Shared with the family</option>
+                            <option value="private">Only the owner</option>
+                          </select>
+                        </div>
+                        <button className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium hover:bg-stone-100">Save</button>
+                      </form>
+                      <p className="mt-1.5 text-[11px] text-stone-400">
+                        Private accounts are only visible to their owner. Spending you flag as &ldquo;for the family&rdquo; still counts in household budgets.
+                      </p>
+                    </div>
+                  )}
                   {a.deletion_requested_by && (
                     <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                       🗑️ Deletion requested {a.deletion_requested_at && `on ${new Date(a.deletion_requested_at).toLocaleDateString("en-AU")}`}
