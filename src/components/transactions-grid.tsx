@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   createCategoryInline,
   assignCategoryInline,
@@ -29,8 +29,124 @@ type Row = {
 type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Acc = { id: string; name: string };
 type SortKey = "date" | "desc" | "account" | "category" | "amount";
+type SortDir = "asc" | "desc";
+
+type ColDef = {
+  key: SortKey | "actions";
+  label: string;
+  /** Default width in px. Undefined = flex (takes the remaining space). */
+  width?: number;
+  minWidth: number;
+  align: "left" | "right";
+  sortable: boolean;
+  /** Can be dragged to a new position. The actions column stays pinned last. */
+  movable: boolean;
+};
 
 const EMOJIS = ["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕","🎰","🏦","💳","🧾"];
+
+const STATUS_OPTIONS = [
+  { value: "unsorted", label: "To sort" },
+  { value: "sorted", label: "Sorted" },
+  { value: "transfer", label: "Transfers" },
+];
+
+// ── MultiSelectFilter — compact checkbox popover for toolbar filters ─────────
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  searchable = false,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  searchable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? options.filter((o) => o.label.toLowerCase().includes(needle)) : options;
+
+  const toggle = (v: string) => {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(next);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`rounded-lg border px-2.5 py-1.5 text-sm ${
+          selected.size > 0
+            ? "border-teal-400 bg-teal-50 font-medium text-teal-800"
+            : "border-stone-300 bg-white text-stone-700"
+        } hover:bg-stone-50`}
+      >
+        {label}
+        {selected.size > 0 ? ` (${selected.size})` : ""} <span className="text-[10px]">▾</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg">
+          {searchable && (
+            <div className="border-b border-stone-100 p-2">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Type to filter…"
+                autoFocus
+                className="w-full rounded-lg border border-stone-300 px-2 py-1 text-xs outline-none focus:border-stone-500"
+              />
+            </div>
+          )}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {shown.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(o.value)}
+                  onChange={() => toggle(o.value)}
+                  className="h-3.5 w-3.5 accent-teal-600"
+                />
+                <span className="truncate">{o.label}</span>
+              </label>
+            ))}
+            {shown.length === 0 && <p className="px-3 py-2 text-xs text-stone-400">No matches</p>}
+          </div>
+          {selected.size > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="block w-full border-t border-stone-100 px-3 py-2 text-left text-xs font-medium text-teal-700 hover:bg-teal-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TransactionsGrid({
   rows,
@@ -41,6 +157,7 @@ export function TransactionsGrid({
   monthKey,
   statusPill = false,
   hideAccountColumn = false,
+  storageKey = "txns",
 }: {
   rows: Row[];
   categories: Cat[];
@@ -52,6 +169,8 @@ export function TransactionsGrid({
   statusPill?: boolean;
   /** Drop the Account column + filter when every row is the same account. */
   hideAccountColumn?: boolean;
+  /** Namespaces the persisted column layout (widths + order) in localStorage. */
+  storageKey?: string;
 }) {
   const [data, setData] = useState(rows);
   const [cats, setCats] = useState(categories);
@@ -59,12 +178,16 @@ export function TransactionsGrid({
   useEffect(() => setCats(categories), [categories]);
 
   const [q, setQ] = useState("");
-  const [acc, setAcc] = useState("");
-  const [cat, setCat] = useState("");
+  const [accSel, setAccSel] = useState<Set<string>>(new Set());
+  const [catSel, setCatSel] = useState<Set<string>>(new Set()); // category ids + "none"
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set()); // unsorted | sorted | transfer
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [sort, setSort] = useState<SortKey>("date");
-  const [dir, setDir] = useState<1 | -1>(-1);
+  // Multi-column sort: a priority-ordered list. Plain click sorts by one column
+  // (3-state asc -> desc -> off); Ctrl/Cmd+click adds the column as a sub-sort.
+  const [sortSpec, setSortSpec] = useState<{ key: SortKey; dir: SortDir }[]>([
+    { key: "date", dir: "desc" },
+  ]);
   const [msg, setMsg] = useState<string | null>(null);
   const [modal, setModal] = useState<{ txnId: string; name: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -74,6 +197,147 @@ export function TransactionsGrid({
   const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
   const accName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
+
+  // ── Column layout (widths + order), persisted per view ─────────────────────
+  const lsPrefix = `txngrid.${storageKey}`;
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const [colOrder, setColOrder] = useState<string[]>([]);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const w = window.localStorage.getItem(`${lsPrefix}.widths`);
+      if (w) {
+        const parsed = JSON.parse(w) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object") {
+          const clean: Record<string, number> = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            if (typeof v === "number" && v > 0) clean[k] = v;
+          }
+          setColWidths(clean);
+        }
+      }
+      const o = window.localStorage.getItem(`${lsPrefix}.order`);
+      if (o) {
+        const parsed = JSON.parse(o) as unknown;
+        if (Array.isArray(parsed)) {
+          setColOrder(parsed.filter((k): k is string => typeof k === "string"));
+        }
+      }
+    } catch {
+      /* corrupted layout never breaks the grid */
+    }
+    setLayoutLoaded(true);
+  }, [lsPrefix]);
+
+  useEffect(() => {
+    if (!layoutLoaded) return;
+    try { window.localStorage.setItem(`${lsPrefix}.widths`, JSON.stringify(colWidths)); } catch { /* ignore */ }
+  }, [colWidths, layoutLoaded, lsPrefix]);
+
+  useEffect(() => {
+    if (!layoutLoaded) return;
+    try { window.localStorage.setItem(`${lsPrefix}.order`, JSON.stringify(colOrder)); } catch { /* ignore */ }
+  }, [colOrder, layoutLoaded, lsPrefix]);
+
+  const baseCols = useMemo<ColDef[]>(() => {
+    const cols: ColDef[] = [
+      { key: "date", label: "Date", width: 118, minWidth: 70, align: "left", sortable: true, movable: true },
+      { key: "desc", label: "Description", minWidth: 120, align: "left", sortable: true, movable: true },
+    ];
+    if (!hideAccountColumn) {
+      cols.push({ key: "account", label: "Account", width: 140, minWidth: 70, align: "left", sortable: true, movable: true });
+    }
+    cols.push(
+      { key: "category", label: "Category", width: 210, minWidth: 90, align: "left", sortable: true, movable: true },
+      { key: "amount", label: "Amount", width: 110, minWidth: 70, align: "right", sortable: true, movable: true },
+    );
+    return cols;
+  }, [hideAccountColumn]);
+
+  const orderedCols = useMemo<ColDef[]>(() => {
+    const cols = colOrder.length
+      ? [...baseCols].sort((a, b) => {
+          const ai = colOrder.indexOf(a.key), bi = colOrder.indexOf(b.key);
+          if (ai === -1 && bi === -1) return 0;
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
+        })
+      : baseCols;
+    // The actions column (transfer / delete) is pinned last and never moves.
+    return canEdit
+      ? [...cols, { key: "actions", label: "", width: 64, minWidth: 56, align: "right", sortable: false, movable: false } as ColDef]
+      : cols;
+  }, [baseCols, colOrder, canEdit]);
+
+  function reorderCols(srcKey: string, destKey: string) {
+    if (srcKey === destKey) {
+      setDragKey(null); setDragOverKey(null);
+      return;
+    }
+    const keys = orderedCols.filter((c) => c.movable).map((c) => c.key as string);
+    const fromIdx = keys.indexOf(srcKey);
+    if (fromIdx === -1) return;
+    keys.splice(fromIdx, 1);
+    const toIdx = keys.indexOf(destKey);
+    keys.splice(toIdx === -1 ? keys.length : toIdx, 0, srcKey);
+    setColOrder(keys);
+    setDragKey(null);
+    setDragOverKey(null);
+  }
+
+  const startResize = (e: React.MouseEvent, colKey: string, minWidth: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Read the th's actual rendered width so an un-resized (flex) column
+    // doesn't snap to some fallback the moment the drag starts.
+    let thEl: HTMLElement | null = e.currentTarget as HTMLElement;
+    while (thEl && thEl.tagName !== "TH") thEl = thEl.parentElement;
+    const renderedW = thEl ? Math.round(thEl.getBoundingClientRect().width) : 150;
+    const startX = e.clientX;
+    const startW = colWidths[colKey] ?? renderedW;
+    // Lock the body cursor for the whole drag so it stays col-resize even
+    // when the pointer drifts off the narrow handle. Restored on mouseup.
+    const prevBodyCursor = document.body.style.cursor;
+    document.body.style.cursor = "col-resize";
+    const onMove = (ev: MouseEvent) => {
+      const newW = Math.max(minWidth, Math.round(startW + (ev.clientX - startX)));
+      setColWidths((prev) => ({ ...prev, [colKey]: newW }));
+    };
+    const onUp = () => {
+      document.body.style.cursor = prevBodyCursor;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const resetColWidth = (colKey: string) => {
+    setColWidths((prev) => {
+      const next = { ...prev };
+      delete next[colKey];
+      return next;
+    });
+  };
+
+  const resetLayout = () => {
+    setColWidths({});
+    setColOrder([]);
+    try {
+      window.localStorage.removeItem(`${lsPrefix}.widths`);
+      window.localStorage.removeItem(`${lsPrefix}.order`);
+    } catch { /* ignore */ }
+  };
+
+  const layoutCustomised = colOrder.length > 0 || Object.keys(colWidths).length > 0;
+
+  // ── Data mutations (unchanged) ──────────────────────────────────────────────
 
   const applyCategory = (txnId: string, category: Cat | null) => {
     const prev = data;
@@ -215,19 +479,28 @@ export function TransactionsGrid({
     });
   };
 
+  // ── Filter + sort ───────────────────────────────────────────────────────────
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const list = data.filter((r) => {
       if (needle && !`${r.description} ${r.merchant ?? ""}`.toLowerCase().includes(needle)) return false;
-      if (acc && r.account_id !== acc) return false;
-      if (cat === "none" && r.category_id) return false;
-      if (cat && cat !== "none" && r.category_id !== cat) return false;
+      if (accSel.size > 0 && (!r.account_id || !accSel.has(r.account_id))) return false;
+      if (catSel.size > 0) {
+        const catMatch = r.category_id ? catSel.has(r.category_id) : catSel.has("none");
+        if (!catMatch) return false;
+      }
+      if (statusSel.size > 0) {
+        const status = r.is_transfer ? "transfer" : r.category_id ? "sorted" : "unsorted";
+        if (!statusSel.has(status)) return false;
+      }
       if (from && r.posted_at < from) return false;
       if (to && r.posted_at > to) return false;
       return true;
     });
-    const key = (r: Row): string | number => {
-      switch (sort) {
+    if (sortSpec.length === 0) return list;
+    const val = (r: Row, k: SortKey): string | number => {
+      switch (k) {
         case "date": return r.posted_at;
         case "desc": return (r.merchant ?? r.description).toLowerCase();
         case "account": return r.account_id ? (accName.get(r.account_id) ?? "") : "";
@@ -235,11 +508,19 @@ export function TransactionsGrid({
         case "amount": return r.amount;
       }
     };
+    // Stable multi-key sort: compare in priority order, fall through on ties.
     return [...list].sort((a, b) => {
-      const ka = key(a), kb = key(b);
-      return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
+      for (const { key, dir } of sortSpec) {
+        const av = val(a, key), bv = val(b, key);
+        const cmp =
+          typeof av === "number" && typeof bv === "number"
+            ? av - bv
+            : String(av).localeCompare(String(bv), undefined, { sensitivity: "base" });
+        if (cmp !== 0) return dir === "asc" ? cmp : -cmp;
+      }
+      return 0;
     });
-  }, [data, q, acc, cat, from, to, sort, dir, accName, catById]);
+  }, [data, q, accSel, catSel, statusSel, from, to, sortSpec, accName, catById]);
 
   const totals = useMemo(() => {
     let inn = 0, out = 0, transfers = 0;
@@ -253,14 +534,26 @@ export function TransactionsGrid({
     return { inn, out, net: inn + out, n: filtered.length, transfers };
   }, [filtered]);
 
-  const clickSort = (k: SortKey) => {
-    if (sort === k) setDir((d) => (d === 1 ? -1 : 1));
-    else {
-      setSort(k);
-      setDir(k === "date" || k === "amount" ? -1 : 1);
-    }
+  // Plain click: sort by this column alone, 3-state asc -> desc -> off.
+  // Ctrl/Cmd+click: append as the next priority, then cycle asc -> desc -> remove.
+  const handleSort = (key: SortKey, additive: boolean) => {
+    setSortSpec((prev) => {
+      const idx = prev.findIndex((s) => s.key === key);
+      if (additive) {
+        if (idx === -1) return [...prev, { key, dir: "asc" as SortDir }];
+        if (prev[idx].dir === "asc") {
+          const next = [...prev];
+          next[idx] = { key, dir: "desc" };
+          return next;
+        }
+        return prev.filter((s) => s.key !== key);
+      }
+      if (prev.length === 1 && idx === 0) {
+        return prev[0].dir === "asc" ? [{ key, dir: "desc" as SortDir }] : [];
+      }
+      return [{ key, dir: "asc" as SortDir }];
+    });
   };
-  const arrow = (k: SortKey) => (sort === k ? (dir === 1 ? " ↑" : " ↓") : "");
 
   const exportCsv = () => {
     const head = "Date,Description,Merchant,Account,Category,Amount";
@@ -282,15 +575,261 @@ export function TransactionsGrid({
     URL.revokeObjectURL(a.href);
   };
 
-  const TH = ({ k, children, right = false }: { k: SortKey; children: React.ReactNode; right?: boolean }) => (
-    <th
-      onClick={() => clickSort(k)}
-      className={`cursor-pointer select-none px-3 py-2.5 font-medium hover:bg-stone-800 ${right ? "text-right" : "text-left"}`}
-    >
-      {children}
-      {arrow(k)}
-    </th>
+  const catOptions = useMemo(
+    () => [
+      { value: "none", label: "◌ Uncategorised" },
+      ...cats.map((c) => ({ value: c.id, label: `${c.icon ?? "🏷️"} ${c.name}` })),
+    ],
+    [cats]
   );
+  const accOptions = useMemo(() => accounts.map((a) => ({ value: a.id, label: a.name })), [accounts]);
+
+  // ── Header cell (sort + drag-reorder + resize, mirrors Tracey's DataTable) ──
+
+  const renderTh = (col: ColDef) => {
+    const sortIdx = col.sortable ? sortSpec.findIndex((s) => s.key === col.key) : -1;
+    const isSorted = sortIdx >= 0;
+    const sortDirHere = isSorted ? sortSpec[sortIdx].dir : null;
+    const sortPriority = isSorted && sortSpec.length > 1 ? sortIdx + 1 : null;
+    return (
+      <th
+        key={col.key}
+        onClick={(e) => col.sortable && handleSort(col.key as SortKey, e.ctrlKey || e.metaKey)}
+        title={col.sortable ? "Click to sort · Ctrl+click (Cmd on Mac) to add a sub-sort" : undefined}
+        onDragOver={
+          dragKey && col.movable
+            ? (e) => {
+                e.preventDefault();
+                if (dragOverKey !== col.key) setDragOverKey(col.key);
+              }
+            : undefined
+        }
+        onDragLeave={() => {
+          if (dragOverKey === col.key) setDragOverKey(null);
+        }}
+        onDrop={
+          dragKey && col.movable
+            ? (e) => {
+                e.preventDefault();
+                reorderCols(dragKey, col.key);
+              }
+            : undefined
+        }
+        className={`relative select-none overflow-hidden px-3 py-2.5 font-medium ${
+          col.align === "right" ? "text-right" : "text-left"
+        } ${col.sortable ? "cursor-pointer hover:bg-stone-800" : ""} ${
+          isSorted ? "text-sky-300" : ""
+        }`}
+        style={{
+          boxShadow:
+            dragOverKey === col.key && dragKey && dragKey !== col.key
+              ? "inset 3px 0 0 #2563eb"
+              : undefined,
+        }}
+      >
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap align-middle">
+          {col.movable && (
+            <span
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData("text/plain", col.key);
+                e.dataTransfer.effectAllowed = "move";
+                setDragKey(col.key);
+              }}
+              onDragEnd={() => {
+                setDragKey(null);
+                setDragOverKey(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              title="Drag to reorder this column"
+              className="cursor-grab text-stone-500"
+              style={{ fontSize: "0.8rem", lineHeight: 1 }}
+            >
+              ⠿
+            </span>
+          )}
+          {col.label}
+          {col.sortable && (
+            <span
+              className={isSorted ? "text-sky-300" : "text-stone-500"}
+              style={{ fontSize: "0.6875rem", lineHeight: 1 }}
+            >
+              {isSorted ? (sortDirHere === "asc" ? "▲" : "▼") : "⇅"}
+              {sortPriority != null && (
+                <sup
+                  style={{ fontSize: "0.55rem", fontWeight: 800, marginLeft: "1px", verticalAlign: "super" }}
+                >
+                  {sortPriority}
+                </sup>
+              )}
+            </span>
+          )}
+        </span>
+
+        {/* Resize handle — wider hit area with an always-visible divider so
+            users can see column boundaries (and learn they're draggable). */}
+        <span
+          onMouseDown={(e) => startResize(e, col.key, col.minWidth)}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => {
+            // Double-click resets this column's width to default.
+            e.stopPropagation();
+            resetColWidth(col.key);
+          }}
+          title="Drag to resize · double-click to reset"
+          className="absolute bottom-0 right-0 top-0 z-10 flex w-2.5 cursor-col-resize items-stretch justify-center"
+          onMouseEnter={(e) => {
+            const bar = e.currentTarget.firstElementChild as HTMLElement | null;
+            if (bar) {
+              bar.style.background = "#5eead4";
+              bar.style.width = "3px";
+            }
+          }}
+          onMouseLeave={(e) => {
+            const bar = e.currentTarget.firstElementChild as HTMLElement | null;
+            if (bar) {
+              bar.style.background = "rgba(255,255,255,0.28)";
+              bar.style.width = "1px";
+            }
+          }}
+        >
+          <span
+            style={{
+              width: "1px",
+              background: "rgba(255,255,255,0.28)",
+              marginTop: "0.4rem",
+              marginBottom: "0.4rem",
+              transition: "background 0.12s, width 0.12s",
+            }}
+          />
+        </span>
+      </th>
+    );
+  };
+
+  // ── Body cell per column key ────────────────────────────────────────────────
+
+  const renderTd = (t: Row, col: ColDef) => {
+    switch (col.key) {
+      case "date":
+        return (
+          <td key={col.key} className="overflow-hidden whitespace-nowrap px-3 py-2 tabular-nums text-stone-500">
+            {fmtDate(t.posted_at)}
+          </td>
+        );
+      case "desc":
+        return (
+          <td key={col.key} className="truncate px-3 py-2" title={t.description}>
+            {t.merchant ?? t.description}
+            {t.source !== "manual" && (
+              <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] uppercase text-stone-400">{t.source}</span>
+            )}
+            {statusPill &&
+              (!t.category_id && !t.is_transfer ? (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">To sort</span>
+              ) : (
+                <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">✓ Sorted</span>
+              ))}
+          </td>
+        );
+      case "account":
+        return (
+          <td key={col.key} className="truncate px-3 py-2 text-stone-500">
+            {t.account_id ? accName.get(t.account_id) : "—"}
+          </td>
+        );
+      case "category":
+        return (
+          <td key={col.key} className="px-3 py-2">
+            {t.is_transfer ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                🔁 Transfer
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => toggleTransfer(t.id, false)}
+                    title="Not a transfer — count it again"
+                    className="text-sky-400 hover:text-sky-700"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            ) : canEdit ? (
+              <div>
+                <CategoryPicker
+                  current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
+                  categories={cats}
+                  onPick={(c) => applyCategory(t.id, c)}
+                  onCreate={(name) => setModal({ txnId: t.id, name })}
+                />
+                {!t.category_id && t.suggested_category_id && catById.get(t.suggested_category_id) && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-violet-700">
+                    <span className="truncate">
+                      ✨ {catById.get(t.suggested_category_id)!.icon ?? ""}{" "}
+                      {catById.get(t.suggested_category_id)!.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => acceptOne(t.id)}
+                      className="rounded bg-violet-100 px-1.5 py-0.5 font-medium hover:bg-violet-200"
+                      title="Accept suggestion"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissOne(t.id)}
+                      className="rounded px-1 py-0.5 text-stone-400 hover:bg-stone-100"
+                      title="Dismiss suggestion"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-stone-500">
+                {t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? "—"}` : "—"}
+              </span>
+            )}
+          </td>
+        );
+      case "amount":
+        return (
+          <td
+            key={col.key}
+            className={`whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums ${t.amount < 0 ? "text-stone-800" : "text-emerald-600"}`}
+          >
+            {fmt(t.amount)}
+          </td>
+        );
+      case "actions":
+        return (
+          <td key={col.key} className="whitespace-nowrap px-2 py-2 text-right">
+            {!t.is_transfer && (
+              <button
+                type="button"
+                onClick={() => toggleTransfer(t.id, true)}
+                className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-sky-50 hover:text-sky-600"
+                title="This is a transfer between our own accounts"
+              >
+                🔁
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => removeRow(t.id)}
+              className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600"
+              title="Delete"
+            >
+              ✕
+            </button>
+          </td>
+        );
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -308,20 +847,27 @@ export function TransactionsGrid({
           className="min-w-52 flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
         />
         {!hideAccountColumn && (
-          <select value={acc} onChange={(e) => setAcc(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
-            <option value="">All accounts</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Account"
+            options={accOptions}
+            selected={accSel}
+            onChange={setAccSel}
+            searchable={accOptions.length > 8}
+          />
         )}
-        <select value={cat} onChange={(e) => setCat(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
-          <option value="">All categories</option>
-          <option value="none">Uncategorised</option>
-          {cats.map((c) => (
-            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-          ))}
-        </select>
+        <MultiSelectFilter
+          label="Category"
+          options={catOptions}
+          selected={catSel}
+          onChange={setCatSel}
+          searchable={catOptions.length > 8}
+        />
+        <MultiSelectFilter
+          label="Status"
+          options={STATUS_OPTIONS}
+          selected={statusSel}
+          onChange={setStatusSel}
+        />
         <label className="text-xs text-stone-400">
           from
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="ml-1 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-700" />
@@ -333,6 +879,16 @@ export function TransactionsGrid({
         <button type="button" onClick={exportCsv} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
           ⬇ CSV
         </button>
+        {layoutCustomised && (
+          <button
+            type="button"
+            onClick={resetLayout}
+            title="Reset column widths and order to default"
+            className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs text-stone-500 hover:bg-stone-100"
+          >
+            ↺ Layout
+          </button>
+        )}
         {canEdit && (
           <button
             type="button"
@@ -369,134 +925,43 @@ export function TransactionsGrid({
         {filtered.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-stone-400">Nothing matches these filters.</p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              {orderedCols.map((c) => (
+                <col key={c.key} style={{ width: colWidths[c.key] ?? c.width }} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="border-b border-stone-200 bg-stone-900 text-white">
-                <TH k="date">Date</TH>
-                <TH k="desc">Description</TH>
-                {!hideAccountColumn && <TH k="account">Account</TH>}
-                <TH k="category">Category</TH>
-                <TH k="amount" right>Amount</TH>
-                {canEdit && <th className="px-3 py-2.5" />}
+                {orderedCols.map((c) => renderTh(c))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((t, i) => (
                 <tr key={t.id} className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}>
-                  <td className="whitespace-nowrap px-3 py-2 text-stone-500">
-                    {new Date(t.posted_at).toLocaleDateString("en-AU", { day: "2-digit", month: "short" })}
-                  </td>
-                  <td className="max-w-72 truncate px-3 py-2" title={t.description}>
-                    {t.merchant ?? t.description}
-                    {t.source !== "manual" && (
-                      <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] uppercase text-stone-400">{t.source}</span>
-                    )}
-                    {statusPill &&
-                      (!t.category_id && !t.is_transfer ? (
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">To sort</span>
-                      ) : (
-                        <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">✓ Sorted</span>
-                      ))}
-                  </td>
-                  {!hideAccountColumn && (
-                    <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
-                  )}
-                  <td className="px-3 py-2">
-                    {t.is_transfer ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
-                        🔁 Transfer
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() => toggleTransfer(t.id, false)}
-                            title="Not a transfer — count it again"
-                            className="text-sky-400 hover:text-sky-700"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </span>
-                    ) : canEdit ? (
-                      <div>
-                        <CategoryPicker
-                          current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
-                          categories={cats}
-                          onPick={(c) => applyCategory(t.id, c)}
-                          onCreate={(name) => setModal({ txnId: t.id, name })}
-                        />
-                        {!t.category_id && t.suggested_category_id && catById.get(t.suggested_category_id) && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-violet-700">
-                            <span className="truncate">
-                              ✨ {catById.get(t.suggested_category_id)!.icon ?? ""}{" "}
-                              {catById.get(t.suggested_category_id)!.name}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => acceptOne(t.id)}
-                              className="rounded bg-violet-100 px-1.5 py-0.5 font-medium hover:bg-violet-200"
-                              title="Accept suggestion"
-                            >
-                              ✓
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => dismissOne(t.id)}
-                              className="rounded px-1 py-0.5 text-stone-400 hover:bg-stone-100"
-                              title="Dismiss suggestion"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-stone-500">
-                        {t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? "—"}` : "—"}
-                      </span>
-                    )}
-                  </td>
-                  <td className={`whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums ${t.amount < 0 ? "text-stone-800" : "text-emerald-600"}`}>
-                    {fmt(t.amount)}
-                  </td>
-                  {canEdit && (
-                    <td className="px-2 py-2 text-right">
-                      {!t.is_transfer && (
-                        <button
-                          type="button"
-                          onClick={() => toggleTransfer(t.id, true)}
-                          className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-sky-50 hover:text-sky-600"
-                          title="This is a transfer between our own accounts"
-                        >
-                          🔁
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeRow(t.id)}
-                        className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600"
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  )}
+                  {orderedCols.map((c) => renderTd(t, c))}
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-stone-200 bg-stone-50 text-xs font-medium">
-                <td className="px-3 py-2 text-stone-500" colSpan={hideAccountColumn ? 1 : 2}>
-                  {totals.n} transaction{totals.n === 1 ? "" : "s"}
-                  {totals.transfers > 0 && (
-                    <span className="text-stone-400"> · {totals.transfers} transfer{totals.transfers === 1 ? "" : "s"} not counted</span>
-                  )}
+                <td colSpan={orderedCols.length} className="px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-stone-500">
+                      {totals.n} transaction{totals.n === 1 ? "" : "s"}
+                      {totals.transfers > 0 && (
+                        <span className="text-stone-400"> · {totals.transfers} transfer{totals.transfers === 1 ? "" : "s"} not counted</span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-3 tabular-nums">
+                      <span className="text-emerald-600">in {fmt(totals.inn)}</span>
+                      <span className="text-red-600">out {fmt(totals.out)}</span>
+                      <span className={totals.net < 0 ? "text-red-600" : "text-emerald-600"}>
+                        net {fmt(totals.net)}
+                      </span>
+                    </span>
+                  </div>
                 </td>
-                <td className="px-3 py-2 text-emerald-600">in {fmt(totals.inn)}</td>
-                <td className="px-3 py-2 text-red-600">out {fmt(totals.out)}</td>
-                <td className={`px-3 py-2 text-right tabular-nums ${totals.net < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                  net {fmt(totals.net)}
-                </td>
-                {canEdit && <td />}
               </tr>
             </tfoot>
           </table>

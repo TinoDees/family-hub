@@ -219,8 +219,9 @@ export default async function AccountDetailPage({
             monthKey={month.key}
             statusPill={view === "all"}
             hideAccountColumn
+            storageKey="account"
           />
-        </>
+              </>
       )}
     </div>
   );
