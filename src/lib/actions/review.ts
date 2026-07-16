@@ -273,6 +273,7 @@ DATA:
 ${JSON.stringify(stats)}`;
 
   let content = "";
+  let stopReason = "";
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -283,17 +284,30 @@ ${JSON.stringify(stats)}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 2000,
+        max_tokens: 3000,
         messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
       }),
     });
     if (!res.ok) return { ok: false, error: `The review writer is unavailable right now (${res.status}) — try again in a minute.` };
-    const data = await res.json();
-    content = String(data?.content?.[0]?.text ?? "").trim();
+    const data = (await res.json()) as {
+      content?: { type: string; text?: string }[];
+      stop_reason?: string;
+    };
+    // the model may lead with non-text blocks (e.g. thinking) — take ALL text blocks
+    content = (data.content ?? [])
+      .filter((b) => b.type === "text" && b.text)
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    stopReason = data.stop_reason ?? "";
   } catch {
     return { ok: false, error: "Couldn't reach the review writer — check the connection and try again." };
   }
-  if (!content) return { ok: false, error: "The review came back empty — try again." };
+  if (!content)
+    return {
+      ok: false,
+      error: `The review came back empty (${stopReason || "no text in reply"}) — try again.`,
+    };
 
   const { error } = await supabase.from("finance_reviews").upsert(
     {

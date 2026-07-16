@@ -33,6 +33,7 @@ export function TopNav({
   const [menuOpen, setMenuOpen] = useState(false); // mobile panel
   const [userOpen, setUserOpen] = useState(false); // user dropdown
   const [openGroup, setOpenGroup] = useState<{ id: string; left: number; top: number } | null>(null);
+  const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
   const userRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -40,6 +41,7 @@ export function TopNav({
     setMenuOpen(false);
     setUserOpen(false);
     setOpenGroup(null);
+    setOpenMobileGroup(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -86,28 +88,6 @@ export function TopNav({
       <span>{it.icon}</span> {it.label}
     </Link>
   );
-
-  // Mobile: flatten groups into titled sections of big buttons. Consecutive
-  // top-level links pool into an untitled section (Home leads the first one).
-  const mobileSections: { title: string | null; items: NavItem[] }[] = [];
-  {
-    let pool: NavItem[] = [];
-    const flush = () => {
-      if (pool.length) mobileSections.push({ title: null, items: pool });
-      pool = [];
-    };
-    for (const node of modules) {
-      if (node.kind === "link") {
-        pool.push(node);
-      } else {
-        flush();
-        for (const s of node.sections) {
-          mobileSections.push({ title: s.title ? `${node.label} — ${s.title}` : node.label, items: s.items });
-        }
-      }
-    }
-    flush();
-  }
 
   const initial = (userLabel.trim()[0] ?? "?").toUpperCase();
 
@@ -239,57 +219,110 @@ export function TopNav({
         </div>
       </header>
 
-      {/* Mobile panel: big friendly buttons, groups flattened into titled sections */}
+      {/* Mobile panel: Tracey-style full-screen accordion list */}
       {menuOpen && (
-        <div className="max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-stone-200 bg-white shadow-lg md:hidden">
-          <div className="space-y-3 p-3">
-            <div className="grid grid-cols-3 gap-2">
-              <Link
-                href="/dashboard"
-                className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center ${
-                  onHome ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 hover:bg-stone-50"
-                }`}
-              >
-                <span className="text-2xl">🏡</span>
-                <span className="text-xs font-medium">Home</span>
-              </Link>
-              {(mobileSections[0]?.title === null ? mobileSections[0].items : []).map((it) => (
-                <MobileTile key={it.slug} item={it} active={isActive(it.href)} />
-              ))}
-            </div>
-            {mobileSections
-              .filter((s, i) => !(i === 0 && s.title === null))
-              .map((s, i) => (
-                <div key={i}>
-                  {s.title && (
-                    <div className="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-400">
-                      {s.title}
+        <div className="fixed inset-x-0 bottom-0 top-14 z-40 overflow-y-auto bg-white md:hidden">
+          <nav className="divide-y divide-stone-100">
+            <Link
+              href="/dashboard"
+              className={`block px-5 py-4 text-base font-semibold ${onHome ? "text-teal-700" : "text-stone-900"}`}
+            >
+              🏡 Home
+            </Link>
+            {modules.map((node) =>
+              node.kind === "link" ? (
+                <Link
+                  key={node.slug}
+                  href={node.href}
+                  className={`block px-5 py-4 text-base font-semibold ${
+                    isActive(node.href) ? "text-teal-700" : "text-stone-900"
+                  }`}
+                >
+                  {node.icon} {node.label}
+                </Link>
+              ) : (
+                <div key={node.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenMobileGroup((o) => (o === node.id ? null : node.id))}
+                    className={`flex w-full items-center justify-between px-5 py-4 text-left text-base font-semibold ${
+                      groupActive(node) || openMobileGroup === node.id ? "text-teal-700" : "text-stone-900"
+                    }`}
+                    aria-expanded={openMobileGroup === node.id}
+                  >
+                    {node.label}
+                    <span className="text-xs text-stone-400">
+                      {openMobileGroup === node.id ? "▲" : "▼"}
+                    </span>
+                  </button>
+                  {openMobileGroup === node.id && (
+                    <div className="divide-y divide-stone-50 border-t border-stone-100 pb-1">
+                      {node.sections.map((sec, i) => (
+                        <div key={i}>
+                          {sec.title && (
+                            <div className="px-8 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-stone-400">
+                              {sec.title}
+                            </div>
+                          )}
+                          {sec.items.map((it) => (
+                            <Link
+                              key={it.slug}
+                              href={it.href}
+                              className={`block px-8 py-3.5 text-[15px] ${
+                                isActive(it.href)
+                                  ? "bg-teal-50 font-semibold text-teal-700"
+                                  : "text-stone-700"
+                              }`}
+                            >
+                              {it.label}
+                            </Link>
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="grid grid-cols-3 gap-2">
-                    {s.items.map((it) => (
-                      <MobileTile key={it.slug} item={it} active={isActive(it.href)} />
-                    ))}
-                  </div>
                 </div>
-              ))}
+              )
+            )}
+          </nav>
+
+          {/* Bottom: who you are + quick actions, like Tracey */}
+          <div className="border-t-4 border-stone-100 px-5 py-4">
+            <div className="text-sm font-semibold">{householdName}</div>
+            <div className="mb-3 text-xs text-stone-500">
+              {userLabel} · <span className="capitalize">{role}</span>
+            </div>
+            <div className="space-y-2">
+              <Link
+                href="/menu"
+                className="block rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium hover:bg-stone-50"
+              >
+                🎛️ Customise navigation
+              </Link>
+              {isOwner && (
+                <Link
+                  href="/settings"
+                  className="block rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium hover:bg-stone-50"
+                >
+                  ⚙️ Settings
+                </Link>
+              )}
+              <Link
+                href="/help"
+                className="block rounded-xl border border-stone-200 px-4 py-3 text-sm font-medium hover:bg-stone-50"
+              >
+                ❓ Help & guides
+              </Link>
+              <InstallButton />
+              <form action={signOutAction}>
+                <button className="block w-full rounded-xl border border-red-200 px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50">
+                  Sign out
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function MobileTile({ item, active }: { item: NavItem; active: boolean }) {
-  return (
-    <Link
-      href={item.href}
-      className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center ${
-        active ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 hover:bg-stone-50"
-      }`}
-    >
-      <span className="text-2xl">{item.icon}</span>
-      <span className="text-xs font-medium leading-tight">{item.label}</span>
-    </Link>
   );
 }
