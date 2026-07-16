@@ -109,9 +109,11 @@ export function TopNav({
               onClick={() => (window.history.length > 1 ? router.back() : router.push("/dashboard"))}
               title="Back"
               aria-label="Back"
-              className="rounded-lg px-2 py-1.5 text-stone-300 hover:bg-white/10 hover:text-white"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/25"
             >
-              ←
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} className="h-5 w-5">
+                <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           )}
 
@@ -175,9 +177,12 @@ export function TopNav({
               onClick={() => window.location.reload()}
               title="Refresh"
               aria-label="Refresh"
-              className="shrink-0 rounded-lg px-2 py-1.5 text-stone-300 hover:bg-white/10 hover:text-white"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/25"
             >
-              ⟳
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-5 w-5">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" strokeLinecap="round" />
+                <path d="M21 3v6h-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           )}
 

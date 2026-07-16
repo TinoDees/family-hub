@@ -921,7 +921,101 @@ export function TransactionsGrid({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+      {/* Mobile: card rows — everything visible, no sideways hunting */}
+      <div className="space-y-2 md:hidden">
+        {filtered.length === 0 ? (
+          <p className="rounded-xl border border-stone-200 bg-white px-4 py-10 text-center text-sm text-stone-400">
+            Nothing matches these filters.
+          </p>
+        ) : (
+          <>
+            {filtered.map((t) => {
+              const sugg = !t.category_id && t.suggested_category_id ? catById.get(t.suggested_category_id) : null;
+              const cat = t.category_id ? catById.get(t.category_id) : null;
+              return (
+                <div key={t.id} className="rounded-xl border border-stone-200 bg-white p-3">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-stone-400">
+                      {fmtDate(t.posted_at)}
+                      {!hideAccountColumn && t.account_id && (
+                        <span> · {accName.get(t.account_id)}</span>
+                      )}
+                    </span>
+                    <span className={`text-base font-semibold tabular-nums ${t.is_transfer ? "text-stone-400" : t.amount < 0 ? "text-stone-800" : "text-emerald-600"}`}>
+                      {fmt(t.amount)}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 break-words text-sm font-medium text-stone-800">
+                    {t.merchant ?? t.description}
+                  </div>
+                  {t.merchant && t.description && t.description !== t.merchant && (
+                    <div className="mt-0.5 break-words text-xs text-stone-400">{t.description}</div>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      {t.is_transfer ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                          🔁 Transfer
+                          {canEdit && (
+                            <button type="button" onClick={() => toggleTransfer(t.id, false)} className="text-sky-400" title="Not a transfer">✕</button>
+                          )}
+                        </span>
+                      ) : canEdit ? (
+                        <div>
+                          <CategoryPicker
+                            current={cat ?? null}
+                            categories={cats}
+                            onPick={(c) => applyCategory(t.id, c)}
+                            onCreate={(name) => setModal({ txnId: t.id, name })}
+                          />
+                          {sugg && (
+                            <div className="mt-1 flex items-center gap-1.5 text-[12px] text-violet-700">
+                              <span className="truncate">✨ {sugg.icon ?? ""} {sugg.name}</span>
+                              <button type="button" onClick={() => acceptOne(t.id)} className="rounded bg-violet-100 px-2 py-0.5 font-medium" title="Accept">✓</button>
+                              <button type="button" onClick={() => dismissOne(t.id)} className="rounded px-1.5 py-0.5 text-stone-400" title="Dismiss">✕</button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-stone-500">
+                          {cat ? `${cat.icon ?? ""} ${cat.name}` : "—"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {statusPill && (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${!t.category_id && !t.is_transfer ? "bg-amber-50 text-amber-700" : "bg-teal-50 text-teal-700"}`}>
+                          {!t.category_id && !t.is_transfer ? "To sort" : "✓ Sorted"}
+                        </span>
+                      )}
+                      {canEdit && !t.is_transfer && (
+                        <button type="button" onClick={() => toggleTransfer(t.id, true)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-sky-50 hover:text-sky-600" title="Transfer between our accounts">🔁</button>
+                      )}
+                      {canEdit && (
+                        <button type="button" onClick={() => removeRow(t.id)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-red-50 hover:text-red-600" title="Delete">✕</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-medium">
+              <span className="text-stone-500">
+                {totals.n} transaction{totals.n === 1 ? "" : "s"}
+                {totals.transfers > 0 && <span className="text-stone-400"> · {totals.transfers} not counted</span>}
+              </span>
+              <span className="flex items-center gap-3 tabular-nums">
+                <span className="text-emerald-600">in {fmt(totals.inn)}</span>
+                <span className="text-red-600">out {fmt(totals.out)}</span>
+                <span className={totals.net < 0 ? "text-red-600" : "text-emerald-600"}>net {fmt(totals.net)}</span>
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Desktop: the smart-sheet table */}
+      <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white md:block">
         {filtered.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-stone-400">Nothing matches these filters.</p>
         ) : (
