@@ -108,6 +108,15 @@ export const MODULES: ModuleDef[] = [
     defaults: { owner: "edit", adult: "edit", child: "edit" },
   },
   {
+    slug: "documents",
+    name: "Documents",
+    icon: "🗂️",
+    description: "Mortgages, insurance, warranties — key dates and payments in one safe place.",
+    planned: [],
+    status: "live",
+    defaults: { owner: "edit", adult: "edit", child: "none" },
+  },
+  {
     slug: "parental",
     name: "Parental Controls",
     icon: "🛡️",
