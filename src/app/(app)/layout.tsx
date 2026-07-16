@@ -27,13 +27,10 @@ export default async function AppLayout({
   );
   const allowed = visibleModules(perms).map((p) => p.module);
 
-  // permissions decide WHAT; nav prefs (household default, then personal) decide the ORDER
-  const { household, personal } = await getNavPrefs(
-    supabase,
-    membership.household_id,
-    user.id
-  );
-  const modules = applyNavPrefs(allowed, household, personal);
+  // permissions decide WHAT; nav prefs decide the ORDER
+  // (personal → household → platform global → built-in default)
+  const prefs = await getNavPrefs(supabase, membership.household_id, user.id);
+  const modules = applyNavPrefs(allowed, prefs);
 
   return (
     <div className="flex min-h-screen flex-col">

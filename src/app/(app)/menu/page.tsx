@@ -9,8 +9,10 @@ import { NavBuilderTabs } from "@/components/nav-builder";
 /**
  * The menu builder — every member arranges their own menu; the owner also
  * gets the family default (scope switch, like Tracey's tenant/user split).
- * The personal builder starts from the personal layout if saved, else the
- * family default, and only shows modules that member may open.
+ * Each builder seeds from the next scope up so you start from what you
+ * actually see today: personal from personal ?? household ?? platform global;
+ * the family default from household ?? platform global. The personal builder
+ * only shows modules that member may open.
  */
 export default async function MenuPage() {
   const membership = await getMembership();
@@ -24,10 +26,14 @@ export default async function MenuPage() {
   const isOwner = membership.role === "owner";
   const perms = await getPermissions(membership.household_id, user.id, membership.role);
   const mineSlugs = visibleModules(perms).map((p) => p.module.slug);
-  const { household, personal } = await getNavPrefs(supabase, membership.household_id, user.id);
+  const { household, personal, global: globalDefault } = await getNavPrefs(
+    supabase,
+    membership.household_id,
+    user.id
+  );
 
-  const mineTree = layoutToTree(personal ?? household, mineSlugs);
-  const householdTree = isOwner ? layoutToTree(household, null) : null;
+  const mineTree = layoutToTree(personal ?? household ?? globalDefault, mineSlugs);
+  const householdTree = isOwner ? layoutToTree(household ?? globalDefault, null) : null;
 
   return (
     <div className="space-y-5">

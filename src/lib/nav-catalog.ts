@@ -7,8 +7,10 @@
  * With no layout saved the default is every module as its own top-level link,
  * so nothing changes for anyone until they customise.
  *
- * Scopes: the household default row (user_id null) is the family's layout; a
- * member's personal row REPLACES it wholesale for that member.
+ * Scopes (most specific wins, wholesale): a member's personal row → the
+ * household default row (user_id null) → the platform-wide default
+ * (platform_settings key 'nav_default', set from the admin panel) → the
+ * built-in default.
  *
  * A layout only arranges — WHO can open what is decided by the permission
  * resolver (src/lib/permissions.ts), and those access gates are applied ON TOP
@@ -156,18 +158,15 @@ export type NavGroup = { kind: "group"; id: string; label: string; sections: Nav
 export type NavNode = NavLink | NavGroup;
 
 /**
- * The resolver: personal layout (if any) else household layout else default,
- * reconciled with the catalog, then ACCESS-GATED on top — only slugs in
+ * The resolver: takes the WINNING layout (callers pick the scope precedence —
+ * personal → household → platform global → null for the built-in default),
+ * reconciles it with the catalog, then ACCESS-GATES on top — only slugs in
  * allowedSlugs render, exactly like Tracey. Hidden items/groups are dropped;
  * a group whose items are all gone is dropped; a group left with exactly one
  * visible item renders as a direct link.
  */
-export function resolveNav(
-  household: NavLayout | null,
-  personal: NavLayout | null,
-  allowedSlugs: string[]
-): NavNode[] {
-  const layout = reconcileLayout(personal ?? household);
+export function resolveNav(winning: NavLayout | null, allowedSlugs: string[]): NavNode[] {
+  const layout = reconcileLayout(winning);
   const allowed = new Set(allowedSlugs);
   const toItem = (slug: string): NavItem | null => {
     const m = getModule(slug);

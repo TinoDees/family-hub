@@ -5,10 +5,13 @@
  * nav-builder, family-sized and Tailwind-styled).
  *
  * Top: a live PREVIEW of the real bar so you can see the menu as you shape it.
- * Below: a board of cards — small cards for top-level buttons, big columns for
- * menus. Drag things between menus and sub-menus, make new menus and sub-menus,
- * rename or remove them, and switch things on or off. Nothing changes until
- * Save.
+ * Below: a board of columns that WRAPS (never scrolls sideways). The first
+ * column is the MENU BAR — one chip per top-level thing (direct links and
+ * menus), in bar order. Drag chips up/down to reorder the bar, drag a link
+ * chip into a menu column to tuck it away, drag items out of menus back onto
+ * the bar. Menus are chips too, so their spot on the bar is dragged the same
+ * way. Each menu is its own column: rename it, hide it, delete it, make
+ * sub-menus, switch items on or off. Nothing changes until Save.
  *
  * This editor only ARRANGES the menu. Who can open what is set by permissions
  * (Settings → Members) and always applies on top — the builder can never show
@@ -22,6 +25,9 @@ import { treeToLayout, newMenuId, type EGroup, type EItem } from "@/lib/nav-cata
 
 type EMenu = Extract<EGroup, { kind: "menu" }>;
 
+/** What is being dragged: a module chip (lives anywhere) or a whole group's bar position. */
+type Drag = { kind: "item"; slug: string } | { kind: "group"; key: string };
+
 type DropTarget =
   | { to: "top"; before: string | null } // group key to insert before (null = end)
   | { to: "menu"; menuId: string; sIdx: number; beforeSlug: string | null };
@@ -32,6 +38,13 @@ const iconBtn =
   "rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[0.7rem] leading-tight hover:bg-stone-100 disabled:opacity-30 disabled:hover:bg-white";
 const iconBtnDark =
   "rounded border border-stone-600 bg-transparent px-1.5 py-0.5 text-[0.7rem] leading-tight text-stone-300 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent";
+const cardHeader = "flex items-center gap-1.5 rounded-t-xl bg-stone-900 px-2.5 py-2 text-white";
+
+const RESET_CONFIRM: Record<NavScope, string> = {
+  global: "Put the default menu for every household back to the built-in layout?",
+  household: "Put the family menu back to the standard layout?",
+  mine: "Put your menu back to the family default?",
+};
 
 export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGroup[] }) {
   const router = useRouter();
@@ -41,7 +54,7 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [openPreview, setOpenPreview] = useState<string | null>(null);
-  const drag = useRef<string | null>(null); // slug being dragged
+  const drag = useRef<Drag | null>(null);
   const [dropHint, setDropHint] = useState<string | null>(null);
 
   const mutate = (fn: (gs: EGroup[]) => void) => {
@@ -56,13 +69,11 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
   };
 
   // ── group / section / item ops ─────────────────────────────────────────────
-  const moveGroup = (i: number, dir: number) =>
+  const toggleGroup = (key: string) =>
     mutate((gs) => {
-      const j = i + dir;
-      if (j < 0 || j >= gs.length) return;
-      [gs[i], gs[j]] = [gs[j], gs[i]];
+      const g = gs.find((x) => keyOf(x) === key);
+      if (g) g.hidden = !g.hidden;
     });
-  const toggleGroup = (i: number) => mutate((gs) => { gs[i].hidden = !gs[i].hidden; });
   const renameMenu = (id: string, label: string) =>
     mutate((gs) => {
       const g = gs.find((x) => x.kind === "menu" && x.id === id) as EMenu | undefined;
@@ -112,13 +123,30 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
       if (it) it.hidden = !it.hidden;
     });
 
-  // Every module appears exactly once, so the drag payload is just its slug:
-  // pull it out of wherever it lives, then drop it into the target.
+  // ── drag & drop ────────────────────────────────────────────────────────────
+  // Two payloads: an ITEM (a module — appears exactly once, so the slug is
+  // enough: pull it out of wherever it lives, drop it into the target) or a
+  // GROUP (a whole menu's chip on the bar — only reorders the top level).
   const relocate = (target: DropTarget) => {
-    const slug = drag.current;
+    const d = drag.current;
     drag.current = null;
     setDropHint(null);
-    if (!slug) return;
+    if (!d) return;
+
+    if (d.kind === "group") {
+      if (target.to !== "top" || target.before === d.key) return; // menus can't go inside menus
+      mutate((gs) => {
+        const from = gs.findIndex((g) => keyOf(g) === d.key);
+        if (from < 0) return;
+        const [moving] = gs.splice(from, 1);
+        const bi = target.before ? gs.findIndex((g) => keyOf(g) === target.before) : -1;
+        if (bi >= 0) gs.splice(bi, 0, moving);
+        else gs.push(moving);
+      });
+      return;
+    }
+
+    const slug = d.slug;
     mutate((gs) => {
       let item: EItem | null = null;
       for (let i = 0; i < gs.length && !item; i++) {
@@ -150,11 +178,20 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
     });
   };
 
-  const dragProps = (slug: string) => ({
+  const startDrag = (d: Drag) => ({
     draggable: true,
-    onDragStart: () => { drag.current = slug; },
+    onDragStart: () => { drag.current = d; },
     onDragEnd: () => { drag.current = null; setDropHint(null); },
   });
+  /** Bar chips accept both payloads; menu sections only accept items. */
+  const topDropProps = (before: string | null) => {
+    const hint = `TOP:${before ?? "END"}`;
+    return {
+      onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDropHint(hint); },
+      onDragLeave: () => setDropHint((h) => (h === hint ? null : h)),
+      onDrop: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); relocate({ to: "top", before }); },
+    };
+  };
 
   // ── save / reset ───────────────────────────────────────────────────────────
   const save = async () => {
@@ -169,12 +206,7 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
     router.refresh();
   };
   const reset = async () => {
-    const ok = window.confirm(
-      scope === "household"
-        ? "Put the family menu back to the standard layout?"
-        : "Put your menu back to the family default?"
-    );
-    if (!ok) return;
+    if (!window.confirm(RESET_CONFIRM[scope])) return;
     setSaving(true);
     const res = await resetNavPrefs(scope);
     setSaving(false);
@@ -203,6 +235,8 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
   const openedPreview = preview.find((p) => p.kind === "group" && p.id === openPreview) as
     | Extract<PNode, { kind: "group" }>
     | undefined;
+
+  const menus = groups.filter((g): g is EMenu => g.kind === "menu");
 
   return (
     <div>
@@ -273,151 +307,171 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
         )}
       </div>
 
-      {/* Board */}
-      <div className="flex items-start gap-3 overflow-x-auto pb-2">
-        {groups.map((g, gi) =>
-          g.kind === "link" ? (
-            <div
-              key={keyOf(g)}
-              className={`w-44 shrink-0 rounded-xl border bg-white ${
-                dropHint === keyOf(g) ? "border-teal-400 ring-2 ring-teal-200" : "border-stone-200"
-              } ${g.hidden ? "opacity-60" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDropHint(keyOf(g)); }}
-              onDragLeave={() => setDropHint((h) => (h === keyOf(g) ? null : h))}
-              onDrop={(e) => { e.preventDefault(); relocate({ to: "top", before: keyOf(g) }); }}
-            >
-              <div className="flex items-center gap-1 border-b border-stone-100 px-2 py-1.5">
-                <button type="button" className={iconBtn} onClick={() => moveGroup(gi, -1)} disabled={gi === 0} title="Move left">◀</button>
-                <button type="button" className={iconBtn} onClick={() => moveGroup(gi, 1)} disabled={gi === groups.length - 1} title="Move right">▶</button>
-                <span className="flex-1 truncate text-[0.65rem] font-semibold uppercase tracking-wide text-stone-400">Button</span>
-                <input type="checkbox" checked={!g.hidden} onChange={() => toggleGroup(gi)} title="Show on the bar" />
-              </div>
-              <div
-                {...dragProps(g.slug)}
-                className={`m-1.5 flex cursor-grab items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 active:cursor-grabbing ${
-                  g.hidden ? "bg-stone-50 line-through opacity-60" : ""
-                }`}
-              >
-                <span aria-hidden className="text-stone-300">⠿</span>
-                <span>{g.icon}</span>
-                <span className="truncate text-sm">{g.label}</span>
-              </div>
-            </div>
-          ) : (
-            <div
-              key={keyOf(g)}
-              className={`w-64 shrink-0 rounded-xl border border-stone-200 bg-white ${g.hidden ? "opacity-60" : ""}`}
-            >
-              <div className="flex items-center gap-1 rounded-t-xl bg-stone-900 px-2 py-2 text-white">
-                <button type="button" className={iconBtnDark} onClick={() => moveGroup(gi, -1)} disabled={gi === 0} title="Move left">◀</button>
-                <button type="button" className={iconBtnDark} onClick={() => moveGroup(gi, 1)} disabled={gi === groups.length - 1} title="Move right">▶</button>
-                <input
-                  value={g.label}
-                  onChange={(e) => renameMenu(g.id, e.target.value)}
-                  title="Rename this menu"
-                  className="min-w-0 flex-1 rounded border border-stone-600 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-white placeholder-stone-400 focus:border-teal-400 focus:outline-none"
-                  placeholder="Menu name…"
-                />
-                <input type="checkbox" checked={!g.hidden} onChange={() => toggleGroup(gi)} title="Show this menu" />
-                <button
-                  type="button"
-                  className={`${iconBtnDark} text-red-300 hover:text-red-200`}
-                  onClick={() => deleteMenu(g.id)}
-                  title="Remove this menu (its things go back to the bar)"
+      {/* Board — wraps, never scrolls sideways */}
+      <div className="flex flex-wrap items-start gap-3 pb-2">
+        {/* The MENU BAR column: every top-level thing as a chip, in bar order */}
+        <div className="w-64 rounded-xl border border-stone-200 bg-white">
+          <div className={cardHeader}>
+            <span className="flex-1 truncate text-sm font-semibold">Menu bar</span>
+            <span className="text-[0.62rem] uppercase tracking-wide text-stone-400">top level</span>
+          </div>
+          <div className="px-2 pb-2 pt-1.5">
+            {groups.map((g) => {
+              const key = keyOf(g);
+              const hintCls = dropHint === `TOP:${key}` ? "border-t-2 border-t-teal-400" : "";
+              return g.kind === "link" ? (
+                <div
+                  key={key}
+                  {...startDrag({ kind: "item", slug: g.slug })}
+                  {...topDropProps(key)}
+                  className={`my-0.5 flex cursor-grab items-center gap-1.5 rounded-lg border px-2 py-1 active:cursor-grabbing ${hintCls} ${
+                    g.hidden ? "border-stone-100 bg-stone-50 opacity-60" : "border-stone-200 bg-white"
+                  }`}
                 >
-                  ✕
-                </button>
-              </div>
-              <div className="px-2 pb-2 pt-1.5">
-                {g.sections.map((s, si) => (
-                  <div
-                    key={si}
-                    className="mb-2"
-                    onDragOver={(e) => { e.preventDefault(); setDropHint(`${g.id}:${si}:END`); }}
-                    onDrop={(e) => { e.preventDefault(); relocate({ to: "menu", menuId: g.id, sIdx: si, beforeSlug: null }); }}
-                  >
-                    <div className="mb-1 flex items-center gap-1">
-                      <span aria-hidden title="Rename sub-menu" className="text-[0.7rem] text-stone-400">✎</span>
-                      <input
-                        value={s.title ?? ""}
-                        placeholder="name this sub-menu…"
-                        title="Rename this sub-menu"
-                        onChange={(e) => renameSection(g.id, si, e.target.value)}
-                        className="min-w-0 flex-1 rounded border border-stone-200 px-1.5 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-stone-500 placeholder-stone-300 focus:border-teal-400 focus:outline-none"
-                      />
-                      <button type="button" className={iconBtn} onClick={() => moveSection(g.id, si, -1)} disabled={si === 0} title="Sub-menu up">▲</button>
-                      <button type="button" className={iconBtn} onClick={() => moveSection(g.id, si, 1)} disabled={si === g.sections.length - 1} title="Sub-menu down">▼</button>
-                      <button
-                        type="button"
-                        className={`${iconBtn} text-red-600`}
-                        onClick={() => deleteSection(g.id, si)}
-                        disabled={g.sections.length <= 1}
-                        title="Remove sub-menu (its things move to the first one)"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div
-                      className={`min-h-2 rounded-lg pb-0.5 ${
-                        dropHint === `${g.id}:${si}:END` ? "outline-dashed outline-2 outline-teal-300" : ""
-                      }`}
-                    >
-                      {s.items.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-stone-200 p-2 text-center text-xs text-stone-300">
-                          drop here
-                        </div>
-                      )}
-                      {s.items.map((it) => (
-                        <div
-                          key={it.slug}
-                          {...dragProps(it.slug)}
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropHint(`${g.id}:${si}:${it.slug}`); }}
-                          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); relocate({ to: "menu", menuId: g.id, sIdx: si, beforeSlug: it.slug }); }}
-                          className={`my-0.5 flex cursor-grab items-center gap-1.5 rounded-lg border px-2 py-1 active:cursor-grabbing ${
-                            dropHint === `${g.id}:${si}:${it.slug}` ? "border-t-2 border-t-teal-400" : ""
-                          } ${it.hidden ? "border-stone-100 bg-stone-50 opacity-60" : "border-stone-200 bg-white"}`}
-                        >
-                          <span aria-hidden className="text-stone-300">⠿</span>
-                          <input type="checkbox" checked={!it.hidden} onChange={() => toggleItem(g.id, si, it.slug)} title="Show this item" />
-                          <span>{it.icon}</span>
-                          <span className={`flex-1 truncate text-sm ${it.hidden ? "line-through" : ""}`}>{it.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => addSection(g.id)}
-                  className="w-full rounded-lg border border-dashed border-stone-300 px-2 py-1.5 text-xs text-teal-700 hover:bg-teal-50"
+                  <span aria-hidden className="text-stone-300">⠿</span>
+                  <input type="checkbox" checked={!g.hidden} onChange={() => toggleGroup(key)} title="Show on the bar" />
+                  <span>{g.icon}</span>
+                  <span className={`flex-1 truncate text-sm ${g.hidden ? "line-through" : ""}`}>{g.label}</span>
+                </div>
+              ) : (
+                <div
+                  key={key}
+                  {...startDrag({ kind: "group", key })}
+                  {...topDropProps(key)}
+                  className={`my-0.5 flex cursor-grab items-center gap-1.5 rounded-lg border border-stone-700 bg-stone-800 px-2 py-1 text-white active:cursor-grabbing ${hintCls} ${
+                    g.hidden ? "opacity-50" : ""
+                  }`}
+                  title="A menu — drag to change where it sits on the bar"
                 >
-                  + Sub-menu
-                </button>
-              </div>
+                  <span aria-hidden className="text-stone-500">⠿</span>
+                  <span className={`flex-1 truncate text-sm font-medium ${g.hidden ? "line-through" : ""}`}>
+                    {g.label} <span className="text-[0.6rem] opacity-70">▾</span>
+                  </span>
+                  <span className="text-[0.6rem] uppercase tracking-wide text-stone-400">menu</span>
+                </div>
+              );
+            })}
+            <div
+              {...topDropProps(null)}
+              className={`mt-1.5 rounded-lg border border-dashed p-2.5 text-center text-xs ${
+                dropHint === "TOP:END" ? "border-teal-400 bg-teal-50 text-teal-700" : "border-stone-200 text-stone-400"
+              }`}
+            >
+              drop here for its own spot on the bar
             </div>
-          )
-        )}
-
-        {/* Trailing: new menu + top-level drop zone */}
-        <div className="w-52 shrink-0 space-y-2">
-          <button
-            type="button"
-            onClick={addMenu}
-            className="w-full rounded-xl border border-dashed border-stone-300 px-3 py-3 text-sm font-medium text-teal-700 hover:bg-teal-50"
-          >
-            + New menu
-          </button>
-          <div
-            className={`rounded-xl border border-dashed p-4 text-center text-xs ${
-              dropHint === "TOP:END" ? "border-teal-400 bg-teal-50 text-teal-700" : "border-stone-200 text-stone-400"
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setDropHint("TOP:END"); }}
-            onDragLeave={() => setDropHint((h) => (h === "TOP:END" ? null : h))}
-            onDrop={(e) => { e.preventDefault(); relocate({ to: "top", before: null }); }}
-          >
-            Drop something here to give it its own button on the bar
           </div>
         </div>
+
+        {/* One column per menu */}
+        {menus.map((g) => (
+          <div
+            key={keyOf(g)}
+            className={`w-64 rounded-xl border border-stone-200 bg-white ${g.hidden ? "opacity-60" : ""}`}
+          >
+            <div className={cardHeader}>
+              <input
+                value={g.label}
+                onChange={(e) => renameMenu(g.id, e.target.value)}
+                title="Rename this menu"
+                className="min-w-0 flex-1 rounded border border-stone-600 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-white placeholder-stone-400 focus:border-teal-400 focus:outline-none"
+                placeholder="Menu name…"
+              />
+              <input type="checkbox" checked={!g.hidden} onChange={() => toggleGroup(keyOf(g))} title="Show this menu" />
+              <button
+                type="button"
+                className={`${iconBtnDark} text-red-300 hover:text-red-200`}
+                onClick={() => deleteMenu(g.id)}
+                title="Remove this menu (its things go back to the bar)"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-2 pb-2 pt-1.5">
+              {g.sections.map((s, si) => (
+                <div
+                  key={si}
+                  className="mb-2"
+                  onDragOver={(e) => {
+                    if (drag.current?.kind === "group") return; // menus can't nest
+                    e.preventDefault();
+                    setDropHint(`${g.id}:${si}:END`);
+                  }}
+                  onDrop={(e) => { e.preventDefault(); relocate({ to: "menu", menuId: g.id, sIdx: si, beforeSlug: null }); }}
+                >
+                  <div className="mb-1 flex items-center gap-1">
+                    <span aria-hidden title="Rename sub-menu" className="text-[0.7rem] text-stone-400">✎</span>
+                    <input
+                      value={s.title ?? ""}
+                      placeholder="name this sub-menu…"
+                      title="Rename this sub-menu"
+                      onChange={(e) => renameSection(g.id, si, e.target.value)}
+                      className="min-w-0 flex-1 rounded border border-stone-200 px-1.5 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-stone-500 placeholder-stone-300 focus:border-teal-400 focus:outline-none"
+                    />
+                    <button type="button" className={iconBtn} onClick={() => moveSection(g.id, si, -1)} disabled={si === 0} title="Sub-menu up">▲</button>
+                    <button type="button" className={iconBtn} onClick={() => moveSection(g.id, si, 1)} disabled={si === g.sections.length - 1} title="Sub-menu down">▼</button>
+                    <button
+                      type="button"
+                      className={`${iconBtn} text-red-600`}
+                      onClick={() => deleteSection(g.id, si)}
+                      disabled={g.sections.length <= 1}
+                      title="Remove sub-menu (its things move to the first one)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div
+                    className={`min-h-2 rounded-lg pb-0.5 ${
+                      dropHint === `${g.id}:${si}:END` ? "outline-dashed outline-2 outline-teal-300" : ""
+                    }`}
+                  >
+                    {s.items.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-stone-200 p-2 text-center text-xs text-stone-300">
+                        drop here
+                      </div>
+                    )}
+                    {s.items.map((it) => (
+                      <div
+                        key={it.slug}
+                        {...startDrag({ kind: "item", slug: it.slug })}
+                        onDragOver={(e) => {
+                          if (drag.current?.kind === "group") return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDropHint(`${g.id}:${si}:${it.slug}`);
+                        }}
+                        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); relocate({ to: "menu", menuId: g.id, sIdx: si, beforeSlug: it.slug }); }}
+                        className={`my-0.5 flex cursor-grab items-center gap-1.5 rounded-lg border px-2 py-1 active:cursor-grabbing ${
+                          dropHint === `${g.id}:${si}:${it.slug}` ? "border-t-2 border-t-teal-400" : ""
+                        } ${it.hidden ? "border-stone-100 bg-stone-50 opacity-60" : "border-stone-200 bg-white"}`}
+                      >
+                        <span aria-hidden className="text-stone-300">⠿</span>
+                        <input type="checkbox" checked={!it.hidden} onChange={() => toggleItem(g.id, si, it.slug)} title="Show this item" />
+                        <span>{it.icon}</span>
+                        <span className={`flex-1 truncate text-sm ${it.hidden ? "line-through" : ""}`}>{it.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => addSection(g.id)}
+                className="w-full rounded-lg border border-dashed border-stone-300 px-2 py-1.5 text-xs text-teal-700 hover:bg-teal-50"
+              >
+                + Sub-menu
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Trailing: new menu */}
+        <button
+          type="button"
+          onClick={addMenu}
+          className="w-52 rounded-xl border border-dashed border-stone-300 px-3 py-3 text-sm font-medium text-teal-700 hover:bg-teal-50"
+        >
+          + New menu
+        </button>
       </div>
 
       <div className="mt-3">
