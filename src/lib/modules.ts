@@ -22,6 +22,12 @@ export type ModuleDef = {
   defaults: Record<MemberRole, Access>;
   /** Where the module lives if not /{slug} (e.g. inside Settings). */
   href?: string;
+  /**
+   * Requires the member's PIN to open on a device (shared-tablet guard, on
+   * TOP of permissions — see ModulePinGate / PinShield). Add the flag here
+   * and a layout.tsx wrapper in the module's route.
+   */
+  pinShield?: boolean;
 };
 
 export const MODULES: ModuleDef[] = [
@@ -34,6 +40,7 @@ export const MODULES: ModuleDef[] = [
     status: "live",
     defaults: { owner: "edit", adult: "none", child: "none" },
     href: "/settings/members",
+    pinShield: true,
   },
   {
     slug: "planner",
@@ -61,6 +68,7 @@ export const MODULES: ModuleDef[] = [
     planned: ["Bill reminders", "Bank feeds (Basiq)", "Multi-currency conversion"],
     status: "live",
     defaults: { owner: "edit", adult: "edit", child: "none" },
+    pinShield: true,
   },
   {
     slug: "recipes",
@@ -124,6 +132,7 @@ export const MODULES: ModuleDef[] = [
     planned: ["Family chat", "Approval queue", "Screen-time windows for Nestly"],
     status: "live",
     defaults: { owner: "edit", adult: "edit", child: "none" },
+    pinShield: true,
   },
   {
     slug: "chores",

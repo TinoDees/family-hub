@@ -35,3 +35,37 @@ export async function updateHousehold(formData: FormData) {
   revalidatePath("/", "layout");
   redirect("/settings?saved=1");
 }
+
+export async function updateDeviceLock(formData: FormData) {
+  const membership = await getMembership();
+  if (!membership || membership.role !== "owner")
+    redirect("/settings?error=Only+the+owner+can+change+device+lock+settings");
+
+  const enabled = formData.get("idle_lock_enabled") === "on";
+  const minutes = Math.min(240, Math.max(1, parseInt(String(formData.get("idle_lock_minutes") ?? "30")) || 30));
+  const overnightRaw = String(formData.get("overnight_logout_at") ?? "").trim();
+  const overnight = /^\d{2}:\d{2}$/.test(overnightRaw) ? overnightRaw : "00:00";
+  const tzRaw = String(formData.get("timezone") ?? "").trim();
+  let timezone = "Australia/Sydney";
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tzRaw });
+    timezone = tzRaw || timezone;
+  } catch {
+    /* keep default */
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("households")
+    .update({
+      idle_lock_enabled: enabled,
+      idle_lock_minutes: minutes,
+      overnight_logout_at: overnight,
+      timezone,
+    })
+    .eq("id", membership.household_id);
+  if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+
+  revalidatePath("/", "layout");
+  redirect("/settings?saved=1");
+}

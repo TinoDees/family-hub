@@ -22,8 +22,30 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveNavPrefs, resetNavPrefs, type NavScope } from "@/lib/actions/nav";
 import { treeToLayout, newMenuId, type EGroup, type EItem } from "@/lib/nav-catalog";
+import { getModule } from "@/lib/modules";
 
 type EMenu = Extract<EGroup, { kind: "menu" }>;
+
+/**
+ * Tiny shield chip so the builder shows WHO will see an item and whether a
+ * PIN guards it — the badge is informational; permissions do the real gating.
+ */
+function LockBadge({ slug }: { slug: string }) {
+  const m = getModule(slug);
+  if (!m) return null;
+  const ownerOnly = m.defaults.adult === "none" && m.defaults.child === "none";
+  const adultsOnly = !ownerOnly && m.defaults.child === "none";
+  if (!m.pinShield && !ownerOnly && !adultsOnly) return null;
+  const label = ownerOnly ? "owner" : adultsOnly ? "adults" : "";
+  return (
+    <span
+      title={`${label ? `Visible to ${label} by default (overridable per member). ` : ""}${m.pinShield ? "Opens with PIN on shared devices." : ""}`}
+      className="ml-auto flex shrink-0 items-center gap-0.5 rounded-full border border-stone-200 bg-stone-50 px-1.5 py-px text-[0.58rem] font-semibold uppercase tracking-wide text-stone-500"
+    >
+      🔒{label && <span>{label}</span>}
+    </span>
+  );
+}
 
 /** What is being dragged: a module chip (lives anywhere) or a whole group's bar position. */
 type Drag = { kind: "item"; slug: string } | { kind: "group"; key: string };
@@ -331,7 +353,8 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
                   <span aria-hidden className="text-stone-300">⠿</span>
                   <input type="checkbox" checked={!g.hidden} onChange={() => toggleGroup(key)} title="Show on the bar" />
                   <span>{g.icon}</span>
-                  <span className={`flex-1 truncate text-sm ${g.hidden ? "line-through" : ""}`}>{g.label}</span>
+                  <span className={`min-w-0 flex-1 truncate text-sm ${g.hidden ? "line-through" : ""}`}>{g.label}</span>
+                  <LockBadge slug={g.slug} />
                 </div>
               ) : (
                 <div
@@ -447,7 +470,8 @@ export function NavBuilder({ scope, initial }: { scope: NavScope; initial: EGrou
                         <span aria-hidden className="text-stone-300">⠿</span>
                         <input type="checkbox" checked={!it.hidden} onChange={() => toggleItem(g.id, si, it.slug)} title="Show this item" />
                         <span>{it.icon}</span>
-                        <span className={`flex-1 truncate text-sm ${it.hidden ? "line-through" : ""}`}>{it.label}</span>
+                        <span className={`min-w-0 flex-1 truncate text-sm ${it.hidden ? "line-through" : ""}`}>{it.label}</span>
+                        <LockBadge slug={it.slug} />
                       </div>
                     ))}
                   </div>

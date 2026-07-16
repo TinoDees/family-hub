@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { inputCls, buttonCls } from "@/components/auth-card";
+import PinSettings from "@/components/pin-settings";
 
 type Factor = { id: string; status: string; factor_type: string };
 
@@ -193,7 +194,10 @@ function Security() {
 export default function SecurityPage() {
   return (
     <Suspense>
-      <Security />
+      <div className="space-y-6">
+        <Security />
+        <PinSettings />
+      </div>
     </Suspense>
   );
 }
