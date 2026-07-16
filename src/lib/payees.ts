@@ -79,4 +79,29 @@ export async function learnPayeeDefault(
     .update({ default_category_id: categoryId })
     .eq("id", txn.payee_id)
     .eq("household_id", householdId);
+  await propagatePayeeSuggestions(client, householdId, txn.payee_id, categoryId, txnId);
+}
+
+/**
+ * Auto-match, instantly: when a payee's category is learned, every OTHER
+ * still-unsorted transaction of that payee gets it as a SUGGESTION — shown
+ * with the accept ✓ / dismiss ✕ pills, so the user always keeps the
+ * overwrite option. (Future feed/import rows apply the default directly.)
+ */
+export async function propagatePayeeSuggestions(
+  client: SupabaseClient,
+  householdId: string,
+  payeeId: string,
+  categoryId: string,
+  excludeTxnId?: string
+): Promise<void> {
+  let q = client
+    .from("finance_transactions")
+    .update({ suggested_category_id: categoryId, suggestion_source: "payee" })
+    .eq("household_id", householdId)
+    .eq("payee_id", payeeId)
+    .eq("is_transfer", false)
+    .is("category_id", null);
+  if (excludeTxnId) q = q.neq("id", excludeTxnId);
+  await q;
 }

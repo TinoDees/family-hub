@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, monthBounds } from "@/lib/finance";
-import { learnPayeeDefault } from "@/lib/payees";
+import { learnPayeeDefault, propagatePayeeSuggestions } from "@/lib/payees";
 
 /**
  * AI pre-classification of bank transactions. Suggestions are stored in
@@ -199,13 +199,14 @@ export async function acceptAllSuggestions(
   }
 
   await Promise.all(
-    [...payeeDefaults].map(([payeeId, categoryId]) =>
-      supabase
+    [...payeeDefaults].map(async ([payeeId, categoryId]) => {
+      await supabase
         .from("finance_payees")
         .update({ default_category_id: categoryId })
         .eq("id", payeeId)
-        .eq("household_id", membership.household_id)
-    )
+        .eq("household_id", membership.household_id);
+      await propagatePayeeSuggestions(supabase, membership.household_id, payeeId, categoryId);
+    })
   );
 
   return { ok: true, accepted };

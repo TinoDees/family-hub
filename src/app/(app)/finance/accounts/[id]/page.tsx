@@ -133,7 +133,7 @@ export default async function AccountDetailPage({
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <Link href="/finance" className="text-xs text-stone-400 hover:underline">← Finance</Link>
           <h1 className="flex items-center gap-2 text-2xl font-semibold">
@@ -141,11 +141,11 @@ export default async function AccountDetailPage({
           </h1>
           {account.institution && <p className="text-sm text-stone-500">{account.institution}</p>}
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <div className={`text-3xl font-semibold tabular-nums ${balance < 0 ? "text-red-600" : ""}`}>
             {formatMoney(balance, currency)}
           </div>
-          <div className="flex items-center justify-end gap-2 text-xs text-stone-400">
+          <div className="flex items-center gap-2 text-xs text-stone-400 sm:justify-end">
             {available !== null && <span>{formatMoney(available, currency)} available</span>}
             {account.external_id && live && (
               <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-emerald-600">

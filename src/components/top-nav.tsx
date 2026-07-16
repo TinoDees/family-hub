@@ -34,6 +34,13 @@ export function TopNav({
   const [userOpen, setUserOpen] = useState(false); // user dropdown
   const [openGroup, setOpenGroup] = useState<{ id: string; left: number; top: number } | null>(null);
   const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
+  const [standalone, setStandalone] = useState(false); // installed app → show refresh
+  useEffect(() => {
+    setStandalone(
+      window.matchMedia("(display-mode: standalone)").matches ||
+        Boolean("standalone" in navigator && (navigator as { standalone?: boolean }).standalone)
+    );
+  }, []);
   const userRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -108,11 +115,11 @@ export function TopNav({
             </button>
           )}
 
-          {/* Brand */}
-          <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
+          {/* Brand — the full lockup, loud and proud */}
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/nestly-icon-192.png" alt="Nestly" className="h-8 w-8 rounded-lg" />
-            <span className="hidden max-w-36 truncate text-sm font-semibold lg:inline">
+            <img src="/nestly-logo-dark.png" alt="Nestly — everything your family needs, together" className="h-10 w-auto" />
+            <span className="hidden max-w-32 truncate border-l border-white/20 pl-2.5 text-xs text-stone-400 lg:inline">
               {householdName}
             </span>
           </Link>
@@ -160,6 +167,19 @@ export function TopNav({
           </nav>
 
           <div className="flex-1 md:hidden" />
+
+          {/* Refresh — installed app has no browser chrome */}
+          {standalone && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              title="Refresh"
+              aria-label="Refresh"
+              className="shrink-0 rounded-lg px-2 py-1.5 text-stone-300 hover:bg-white/10 hover:text-white"
+            >
+              ⟳
+            </button>
+          )}
 
           {/* User menu */}
           <div className="relative shrink-0" ref={userRef}>

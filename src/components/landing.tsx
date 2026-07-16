@@ -76,8 +76,8 @@ export default function Landing() {
           <Image
             src="/nestly-logo.png"
             alt="Nestly — everything your family needs, together"
-            width={168}
-            height={63}
+            width={216}
+            height={81}
             priority
           />
         </div>

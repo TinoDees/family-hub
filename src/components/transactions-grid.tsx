@@ -839,12 +839,12 @@ export function TransactionsGrid({
           <button className="underline" onClick={() => setMsg(null)}>dismiss</button>
         </p>
       )}
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-stone-200 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white p-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="🔍 Search description or merchant…"
-          className="min-w-52 flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+          className="w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm sm:w-auto sm:min-w-52 sm:flex-1"
         />
         {!hideAccountColumn && (
           <MultiSelectFilter
@@ -868,13 +868,13 @@ export function TransactionsGrid({
           selected={statusSel}
           onChange={setStatusSel}
         />
-        <label className="text-xs text-stone-400">
+        <label className="inline-flex items-center gap-1 text-xs text-stone-400">
           from
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="ml-1 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-700" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[8.4rem] rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-700" />
         </label>
-        <label className="text-xs text-stone-400">
+        <label className="inline-flex items-center gap-1 text-xs text-stone-400">
           to
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="ml-1 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-700" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[8.4rem] rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-700" />
         </label>
         <button type="button" onClick={exportCsv} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
           ⬇ CSV
