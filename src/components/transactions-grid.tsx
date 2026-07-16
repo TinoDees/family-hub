@@ -39,6 +39,8 @@ export function TransactionsGrid({
   canEdit,
   currency,
   monthKey,
+  statusPill = false,
+  hideAccountColumn = false,
 }: {
   rows: Row[];
   categories: Cat[];
@@ -46,6 +48,10 @@ export function TransactionsGrid({
   canEdit: boolean;
   currency: string;
   monthKey: string;
+  /** Show a per-row "✓ Sorted" / "To sort" pill (account detail page). */
+  statusPill?: boolean;
+  /** Drop the Account column + filter when every row is the same account. */
+  hideAccountColumn?: boolean;
 }) {
   const [data, setData] = useState(rows);
   const [cats, setCats] = useState(categories);
@@ -301,12 +307,14 @@ export function TransactionsGrid({
           placeholder="🔍 Search description or merchant…"
           className="min-w-52 flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
         />
-        <select value={acc} onChange={(e) => setAcc(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
-          <option value="">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+        {!hideAccountColumn && (
+          <select value={acc} onChange={(e) => setAcc(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
+            <option value="">All accounts</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
         <select value={cat} onChange={(e) => setCat(e.target.value)} className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm">
           <option value="">All categories</option>
           <option value="none">Uncategorised</option>
@@ -366,7 +374,7 @@ export function TransactionsGrid({
               <tr className="border-b border-stone-200 bg-stone-900 text-white">
                 <TH k="date">Date</TH>
                 <TH k="desc">Description</TH>
-                <TH k="account">Account</TH>
+                {!hideAccountColumn && <TH k="account">Account</TH>}
                 <TH k="category">Category</TH>
                 <TH k="amount" right>Amount</TH>
                 {canEdit && <th className="px-3 py-2.5" />}
@@ -383,8 +391,16 @@ export function TransactionsGrid({
                     {t.source !== "manual" && (
                       <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] uppercase text-stone-400">{t.source}</span>
                     )}
+                    {statusPill &&
+                      (!t.category_id && !t.is_transfer ? (
+                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">To sort</span>
+                      ) : (
+                        <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">✓ Sorted</span>
+                      ))}
                   </td>
-                  <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
+                  {!hideAccountColumn && (
+                    <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
+                  )}
                   <td className="px-3 py-2">
                     {t.is_transfer ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
@@ -469,7 +485,7 @@ export function TransactionsGrid({
             </tbody>
             <tfoot>
               <tr className="border-t border-stone-200 bg-stone-50 text-xs font-medium">
-                <td className="px-3 py-2 text-stone-500" colSpan={2}>
+                <td className="px-3 py-2 text-stone-500" colSpan={hideAccountColumn ? 1 : 2}>
                   {totals.n} transaction{totals.n === 1 ? "" : "s"}
                   {totals.transfers > 0 && (
                     <span className="text-stone-400"> · {totals.transfers} transfer{totals.transfers === 1 ? "" : "s"} not counted</span>

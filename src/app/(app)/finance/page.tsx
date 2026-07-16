@@ -186,7 +186,7 @@ export default async function FinanceDashboard({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {accountCards.map((a) => (
-              <div key={a.id} className="rounded-xl bg-white/10 p-4">
+              <Link key={a.id} href={`/finance/accounts/${a.id}`} className="block rounded-xl bg-white/10 p-4 transition-colors hover:bg-white/15">
                 <div className="flex items-center gap-2 text-sm text-stone-300">
                   <span>{TYPE_ICON[a.type] ?? "📁"}</span>
                   <span className="truncate">{a.name}</span>
@@ -204,7 +204,7 @@ export default async function FinanceDashboard({
                     {formatMoney(a.available, currency)} available
                   </div>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         </div>
