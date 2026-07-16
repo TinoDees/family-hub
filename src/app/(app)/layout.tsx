@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
 import { getPermissions, visibleModules } from "@/lib/permissions";
+import { getNavPrefs, applyNavPrefs } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
-import { AppShell } from "@/components/app-shell";
+import { TopNav } from "@/components/top-nav";
 
 export default async function AppLayout({
   children,
@@ -24,18 +25,27 @@ export default async function AppLayout({
     user.id,
     membership.role
   );
-  const modules = visibleModules(perms).map((p) => p.module);
+  const allowed = visibleModules(perms).map((p) => p.module);
+
+  // permissions decide WHAT; nav prefs (household default, then personal) decide the ORDER
+  const { household, personal } = await getNavPrefs(
+    supabase,
+    membership.household_id,
+    user.id
+  );
+  const modules = applyNavPrefs(allowed, household, personal);
 
   return (
-    <AppShell
-      modules={modules}
-      householdName={membership.household.name}
-      isOwner={membership.role === "owner"}
-      userLabel={membership.display_name ?? user.email ?? ""}
-      role={membership.role}
-      signOutAction={signOut}
-    >
-      {children}
-    </AppShell>
+    <div className="flex min-h-screen flex-col">
+      <TopNav
+        modules={modules}
+        householdName={membership.household.name}
+        isOwner={membership.role === "owner"}
+        userLabel={membership.display_name ?? user.email ?? ""}
+        role={membership.role}
+        signOutAction={signOut}
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-6">{children}</main>
+    </div>
   );
 }
