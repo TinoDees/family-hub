@@ -151,7 +151,17 @@ export default async function FinanceDashboard({
           <h1 className="text-2xl font-semibold">💰 Finance</h1>
           <p className="text-sm text-stone-500">{membership.household.name}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <>
+              <Link href="/finance/setup?sec=categories#categories" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
+                🏷️ Categories & budgets
+              </Link>
+              <Link href="/finance/import" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
+                Import CSV
+              </Link>
+            </>
+          )}
           <Link href={`/finance?m=${shiftMonth(month.key, -1)}`} className="rounded-lg border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100">←</Link>
           <span className="min-w-32 text-center text-sm font-medium">{month.label}</span>
           <Link href={`/finance?m=${shiftMonth(month.key, 1)}`} className="rounded-lg border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100">→</Link>
