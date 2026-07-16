@@ -3,6 +3,10 @@ import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance, formatMoney, monthBounds, shiftMonth } from "@/lib/finance";
 import { generateReviewAction } from "@/lib/actions/review";
+import { PendingButton } from "@/components/pending-button";
+
+// the AI write-up takes ~20s — without this Vercel kills the action mid-flight
+export const maxDuration = 60;
 
 /** Inline markdown: just **bold** — enough for the review copy. */
 function renderInline(text: string): ReactNode[] {
@@ -177,9 +181,12 @@ export default async function ReviewPage({
       {canEdit && (
         <form action={generateReviewAction} className="flex justify-center">
           <input type="hidden" name="m" value={month.key} />
-          <button className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-teal-700">
+          <PendingButton
+            pendingLabel="Reading your month… about 20 seconds"
+            className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-teal-700"
+          >
             {review ? "Refresh review" : "Generate review"}
-          </button>
+          </PendingButton>
         </form>
       )}
 
