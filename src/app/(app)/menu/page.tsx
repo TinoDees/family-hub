@@ -2,11 +2,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
 import { getPermissions, visibleModules } from "@/lib/permissions";
-import { MODULES } from "@/lib/modules";
-import { getNavPrefs, applyNavPrefs, type NavItemPref } from "@/lib/nav";
-import { NavEditor } from "@/components/nav-editor";
+import { getNavPrefs } from "@/lib/nav";
+import { layoutToTree } from "@/lib/nav-catalog";
+import { NavBuilderTabs } from "@/components/nav-builder";
 
-/** Arrange the menu — every member can arrange their own; owners also set the family default. */
+/**
+ * The menu builder — every member arranges their own menu; the owner also
+ * gets the family default (scope switch, like Tracey's tenant/user split).
+ * The personal builder starts from the personal layout if saved, else the
+ * family default, and only shows modules that member may open.
+ */
 export default async function MenuPage() {
   const membership = await getMembership();
   if (!membership) redirect("/onboarding");
@@ -18,56 +23,24 @@ export default async function MenuPage() {
 
   const isOwner = membership.role === "owner";
   const perms = await getPermissions(membership.household_id, user.id, membership.role);
-  const mine = visibleModules(perms).map((p) => p.module);
+  const mineSlugs = visibleModules(perms).map((p) => p.module.slug);
   const { household, personal } = await getNavPrefs(supabase, membership.household_id, user.id);
 
-  // seed editors with the currently-effective order, marking hidden items
-  const toItems = (base: typeof MODULES, prefs: NavItemPref[] | null) => {
-    const hidden = new Set((prefs ?? []).filter((p) => p.hidden).map((p) => p.slug));
-    const pos = new Map((prefs ?? []).map((p, i) => [p.slug, i]));
-    return base
-      .slice()
-      .sort((a, b) => (pos.get(a.slug) ?? 999) - (pos.get(b.slug) ?? 999))
-      .map((m) => ({ slug: m.slug, name: m.name, icon: m.icon, hidden: hidden.has(m.slug) }));
-  };
-
-  // personal editor starts from what the member actually sees (household default applied)
-  const mineArranged = applyNavPrefs(mine, household, null);
-  const mineHiddenByMe = new Set((personal ?? []).filter((p) => p.hidden).map((p) => p.slug));
-  const minePos = new Map((personal ?? []).map((p, i) => [p.slug, i]));
-  const mineItems = [
-    ...mineArranged,
-    // things I hid personally still need to appear in the editor so I can unhide them
-    ...mine.filter((m) => !mineArranged.some((x) => x.slug === m.slug)),
-  ]
-    .sort((a, b) => (minePos.get(a.slug) ?? 999) - (minePos.get(b.slug) ?? 999))
-    .map((m) => ({ slug: m.slug, name: m.name, icon: m.icon, hidden: mineHiddenByMe.has(m.slug) }));
+  const mineTree = layoutToTree(personal ?? household, mineSlugs);
+  const householdTree = isOwner ? layoutToTree(household, null) : null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">🎛️ Arrange the menu</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Put the things you use most at the front. Hiding something only tidies the menu — it
-          doesn&apos;t change who&apos;s allowed to use it.
+        <p className="mt-1 max-w-2xl text-sm text-stone-500">
+          Group things the way your family thinks — drag them between menus and sub-menus, make new
+          menus, hide what you don&apos;t use. Nothing changes until you Save. Who can open what is
+          set by permissions and always applies on top.
         </p>
       </div>
 
-      <NavEditor
-        scope="mine"
-        title="My menu"
-        hint="Only you see this order. It sits on top of the family menu."
-        initial={mineItems}
-      />
-
-      {isOwner && (
-        <NavEditor
-          scope="household"
-          title={`${membership.household.name}'s menu`}
-          hint="The default order everyone in the family starts with."
-          initial={toItems(MODULES, household)}
-        />
-      )}
+      <NavBuilderTabs mine={mineTree} household={householdTree} householdName={membership.household.name} />
     </div>
   );
 }

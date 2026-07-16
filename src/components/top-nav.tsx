@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { ModuleDef } from "@/lib/modules";
+import type { NavNode, NavItem, NavGroup } from "@/lib/nav-catalog";
 import { InstallButton } from "@/components/install-button";
 
 /**
  * Tracey-style top navigation, family-sized and Apple-simple:
  * one dark bar, big clear labels, Home first, everything one tap away.
- * WHAT appears here is decided by permissions; the ORDER by nav_prefs
- * (household default + personal) — see src/lib/nav.ts.
+ * WHAT appears here is decided by permissions; HOW it's arranged (order,
+ * grouping under "Label ▾" menus with sub-menu sections, hiding) by the
+ * resolved nav tree from nav_prefs — see src/lib/nav.ts + nav-catalog.ts.
  */
 export function TopNav({
   modules,
@@ -20,7 +21,7 @@ export function TopNav({
   role,
   signOutAction,
 }: {
-  modules: ModuleDef[];
+  modules: NavNode[];
   householdName: string;
   isOwner: boolean;
   userLabel: string;
@@ -31,29 +32,82 @@ export function TopNav({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false); // mobile panel
   const [userOpen, setUserOpen] = useState(false); // user dropdown
+  const [openGroup, setOpenGroup] = useState<{ id: string; left: number; top: number } | null>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMenuOpen(false);
     setUserOpen(false);
+    setOpenGroup(null);
   }, [pathname]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
       if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false);
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setOpenGroup(null);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  const hrefFor = (m: ModuleDef) => m.href ?? `/${m.slug}`;
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const groupActive = (g: NavGroup) => g.sections.some((s) => s.items.some((it) => isActive(it.href)));
   const onHome = pathname === "/dashboard" || pathname === "/";
 
   const linkCls = (active: boolean) =>
     `flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
       active ? "bg-white/15 font-medium text-white" : "text-stone-300 hover:bg-white/10 hover:text-white"
     }`;
+
+  const toggleGroup = (g: NavGroup, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openGroup?.id === g.id) {
+      setOpenGroup(null);
+      return;
+    }
+    // The bar scrolls horizontally, so the panel is position:fixed (escapes the
+    // overflow clip); anchor it to the button and clamp to the viewport.
+    const rect = e.currentTarget.getBoundingClientRect();
+    setOpenGroup({
+      id: g.id,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 340)),
+      top: rect.bottom + 6,
+    });
+  };
+
+  const dropdownItem = (it: NavItem) => (
+    <Link
+      key={it.slug}
+      href={it.href}
+      className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm hover:bg-stone-50 ${
+        isActive(it.href) ? "font-semibold text-teal-700" : "text-stone-800"
+      }`}
+    >
+      <span>{it.icon}</span> {it.label}
+    </Link>
+  );
+
+  // Mobile: flatten groups into titled sections of big buttons. Consecutive
+  // top-level links pool into an untitled section (Home leads the first one).
+  const mobileSections: { title: string | null; items: NavItem[] }[] = [];
+  {
+    let pool: NavItem[] = [];
+    const flush = () => {
+      if (pool.length) mobileSections.push({ title: null, items: pool });
+      pool = [];
+    };
+    for (const node of modules) {
+      if (node.kind === "link") {
+        pool.push(node);
+      } else {
+        flush();
+        for (const s of node.sections) {
+          mobileSections.push({ title: s.title ? `${node.label} — ${s.title}` : node.label, items: s.items });
+        }
+      }
+    }
+    flush();
+  }
 
   const initial = (userLabel.trim()[0] ?? "?").toUpperCase();
 
@@ -83,16 +137,46 @@ export function TopNav({
             </span>
           </Link>
 
-          {/* Desktop links */}
-          <nav className="mx-1 [scrollbar-width:none] hidden flex-1 items-center gap-1 overflow-x-auto md:flex">
+          {/* Desktop links + group dropdowns */}
+          <nav ref={navRef} className="mx-1 [scrollbar-width:none] hidden flex-1 items-center gap-1 overflow-x-auto md:flex">
             <Link href="/dashboard" className={linkCls(onHome)}>
               <span>🏡</span> Home
             </Link>
-            {modules.map((m) => (
-              <Link key={m.slug} href={hrefFor(m)} className={linkCls(isActive(hrefFor(m)))}>
-                <span>{m.icon}</span> {m.name}
-              </Link>
-            ))}
+            {modules.map((node) =>
+              node.kind === "link" ? (
+                <Link key={node.slug} href={node.href} className={linkCls(isActive(node.href))}>
+                  <span>{node.icon}</span> {node.label}
+                </Link>
+              ) : (
+                <div key={node.id} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => toggleGroup(node, e)}
+                    className={linkCls(groupActive(node) || openGroup?.id === node.id)}
+                    aria-expanded={openGroup?.id === node.id}
+                  >
+                    {node.label} <span className="text-[0.6rem] opacity-70">▾</span>
+                  </button>
+                  {openGroup?.id === node.id && (
+                    <div
+                      className="fixed z-50 flex max-w-[calc(100vw-1rem)] gap-4 overflow-x-auto rounded-xl border border-stone-200 bg-white p-2.5 text-stone-800 shadow-xl"
+                      style={{ left: openGroup.left, top: openGroup.top }}
+                    >
+                      {node.sections.map((s, i) => (
+                        <div key={i} className="min-w-40">
+                          {s.title && (
+                            <div className="px-2.5 pb-1 pt-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-stone-400">
+                              {s.title}
+                            </div>
+                          )}
+                          {s.items.map(dropdownItem)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            )}
           </nav>
 
           <div className="flex-1 md:hidden" />
@@ -155,36 +239,57 @@ export function TopNav({
         </div>
       </header>
 
-      {/* Mobile panel: big friendly buttons */}
+      {/* Mobile panel: big friendly buttons, groups flattened into titled sections */}
       {menuOpen && (
-        <div className="border-b border-stone-200 bg-white shadow-lg md:hidden">
-          <div className="grid grid-cols-3 gap-2 p-3">
-            <Link
-              href="/dashboard"
-              className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center ${
-                onHome ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 hover:bg-stone-50"
-              }`}
-            >
-              <span className="text-2xl">🏡</span>
-              <span className="text-xs font-medium">Home</span>
-            </Link>
-            {modules.map((m) => (
+        <div className="max-h-[calc(100vh-3.5rem)] overflow-y-auto border-b border-stone-200 bg-white shadow-lg md:hidden">
+          <div className="space-y-3 p-3">
+            <div className="grid grid-cols-3 gap-2">
               <Link
-                key={m.slug}
-                href={hrefFor(m)}
+                href="/dashboard"
                 className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center ${
-                  isActive(hrefFor(m))
-                    ? "border-stone-900 bg-stone-900 text-white"
-                    : "border-stone-200 hover:bg-stone-50"
+                  onHome ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 hover:bg-stone-50"
                 }`}
               >
-                <span className="text-2xl">{m.icon}</span>
-                <span className="text-xs font-medium leading-tight">{m.name}</span>
+                <span className="text-2xl">🏡</span>
+                <span className="text-xs font-medium">Home</span>
               </Link>
-            ))}
+              {(mobileSections[0]?.title === null ? mobileSections[0].items : []).map((it) => (
+                <MobileTile key={it.slug} item={it} active={isActive(it.href)} />
+              ))}
+            </div>
+            {mobileSections
+              .filter((s, i) => !(i === 0 && s.title === null))
+              .map((s, i) => (
+                <div key={i}>
+                  {s.title && (
+                    <div className="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                      {s.title}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2">
+                    {s.items.map((it) => (
+                      <MobileTile key={it.slug} item={it} active={isActive(it.href)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function MobileTile({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center ${
+        active ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 hover:bg-stone-50"
+      }`}
+    >
+      <span className="text-2xl">{item.icon}</span>
+      <span className="text-xs font-medium leading-tight">{item.label}</span>
+    </Link>
   );
 }

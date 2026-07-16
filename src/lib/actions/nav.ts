@@ -3,25 +3,28 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
-import { getModule } from "@/lib/modules";
-import type { NavItemPref } from "@/lib/nav";
+import { parseLayout, type NavLayout } from "@/lib/nav-catalog";
 
 export type NavScope = "household" | "mine";
 
-/** Save an arranged menu. Household scope is owner-only (also enforced by RLS). */
+/**
+ * Save an arranged menu tree (menus, sub-menus, order, show/hide).
+ * Household scope is owner-only (also enforced by RLS). parseLayout validates
+ * everything: every slug must exist in MODULES, duplicates and unknown junk
+ * are stripped, labels trimmed, sizes capped — the layout can only arrange,
+ * never grant access (permissions apply on top at render time).
+ */
 export async function saveNavPrefs(
   scope: NavScope,
-  layout: NavItemPref[]
+  layout: NavLayout
 ): Promise<{ ok: boolean; error?: string }> {
   const membership = await getMembership();
   if (!membership) return { ok: false, error: "Not signed in" };
   if (scope === "household" && membership.role !== "owner")
     return { ok: false, error: "Only the household owner can change the family menu" };
 
-  const clean = (Array.isArray(layout) ? layout : [])
-    .filter((i) => i && typeof i.slug === "string" && getModule(i.slug))
-    .slice(0, 50)
-    .map((i) => ({ slug: i.slug, hidden: Boolean(i.hidden) }));
+  const clean = parseLayout(layout);
+  if (!clean) return { ok: false, error: "Nothing to save" };
 
   const supabase = await createClient();
   const {
@@ -31,7 +34,7 @@ export async function saveNavPrefs(
   const row = {
     household_id: membership.household_id,
     user_id: scope === "mine" ? user!.id : null,
-    layout: clean,
+    layout: clean as unknown as object,
     updated_at: new Date().toISOString(),
   };
 
