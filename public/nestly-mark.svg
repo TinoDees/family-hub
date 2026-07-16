@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2bbfae"/><stop offset="1" stop-color="#35c9d8"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#35b5e0"/><stop offset="1" stop-color="#2e7fd9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- feathered nest: elongated feather strokes fanning around the bottom -->
+  <g fill="none" stroke-linecap="round">
+    <!-- left side, teal -->
+    <path d="M 68 268 C 60 330, 110 392, 190 414" stroke="url(#teal)" stroke-width="26"/>
+    <path d="M 96 320 C 110 368, 170 404, 240 416" stroke="url(#teal)" stroke-width="22" opacity="0.85"/>
+    <path d="M 52 306 C 62 372, 140 428, 232 440" stroke="url(#teal)" stroke-width="18" opacity="0.7"/>
+    <!-- bottom sweep -->
+    <path d="M 96 372 C 180 452, 330 452, 414 376" stroke="url(#blue)" stroke-width="26"/>
+    <path d="M 150 416 C 230 462, 300 460, 372 420" stroke="url(#teal)" stroke-width="18" opacity="0.75"/>
+    <!-- right side, blue -->
+    <path d="M 444 268 C 452 330, 402 392, 322 414" stroke="url(#blue)" stroke-width="26"/>
+    <path d="M 416 320 C 402 368, 342 404, 272 416" stroke="url(#blue)" stroke-width="22" opacity="0.85"/>
+    <path d="M 460 306 C 450 372, 372 428, 280 440" stroke="url(#blue)" stroke-width="18" opacity="0.7"/>
+  </g>
+
+  <!-- house outline, open at the bottom -->
+  <path d="M 128 360 L 128 226 L 256 112 L 384 226 L 384 360"
+        fill="none" stroke="#24365f" stroke-width="30"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- window -->
+  <g stroke="#24365f" stroke-width="12" stroke-linecap="round">
+    <rect x="228" y="154" width="56" height="52" rx="10" fill="none"/>
+    <line x1="256" y1="158" x2="256" y2="202"/>
+    <line x1="232" y1="180" x2="280" y2="180"/>
+  </g>
+
+  <!-- family: teal + blue adults outside-in, yellow child + purple child in front -->
+  <g>
+    <circle cx="178" cy="258" r="27" fill="#2bbfae"/>
+    <path d="M 142 374 L 142 336 C 142 304, 214 304, 214 336 L 214 374 Z" fill="#2bbfae"/>
+
+    <circle cx="334" cy="258" r="27" fill="#3d7bd9"/>
+    <path d="M 298 374 L 298 336 C 298 304, 370 304, 370 336 L 370 374 Z" fill="#3d7bd9"/>
+
+    <circle cx="222" cy="300" r="24" fill="#f2b231"/>
+    <path d="M 190 388 L 190 358 C 190 330, 254 330, 254 358 L 254 388 Z" fill="#f2b231"/>
+
+    <circle cx="288" cy="304" r="22" fill="#a64fbf"/>
+    <path d="M 258 390 L 258 362 C 258 336, 318 336, 318 362 L 318 390 Z" fill="#a64fbf"/>
+  </g>
+</svg>

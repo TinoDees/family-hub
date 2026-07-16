@@ -74,13 +74,12 @@ export default function Landing() {
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2.5">
           <Image
-            src="/nestly-icon-192.png"
-            alt="Nestly"
-            width={36}
-            height={36}
-            className="rounded-lg"
+            src="/nestly-logo.png"
+            alt="Nestly — everything your family needs, together"
+            width={168}
+            height={63}
+            priority
           />
-          <span className="text-lg font-semibold tracking-tight">Nestly</span>
         </div>
         <nav className="flex items-center gap-3">
           <Link
