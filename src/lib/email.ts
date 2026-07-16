@@ -103,3 +103,92 @@ export async function sendLoginLinkEmail({
   if (!res.ok) return { sent: false, reason: await res.text() };
   return { sent: true };
 }
+
+
+/* ------------------------- daily health report ------------------------- */
+
+const STATUS_META: Record<string, { emoji: string; color: string }> = {
+  ok: { emoji: "\u{1F7E2}", color: "#0d9488" },
+  warn: { emoji: "\u{1F7E1}", color: "#d97706" },
+  alert: { emoji: "\u{1F534}", color: "#dc2626" },
+  skip: { emoji: "\u26AA", color: "#a8a29e" },
+};
+
+export async function sendHealthReportEmail(
+  report: import("@/lib/health").HealthReport
+): Promise<{ sent: boolean; reason?: string }> {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  const to = process.env.ADMIN_ALERT_EMAIL;
+  if (!key || !from) return { sent: false, reason: "email-not-configured" };
+  if (!to) return { sent: false, reason: "ADMIN_ALERT_EMAIL not set" };
+
+  const meta = STATUS_META[report.status] ?? STATUS_META.ok;
+  const g = report.growth;
+  const f = report.funnel;
+  const s = report.security;
+
+  const row = (label: string, value: string | number) =>
+    `<tr><td style="padding:4px 12px 4px 0;color:#78716c;">${label}</td><td style="padding:4px 0;font-weight:bold;color:#1c1917;">${value}</td></tr>`;
+
+  const checksHtml = report.checks
+    .map((c) => {
+      const m = STATUS_META[c.status] ?? STATUS_META.skip;
+      return `<tr>
+        <td style="padding:6px 8px 6px 0;white-space:nowrap;">${m.emoji} <strong>${c.name}</strong></td>
+        <td style="padding:6px 0;color:#44403c;">${c.summary}${c.detail ? `<br/><span style="color:#a8a29e;font-size:12px;">${c.detail}</span>` : ""}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const html = emailShell({
+    title: `${meta.emoji} Daily health \u2014 ${report.status.toUpperCase()}`,
+    bodyHtml: `
+      <h2 style="font-size:14px;margin:0 0 8px;color:${meta.color};">Growth (last 24h)</h2>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:14px;margin-bottom:20px;">
+        ${row("New signups", g.new_users_24h)}
+        ${row("New households", g.new_households_24h)}
+        ${row("Account deletions (opt-outs)", g.account_deletions_24h)}
+        ${row("Total users", `${g.total_users} (${g.new_users_7d} this week)`)}
+      </table>
+      <h2 style="font-size:14px;margin:0 0 8px;color:${meta.color};">Funnel (last 24h)</h2>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:14px;margin-bottom:20px;">
+        ${row("Landing visitors", f.landing_visitors_24h)}
+        ${row("Reached signup page", f.signup_page_views_24h)}
+        ${row("Completed signup", f.signups_completed_24h)}
+        ${row("Visited but didn't proceed", f.bounced_visitors_24h)}
+        ${row("Visit \u2192 signup", f.visit_to_signup_pct === null ? "\u2014" : `${f.visit_to_signup_pct}%`)}
+      </table>
+      <h2 style="font-size:14px;margin:0 0 8px;color:${meta.color};">Security (last 24h)</h2>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:14px;margin-bottom:20px;">
+        ${row("Failed logins", `${s.failed_logins_24h} (avg ${s.failed_logins_daily_avg_7d}/day)`)}
+        ${row("Failed signups", s.failed_signups_24h)}
+        ${row("Bad webhook signatures", s.bad_webhook_signatures_24h)}
+      </table>
+      ${
+        s.notes.length > 0
+          ? `<p style="background:#fef2f2;border-radius:8px;padding:12px;color:#b91c1c;font-size:13px;">${s.notes.join("<br/>")}</p>`
+          : ""
+      }
+      <h2 style="font-size:14px;margin:0 0 8px;color:${meta.color};">Services</h2>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:13px;">${checksHtml}</table>
+      <p style="margin-top:24px;font-size:12px;color:#a8a29e;">Full history at /admin/health.</p>`,
+  });
+
+  const date = new Date(report.run_at).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+  });
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: `${meta.emoji} Nestly health ${report.status.toUpperCase()} \u2014 ${date} \u2014 ${g.new_users_24h} signup(s)`,
+      html,
+    }),
+  });
+  if (!res.ok) return { sent: false, reason: await res.text() };
+  return { sent: true };
+}

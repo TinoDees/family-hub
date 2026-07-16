@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { login } from "@/lib/actions/auth";
 import { AuthCard, inputCls } from "@/components/auth-card";
+import Track from "@/components/track";
 
 export default async function LoginPage({
   searchParams,
@@ -10,6 +11,7 @@ export default async function LoginPage({
   const { error, message, next } = await searchParams;
   return (
     <AuthCard title="Nestly" subtitle="Sign in to your household" error={error} message={message}>
+      <Track path="/login" />
       <form action={login} className="space-y-3">
         {next && <input type="hidden" name="next" value={next} />}
         <input name="email" type="text" required placeholder="Email or username" autoComplete="username" className={inputCls} />

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { signup } from "@/lib/actions/auth";
 import { inputCls } from "@/components/auth-card";
+import Track from "@/components/track";
 
 const perks = [
   "Free during early access — no card needed",
@@ -17,6 +18,7 @@ export default async function SignupPage({
   const { error, next } = await searchParams;
   return (
     <main className="flex min-h-screen items-center justify-center bg-stone-50 p-6">
+      <Track path="/signup" />
       <div className="w-full max-w-sm">
         <div className="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm">
           <div className="mb-6 text-center">

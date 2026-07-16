@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolvePayees, payeeMatchKey } from "@/lib/payees";
 import { detectTransfers } from "@/lib/transfers";
+import { logSecurityEvent } from "@/lib/telemetry";
+import { requestIpHash } from "@/lib/hash";
 
 export const runtime = "nodejs";
 
@@ -54,6 +56,7 @@ export async function POST(req: Request) {
     .select("id, household_id, webhook_secret");
 
   let householdId: string | null = null;
+  let feedId: string | null = null;
   const sigBuf = Buffer.from(signature);
   for (const feed of feeds ?? []) {
     const expected = Buffer.from(
@@ -61,10 +64,24 @@ export async function POST(req: Request) {
     );
     if (sigBuf.length === expected.length && timingSafeEqual(sigBuf, expected)) {
       householdId = feed.household_id;
+      feedId = feed.id;
       break;
     }
   }
-  if (!householdId) return NextResponse.json({ ok: false, reason: "unknown signature" }, { status: 401 });
+  if (!householdId) {
+    await logSecurityEvent("webhook_bad_signature", {
+      path: "/api/feeds/redbark",
+      ipHash: requestIpHash(req),
+      detail: "signature did not match any feed",
+    });
+    return NextResponse.json({ ok: false, reason: "unknown signature" }, { status: 401 });
+  }
+  // liveness stamp for the daily health check
+  if (feedId)
+    await admin
+      .from("redbark_feeds")
+      .update({ last_received_at: new Date().toISOString() })
+      .eq("id", feedId);
 
   let event: {
     type?: string;

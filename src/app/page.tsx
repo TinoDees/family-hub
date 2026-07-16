@@ -2,13 +2,20 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership } from "@/lib/household";
 import Landing from "@/components/landing";
+import Track from "@/components/track";
 
 export default async function Home() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return <Landing />;
+  if (!user)
+    return (
+      <>
+        <Track path="/" />
+        <Landing />
+      </>
+    );
 
   const membership = await getMembership();
   if (membership) redirect("/dashboard");

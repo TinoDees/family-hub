@@ -1,6 +1,7 @@
 {
   "regions": ["syd1"],
   "crons": [
-    { "path": "/api/cron/cleanup-receipts", "schedule": "0 17 * * *" }
+    { "path": "/api/cron/cleanup-receipts", "schedule": "0 17 * * *" },
+    { "path": "/api/cron/daily-health", "schedule": "0 21 * * *" }
   ]
 }

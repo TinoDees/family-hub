@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import Track from "@/components/track";
 
 export const metadata: Metadata = {
   title: "Pricing — Nestly",
@@ -52,6 +53,7 @@ function Check() {
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
+      <Track path="/pricing" />
       {/* Nav */}
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <Link href="/" className="flex items-center gap-2.5">

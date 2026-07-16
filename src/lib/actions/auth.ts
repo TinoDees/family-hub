@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logSecurityEvent, logAnalyticsEvent } from "@/lib/telemetry";
+import { saltedHash, actionIpHash } from "@/lib/hash";
 
 function safeNext(raw: FormDataEntryValue | null): string | null {
   const next = String(raw ?? "");
@@ -22,10 +24,18 @@ export async function login(formData: FormData) {
     email: identifier,
     password: String(formData.get("password") ?? ""),
   });
-  if (error)
+  if (error) {
+    await logSecurityEvent("login_failed", {
+      identifier: identifier ? saltedHash(identifier) : null,
+      ipHash: await actionIpHash(),
+      path: "/login",
+      detail: error.message,
+    });
     redirect(
       `/login?error=${encodeURIComponent(error.message)}${next ? `&next=${encodeURIComponent(next)}` : ""}`
     );
+  }
+  await logAnalyticsEvent("login", { path: "/login", ipHash: await actionIpHash() });
   revalidatePath("/", "layout");
   redirect(next ?? "/");
 }
@@ -42,6 +52,12 @@ export async function signup(formData: FormData) {
     },
   });
   if (error) {
+    await logSecurityEvent("signup_failed", {
+      identifier: email ? saltedHash(email) : null,
+      ipHash: await actionIpHash(),
+      path: "/signup",
+      detail: error.message,
+    });
     if (/already registered/i.test(error.message))
       redirect(
         `/login?message=${encodeURIComponent(
@@ -52,6 +68,10 @@ export async function signup(formData: FormData) {
       `/signup?error=${encodeURIComponent(error.message)}${next ? `&next=${encodeURIComponent(next)}` : ""}`
     );
   }
+  await logAnalyticsEvent("signup_completed", {
+    path: "/signup",
+    ipHash: await actionIpHash(),
+  });
   if (!data.session)
     redirect("/login?message=Check+your+email+to+confirm+your+account");
   revalidatePath("/", "layout");

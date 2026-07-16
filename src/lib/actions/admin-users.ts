@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMembership } from "@/lib/household";
+import { logSecurityEvent } from "@/lib/telemetry";
+import { saltedHash } from "@/lib/hash";
 
 const NO_KEY_MSG =
   "Admin operations need the SUPABASE_SERVICE_ROLE_KEY environment variable (Supabase dashboard → Project Settings → API Keys)";
@@ -111,6 +113,11 @@ export async function adminDeleteUser(formData: FormData) {
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(userId);
+  if (!error)
+    await logSecurityEvent("account_deleted", {
+      identifier: saltedHash(userId),
+      detail: "deleted by household owner",
+    });
   revalidatePath("/settings/members");
   redirect(
     error
