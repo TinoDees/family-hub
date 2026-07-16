@@ -6,6 +6,12 @@ import {
   assignCategoryInline,
   deleteTransactionInline,
 } from "@/lib/actions/finance";
+import {
+  suggestCategories,
+  acceptSuggestion,
+  dismissSuggestion,
+  acceptAllSuggestions,
+} from "@/lib/actions/classify";
 
 type Row = {
   id: string;
@@ -14,6 +20,7 @@ type Row = {
   merchant: string | null;
   amount: number;
   category_id: string | null;
+  suggested_category_id: string | null;
   source: string;
   account_id: string | null;
 };
@@ -52,6 +59,7 @@ export function TransactionsGrid({
   const [dir, setDir] = useState<1 | -1>(-1);
   const [msg, setMsg] = useState<string | null>(null);
   const [modal, setModal] = useState<{ txnId: string; name: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const [, startTransition] = useTransition();
 
   const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
@@ -60,7 +68,11 @@ export function TransactionsGrid({
 
   const applyCategory = (txnId: string, category: Cat | null) => {
     const prev = data;
-    setData((d) => d.map((r) => (r.id === txnId ? { ...r, category_id: category?.id ?? null } : r)));
+    setData((d) =>
+      d.map((r) =>
+        r.id === txnId ? { ...r, category_id: category?.id ?? null, suggested_category_id: null } : r
+      )
+    );
     startTransition(async () => {
       const res = await assignCategoryInline(txnId, category?.id ?? null);
       if (!res.ok) {
@@ -69,6 +81,78 @@ export function TransactionsGrid({
       }
     });
   };
+
+  const acceptOne = (txnId: string) => {
+    const prev = data;
+    setData((d) =>
+      d.map((r) =>
+        r.id === txnId
+          ? { ...r, category_id: r.suggested_category_id, suggested_category_id: null }
+          : r
+      )
+    );
+    startTransition(async () => {
+      const res = await acceptSuggestion(txnId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not accept suggestion");
+      }
+    });
+  };
+
+  const dismissOne = (txnId: string) => {
+    const prev = data;
+    setData((d) => d.map((r) => (r.id === txnId ? { ...r, suggested_category_id: null } : r)));
+    startTransition(async () => {
+      const res = await dismissSuggestion(txnId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not dismiss suggestion");
+      }
+    });
+  };
+
+  const runSuggest = () => {
+    setAiBusy(true);
+    startTransition(async () => {
+      const res = await suggestCategories(monthKey);
+      setAiBusy(false);
+      if (!res.ok) {
+        setMsg(res.error ?? "Suggestions failed");
+        return;
+      }
+      if (res.suggestions.length === 0) {
+        setMsg("Nothing new to suggest — everything is categorised or already has a suggestion.");
+        return;
+      }
+      const byTxn = new Map(res.suggestions.map((s) => [s.txnId, s.categoryId]));
+      setData((d) =>
+        d.map((r) => (byTxn.has(r.id) ? { ...r, suggested_category_id: byTxn.get(r.id)! } : r))
+      );
+    });
+  };
+
+  const acceptAll = () => {
+    const ids = data.filter((r) => !r.category_id && r.suggested_category_id).map((r) => r.id);
+    if (ids.length === 0) return;
+    const prev = data;
+    setData((d) =>
+      d.map((r) =>
+        !r.category_id && r.suggested_category_id
+          ? { ...r, category_id: r.suggested_category_id, suggested_category_id: null }
+          : r
+      )
+    );
+    startTransition(async () => {
+      const res = await acceptAllSuggestions(ids);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not accept suggestions");
+      }
+    });
+  };
+
+  const suggestionCount = data.filter((r) => !r.category_id && r.suggested_category_id).length;
 
   const removeRow = (txnId: string) => {
     if (!window.confirm("Delete this transaction?")) return;
@@ -193,6 +277,25 @@ export function TransactionsGrid({
         <button type="button" onClick={exportCsv} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
           ⬇ CSV
         </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={runSuggest}
+            disabled={aiBusy}
+            className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+          >
+            {aiBusy ? "Thinking…" : "✨ Suggest categories"}
+          </button>
+        )}
+        {canEdit && suggestionCount > 0 && (
+          <button
+            type="button"
+            onClick={acceptAll}
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
+          >
+            ✓ Accept all {suggestionCount}
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
@@ -225,12 +328,38 @@ export function TransactionsGrid({
                   <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
                   <td className="px-3 py-2">
                     {canEdit ? (
-                      <CategoryPicker
-                        current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
-                        categories={cats}
-                        onPick={(c) => applyCategory(t.id, c)}
-                        onCreate={(name) => setModal({ txnId: t.id, name })}
-                      />
+                      <div>
+                        <CategoryPicker
+                          current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
+                          categories={cats}
+                          onPick={(c) => applyCategory(t.id, c)}
+                          onCreate={(name) => setModal({ txnId: t.id, name })}
+                        />
+                        {!t.category_id && t.suggested_category_id && catById.get(t.suggested_category_id) && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-violet-700">
+                            <span className="truncate">
+                              ✨ {catById.get(t.suggested_category_id)!.icon ?? ""}{" "}
+                              {catById.get(t.suggested_category_id)!.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => acceptOne(t.id)}
+                              className="rounded bg-violet-100 px-1.5 py-0.5 font-medium hover:bg-violet-200"
+                              title="Accept suggestion"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => dismissOne(t.id)}
+                              className="rounded px-1 py-0.5 text-stone-400 hover:bg-stone-100"
+                              title="Dismiss suggestion"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-stone-500">
                         {t.category_id ? `${catById.get(t.category_id)?.icon ?? ""} ${catById.get(t.category_id)?.name ?? "—"}` : "—"}

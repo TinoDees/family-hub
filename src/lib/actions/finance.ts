@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance } from "@/lib/finance";
+import { resolvePayees, payeeMatchKey, learnPayeeDefault } from "@/lib/payees";
 
 function enc(s: string) {
   return encodeURIComponent(s);
@@ -206,9 +207,15 @@ export async function setTransactionCategory(formData: FormData) {
 
   await supabase
     .from("finance_transactions")
-    .update({ category_id: categoryId })
+    .update({
+      category_id: categoryId,
+      suggested_category_id: null,
+      suggestion_source: null,
+      suggestion_confidence: null,
+    })
     .eq("id", String(formData.get("txn_id")))
     .eq("household_id", membership.household_id);
+  await learnPayeeDefault(supabase, membership.household_id, String(formData.get("txn_id")), categoryId);
   revalidatePath("/finance");
   redirect(`/finance/transactions?m=${formData.get("m") ?? ""}`);
 }
@@ -246,10 +253,17 @@ export async function assignCategoryInline(
   const supabase = await createClient();
   const { error } = await supabase
     .from("finance_transactions")
-    .update({ category_id: categoryId })
+    .update({
+      category_id: categoryId,
+      suggested_category_id: null,
+      suggestion_source: null,
+      suggestion_confidence: null,
+    })
     .eq("id", txnId)
     .eq("household_id", membership.household_id);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  if (error) return { ok: false, error: error.message };
+  await learnPayeeDefault(supabase, membership.household_id, txnId, categoryId);
+  return { ok: true };
 }
 
 export async function deleteTransactionInline(txnId: string): Promise<{ ok: boolean; error?: string }> {
@@ -301,8 +315,15 @@ export async function importTransactions(
     .select("id, name")
     .eq("household_id", membership.household_id);
   const catByName = new Map((cats ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
+  const payees = await resolvePayees(supabase, membership.household_id, rows.map((r) => r.merchant));
 
-  const records = rows.map((r) => ({
+  const records = rows.map((r) => {
+    const matchKey = payeeMatchKey(r.merchant);
+    const payee = matchKey ? payees.get(matchKey) : undefined;
+    const categoryId =
+      payee?.default_category_id ??
+      (r.bankCategory ? (catByName.get(r.bankCategory.trim().toLowerCase()) ?? null) : null);
+    return {
     household_id: membership.household_id,
     account_id: accountId,
     posted_at: r.date,
@@ -313,16 +334,17 @@ export async function importTransactions(
     source: "import" as const,
     bank_category: r.bankCategory?.slice(0, 100) || null,
     txn_type: r.txnType?.slice(0, 100) || null,
-    category_id: r.bankCategory
-      ? (catByName.get(r.bankCategory.trim().toLowerCase()) ?? null)
-      : null,
+    payee_id: payee?.id ?? null,
+    category_id: categoryId,
+    suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
     import_hash: createHash("sha256")
       .update(
         `${membership.household_id}|${accountId}|${r.date}|${r.amount.toFixed(2)}|${r.description.trim().toLowerCase()}`
       )
       .digest("hex"),
     created_by: userId,
-  }));
+    };
+  });
 
   // dedupe within the file itself
   const seen = new Set<string>();

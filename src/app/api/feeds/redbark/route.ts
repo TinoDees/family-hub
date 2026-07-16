@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual, createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolvePayees, payeeMatchKey } from "@/lib/payees";
 
 export const runtime = "nodejs";
 
@@ -137,11 +138,19 @@ export async function POST(req: Request) {
     .eq("household_id", householdId);
   const catByName = new Map((cats ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
 
+  // --- payees: find-or-create per merchant; a learned payee default beats the bank's label ---
+  const payees = await resolvePayees(admin, householdId, incoming.map((t) => t.merchant_name));
+
   const records = incoming
     .map((t) => {
       const accountId = accountIdFor.get(t.account_id);
       if (!accountId) return null;
       const bankCategory = t.custom_category ?? (t.category ? humanise(t.category) : null);
+      const matchKey = payeeMatchKey(t.merchant_name);
+      const payee = matchKey ? payees.get(matchKey) : undefined;
+      const categoryId =
+        payee?.default_category_id ??
+        (bankCategory ? (catByName.get(bankCategory.trim().toLowerCase()) ?? null) : null);
       return {
         household_id: householdId!,
         account_id: accountId,
@@ -153,7 +162,9 @@ export async function POST(req: Request) {
         source: "feed",
         bank_category: bankCategory?.slice(0, 100) ?? null,
         txn_type: t.class?.slice(0, 100) ?? null,
-        category_id: bankCategory ? (catByName.get(bankCategory.trim().toLowerCase()) ?? null) : null,
+        payee_id: payee?.id ?? null,
+        category_id: categoryId,
+        suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
         external_id: t.id,
         import_hash: createHash("sha256").update(`redbark|${t.id}`).digest("hex"),
       };

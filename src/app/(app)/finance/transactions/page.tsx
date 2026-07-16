@@ -24,7 +24,7 @@ export default async function TransactionsPage({
   const [{ data: txns }, { data: categories }, { data: accounts }] = await Promise.all([
     supabase
       .from("finance_transactions")
-      .select("id, posted_at, description, merchant, amount, category_id, source, account_id")
+      .select("id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id")
       .eq("household_id", membership.household_id)
       .gte("posted_at", month.start)
       .lte("posted_at", month.end)
@@ -132,6 +132,7 @@ export default async function TransactionsPage({
           merchant: t.merchant,
           amount: Number(t.amount),
           category_id: t.category_id,
+          suggested_category_id: t.suggested_category_id,
           source: t.source,
           account_id: t.account_id,
         }))}
