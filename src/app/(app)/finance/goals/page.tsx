@@ -81,6 +81,7 @@ export default async function GoalsPage({
       .from("finance_transactions")
       .select("amount")
       .eq("household_id", membership.household_id)
+      .eq("is_transfer", false)
       .gte("posted_at", windowStart)
       .lte("posted_at", windowEnd),
   ]);

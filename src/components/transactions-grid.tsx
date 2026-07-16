@@ -12,6 +12,7 @@ import {
   dismissSuggestion,
   acceptAllSuggestions,
 } from "@/lib/actions/classify";
+import { findTransfersInline, setTransferInline } from "@/lib/actions/transfers";
 
 type Row = {
   id: string;
@@ -22,6 +23,7 @@ type Row = {
   category_id: string | null;
   suggested_category_id: string | null;
   source: string;
+  is_transfer: boolean;
   account_id: string | null;
 };
 type Cat = { id: string; name: string; icon: string | null; kind: string };
@@ -60,6 +62,7 @@ export function TransactionsGrid({
   const [msg, setMsg] = useState<string | null>(null);
   const [modal, setModal] = useState<{ txnId: string; name: string } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
   const [, startTransition] = useTransition();
 
   const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
@@ -152,7 +155,46 @@ export function TransactionsGrid({
     });
   };
 
-  const suggestionCount = data.filter((r) => !r.category_id && r.suggested_category_id).length;
+  const suggestionCount = data.filter((r) => !r.category_id && r.suggested_category_id && !r.is_transfer).length;
+
+  const toggleTransfer = (txnId: string, makeTransfer: boolean) => {
+    const prev = data;
+    setData((d) =>
+      d.map((r) =>
+        r.id === txnId ? { ...r, is_transfer: makeTransfer, suggested_category_id: null } : r
+      )
+    );
+    startTransition(async () => {
+      const res = await setTransferInline(txnId, makeTransfer);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not update");
+        return;
+      }
+      // the matching leg on the other account follows along
+      if (res.pairedId)
+        setData((d) =>
+          d.map((r) => (r.id === res.pairedId ? { ...r, is_transfer: makeTransfer } : r))
+        );
+    });
+  };
+
+  const runFindTransfers = () => {
+    setTransferBusy(true);
+    startTransition(async () => {
+      const res = await findTransfersInline();
+      setTransferBusy(false);
+      if (!res.ok) {
+        setMsg(res.error ?? "Could not scan for transfers");
+        return;
+      }
+      setMsg(
+        res.found === 0
+          ? "No new transfers found — everything already looks right."
+          : `Found ${res.found} transfer${res.found === 1 ? "" : "s"} between your accounts — they no longer count as spending or income. Refresh to see them.`
+      );
+    });
+  };
 
   const removeRow = (txnId: string) => {
     if (!window.confirm("Delete this transaction?")) return;
@@ -194,9 +236,15 @@ export function TransactionsGrid({
   }, [data, q, acc, cat, from, to, sort, dir, accName, catById]);
 
   const totals = useMemo(() => {
-    let inn = 0, out = 0;
-    for (const r of filtered) r.amount >= 0 ? (inn += r.amount) : (out += r.amount);
-    return { inn, out, net: inn + out, n: filtered.length };
+    let inn = 0, out = 0, transfers = 0;
+    for (const r of filtered) {
+      if (r.is_transfer) {
+        transfers++;
+        continue; // moving money between your own accounts is neither in nor out
+      }
+      r.amount >= 0 ? (inn += r.amount) : (out += r.amount);
+    }
+    return { inn, out, net: inn + out, n: filtered.length, transfers };
   }, [filtered]);
 
   const clickSort = (k: SortKey) => {
@@ -296,6 +344,17 @@ export function TransactionsGrid({
             ✓ Accept all {suggestionCount}
           </button>
         )}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={runFindTransfers}
+            disabled={transferBusy}
+            title="Find money moved between your own accounts and stop counting it as spending"
+            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+          >
+            {transferBusy ? "Scanning…" : "🔁 Find transfers"}
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
@@ -327,7 +386,21 @@ export function TransactionsGrid({
                   </td>
                   <td className="px-3 py-2 text-stone-500">{t.account_id ? accName.get(t.account_id) : "—"}</td>
                   <td className="px-3 py-2">
-                    {canEdit ? (
+                    {t.is_transfer ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                        🔁 Transfer
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTransfer(t.id, false)}
+                            title="Not a transfer — count it again"
+                            className="text-sky-400 hover:text-sky-700"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </span>
+                    ) : canEdit ? (
                       <div>
                         <CategoryPicker
                           current={t.category_id ? (catById.get(t.category_id) ?? null) : null}
@@ -371,6 +444,16 @@ export function TransactionsGrid({
                   </td>
                   {canEdit && (
                     <td className="px-2 py-2 text-right">
+                      {!t.is_transfer && (
+                        <button
+                          type="button"
+                          onClick={() => toggleTransfer(t.id, true)}
+                          className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-sky-50 hover:text-sky-600"
+                          title="This is a transfer between our own accounts"
+                        >
+                          🔁
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeRow(t.id)}
@@ -388,6 +471,9 @@ export function TransactionsGrid({
               <tr className="border-t border-stone-200 bg-stone-50 text-xs font-medium">
                 <td className="px-3 py-2 text-stone-500" colSpan={2}>
                   {totals.n} transaction{totals.n === 1 ? "" : "s"}
+                  {totals.transfers > 0 && (
+                    <span className="text-stone-400"> · {totals.transfers} transfer{totals.transfers === 1 ? "" : "s"} not counted</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-emerald-600">in {fmt(totals.inn)}</td>
                 <td className="px-3 py-2 text-red-600">out {fmt(totals.out)}</td>

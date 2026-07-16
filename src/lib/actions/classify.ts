@@ -42,6 +42,7 @@ export async function suggestCategories(
       .lte("posted_at", month.end)
       .is("category_id", null)
       .is("suggested_category_id", null)
+      .eq("is_transfer", false)
       .order("posted_at", { ascending: false })
       .limit(MAX_TXNS),
   ]);

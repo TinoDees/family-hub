@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual, createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolvePayees, payeeMatchKey } from "@/lib/payees";
+import { detectTransfers } from "@/lib/transfers";
 
 export const runtime = "nodejs";
 
@@ -181,5 +182,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 }); // 5xx → Redbark retries
   }
 
-  return NextResponse.json({ ok: true, received: records.length, upserted: count ?? records.length });
+  // pair up internal transfers among recent transactions (best effort)
+  let transfers = 0;
+  try {
+    const earliest = incoming.map((t) => t.local_date).sort()[0];
+    const since = new Date(new Date(earliest).getTime() - 5 * 86400000).toISOString().slice(0, 10);
+    transfers = await detectTransfers(admin, householdId, { since });
+  } catch {
+    /* next sync will catch them */
+  }
+
+  return NextResponse.json({ ok: true, received: records.length, upserted: count ?? records.length, transfers });
 }

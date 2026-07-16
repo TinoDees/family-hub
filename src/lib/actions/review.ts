@@ -73,18 +73,21 @@ export async function generateReview(
       .from("finance_transactions")
       .select("amount, category_id")
       .eq("household_id", hid)
+      .eq("is_transfer", false)
       .gte("posted_at", month.start)
       .lte("posted_at", month.end),
     supabase
       .from("finance_transactions")
       .select("amount, category_id")
       .eq("household_id", hid)
+      .eq("is_transfer", false)
       .gte("posted_at", prev.start)
       .lte("posted_at", prev.end),
     supabase
       .from("finance_transactions")
       .select("amount, payee_id, category_id, posted_at")
       .eq("household_id", hid)
+      .eq("is_transfer", false)
       .not("payee_id", "is", null)
       .lt("amount", 0)
       .gte("posted_at", windowStart)
