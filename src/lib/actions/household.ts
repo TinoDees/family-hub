@@ -13,7 +13,7 @@ export async function createHousehold(formData: FormData) {
   if (error) redirect(`/onboarding?error=${encodeURIComponent(error.message)}`);
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/setup-device");
 }
 
 export async function joinHousehold(formData: FormData) {
@@ -30,5 +30,5 @@ export async function joinHousehold(formData: FormData) {
     );
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/setup-device");
 }

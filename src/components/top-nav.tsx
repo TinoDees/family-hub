@@ -211,6 +211,9 @@ export function TopNav({
                   <Link href="/menu" className="block px-4 py-2 hover:bg-stone-50">
                     🎛️ Customise my menu
                   </Link>
+                  <Link href="/account/iphone-sharing" className="block px-4 py-2 hover:bg-stone-50">
+                    📲 iPhone sharing
+                  </Link>
                   {isOwner && (
                     <Link href="/settings" className="block px-4 py-2 hover:bg-stone-50">
                       ⚙️ Settings

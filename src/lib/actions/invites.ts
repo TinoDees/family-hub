@@ -172,7 +172,7 @@ export async function acceptInviteNewUser(formData: FormData) {
   if (acceptError) fail(acceptError.message);
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/setup-device");
 }
 
 export async function signOutToInvite(formData: FormData) {
@@ -189,5 +189,5 @@ export async function acceptInvite(formData: FormData) {
   if (error)
     redirect(`/invite/${token}?error=${encodeURIComponent(error.message)}`);
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/setup-device");
 }

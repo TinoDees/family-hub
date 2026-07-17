@@ -11,6 +11,7 @@ import {
   type Occurrence,
 } from "@/lib/planner";
 import { formatMoney } from "@/lib/finance";
+import { dismissDeviceSetupNudge } from "@/lib/actions/device-setup";
 
 const TYPE_ICON: Record<string, string> = {
   bank: "🏦",
@@ -90,6 +91,15 @@ export default async function DashboardPage() {
 
   const perms = await getPermissions(membership.household_id, user!.id, membership.role);
   const can = (slug: string) => canAtLeast(accessFor(perms, slug), "view");
+
+  // "Set up your phone" nudge — shown only while the user has neither
+  // completed nor skipped the /setup-device flow (dismissed counts as done).
+  const { data: deviceSetup } = await supabase
+    .from("user_device_setup")
+    .select("completed_at, dismissed_at")
+    .eq("user_id", user!.id)
+    .maybeSingle();
+  const showDeviceNudge = !deviceSetup?.completed_at && !deviceSetup?.dismissed_at;
 
   const hid = membership.household_id;
   const tz = membership.household.timezone ?? "Australia/Sydney";
@@ -336,6 +346,27 @@ export default async function DashboardPage() {
           </p>
         )}
       </div>
+
+      {/* Device setup nudge — until /setup-device is completed or skipped */}
+      {showDeviceNudge && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4">
+          <Link
+            href="/setup-device"
+            className="min-w-0 truncate text-sm font-medium text-teal-900 hover:underline"
+          >
+            📲 Finish setting up your phone → 2 minutes
+          </Link>
+          <form action={dismissDeviceSetupNudge}>
+            <button
+              className="shrink-0 rounded px-1.5 text-sm text-teal-600 hover:bg-teal-100 hover:text-teal-900"
+              title="Dismiss"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Trips this user is invited to (other households) */}
       {guestTrips.length > 0 && (
