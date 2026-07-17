@@ -20,6 +20,11 @@ export default async function ShareRecipePage({
   const { membership } = await requireModule("recipes", "edit");
   const { url, text, title, video, err } = await searchParams;
   const shared = extractUrl(url, text, title);
+  // no link in the share (e.g. a copied ChatGPT recipe) — treat it as recipe text
+  const sharedText = !shared
+    ? [title, text].filter((s) => s && s.trim().length > 0).join("\n\n").trim()
+    : undefined;
+  const initialText = sharedText && sharedText.length >= 40 ? sharedText : undefined;
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -42,7 +47,7 @@ export default async function ShareRecipePage({
             Upload failed — try again.
           </p>
         )}
-        {!shared && !video && !err && (
+        {!shared && !initialText && !video && !err && (
           <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800">
             Share a recipe page or a saved video to Nestly, or paste a link below.
           </p>
@@ -50,6 +55,7 @@ export default async function ShareRecipePage({
         <NewRecipeClient
           householdId={membership.household_id}
           initialUrl={shared}
+          initialText={initialText}
           initialVideoPath={video}
         />
       </main>

@@ -6,7 +6,7 @@ import { RecipeForm } from "@/components/recipe-form";
 import { createRecipe } from "@/lib/actions/recipes";
 import { scanRecipeImage, type ScannedRecipe } from "@/lib/actions/recipe-scan";
 import { recipeFromVideo, recipeFromYouTube } from "@/lib/actions/video-recipe";
-import { recipeFromUrl } from "@/lib/actions/recipe-from-url";
+import { recipeFromUrl, recipeFromText } from "@/lib/actions/recipe-from-url";
 import { createClient } from "@/lib/supabase/client";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
@@ -34,11 +34,14 @@ async function toBase64(file: File): Promise<{ data: string; mediaType: string }
 export function NewRecipeClient({
   householdId,
   initialUrl,
+  initialText,
   initialVideoPath,
 }: {
   householdId: string;
   /** pre-filled by the Android share target — auto-reads on load */
   initialUrl?: string;
+  /** Shared plain text (e.g. a copied ChatGPT recipe) — parsed on load. */
+  initialText?: string;
   /** a video file already uploaded by the share target — auto-processes */
   initialVideoPath?: string;
 }) {
@@ -129,8 +132,24 @@ export function NewRecipeClient({
     }
   };
 
-  // share-target flow: auto-read the shared link / video once
-  if ((initialUrl || initialVideoPath) && !autoRan) {
+  const [pasted, setPasted] = useState("");
+  const onText = async (raw?: string) => {
+    const text = (raw ?? pasted).trim();
+    if (!text) return;
+    setScanning(true);
+    setMsg("Reading the recipe text…");
+    try {
+      const res = await recipeFromText(text);
+      applyResult(res);
+    } catch {
+      setMsg("Reading failed — try again.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // share-target flow: auto-read the shared link / text / video once
+  if ((initialUrl || initialText || initialVideoPath) && !autoRan) {
     setAutoRan(true);
     if (initialVideoPath) {
       setTimeout(async () => {
@@ -148,6 +167,9 @@ export function NewRecipeClient({
       }, 0);
     } else if (initialUrl) {
       setTimeout(() => onLink(initialUrl), 0);
+    } else if (initialText) {
+      setPasted(initialText);
+      setTimeout(() => onText(initialText), 0);
     }
   }
 
@@ -227,6 +249,35 @@ export function NewRecipeClient({
           Cookbook pages, screenshots, saved videos, YouTube links — or any recipe website link. Handwritten notes work too: take a normal photo and use &ldquo;From a screenshot&rdquo;, or untick B&amp;W in the scanner.
         </span>
       </div>
+
+      {/* Pasted text — the reliable route for ChatGPT/Claude/WhatsApp recipes */}
+      <details className="rounded-xl border border-stone-200 bg-white" open={Boolean(initialText)}>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-600">
+          📋 Paste a recipe (from ChatGPT, WhatsApp, notes…)
+        </summary>
+        <div className="space-y-2 border-t border-stone-100 px-4 py-3">
+          <textarea
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            rows={6}
+            placeholder="Copy the whole recipe message and paste it here — ingredients, steps, everything."
+            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm placeholder:text-stone-400"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-stone-400">
+              Tip: chat share links can&apos;t be read — copying the message text always works.
+            </span>
+            <button
+              type="button"
+              disabled={scanning || pasted.trim().length < 40}
+              onClick={() => onText()}
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
+            >
+              Read it
+            </button>
+          </div>
+        </div>
+      </details>
 
       <details className="rounded-xl border border-stone-200 bg-white">
         <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-stone-600">

@@ -3,6 +3,21 @@
 import { requireModule } from "@/lib/module-guard";
 import type { ScannedRecipe } from "@/lib/actions/recipe-scan";
 
+/**
+ * Pasted or shared TEXT (ChatGPT answers, WhatsApp messages, notes…) → recipe.
+ * AI chat share links (chatgpt.com/share etc.) are bot-gated and unreadable
+ * server-side, so text is the reliable path — copy the message, share the text.
+ */
+const AI_CHAT_HOSTS = /https?:\/\/(chatgpt\.com|chat\.openai\.com|claude\.ai|gemini\.google\.com|g\.co\/gemini|copilot\.microsoft\.com)\//i;
+
+export async function recipeFromText(raw: string): Promise<ScannedRecipe> {
+  await requireModule("recipes", "edit");
+  const text = String(raw ?? "").trim().slice(0, 30000);
+  if (text.length < 40)
+    return { ok: false, error: "That looks too short to be a recipe — paste the whole thing." };
+  return readTextWithClaude(text);
+}
+
 function parseIsoDuration(d: unknown): number | undefined {
   if (typeof d !== "string") return undefined;
   const m = d.match(/^PT(?:(\d+)H)?(?:(\d+)M)?/i);
@@ -99,6 +114,14 @@ export async function recipeFromUrl(url: string): Promise<ScannedRecipe> {
   await requireModule("recipes", "edit");
   const clean = url.trim();
   if (!/^https?:\/\//i.test(clean)) return { ok: false, error: "That doesn't look like a link" };
+
+  // ChatGPT/Claude/Gemini share links are login/bot-gated — we can't read them.
+  if (AI_CHAT_HOSTS.test(clean))
+    return {
+      ok: false,
+      error:
+        "Chat share links can't be read directly. In the chat, copy the recipe message itself, then paste it in the 'Paste a recipe' box below (or share the copied text to Nestly) — I'll build the card from that.",
+    };
 
   // TikTok: the caption (via public oEmbed) very often contains the whole recipe
   if (/tiktok\.com\//i.test(clean)) {
