@@ -7,6 +7,7 @@ import { createRecipe } from "@/lib/actions/recipes";
 import { scanRecipeImage, type ScannedRecipe } from "@/lib/actions/recipe-scan";
 import { recipeFromVideo, recipeFromYouTube } from "@/lib/actions/video-recipe";
 import { recipeFromUrl, recipeFromText } from "@/lib/actions/recipe-from-url";
+import { scanRecipeImageFromPath } from "@/lib/actions/recipe-scan";
 import { createClient } from "@/lib/supabase/client";
 
 const DocScannerModal = dynamic(() => import("@/components/doc-scanner-modal"), { ssr: false });
@@ -36,12 +37,15 @@ export function NewRecipeClient({
   initialUrl,
   initialText,
   initialVideoPath,
+  initialImagePath,
 }: {
   householdId: string;
   /** pre-filled by the Android share target — auto-reads on load */
   initialUrl?: string;
   /** Shared plain text (e.g. a copied ChatGPT recipe) — parsed on load. */
   initialText?: string;
+  /** Shared screenshot already uploaded by the share endpoint — scanned on load. */
+  initialImagePath?: string;
   /** a video file already uploaded by the share target — auto-processes */
   initialVideoPath?: string;
 }) {
@@ -148,8 +152,8 @@ export function NewRecipeClient({
     }
   };
 
-  // share-target flow: auto-read the shared link / text / video once
-  if ((initialUrl || initialText || initialVideoPath) && !autoRan) {
+  // share-target flow: auto-read the shared link / text / image / video once
+  if ((initialUrl || initialText || initialVideoPath || initialImagePath) && !autoRan) {
     setAutoRan(true);
     if (initialVideoPath) {
       setTimeout(async () => {
@@ -161,6 +165,19 @@ export function NewRecipeClient({
           applyResult(res);
         } catch {
           setMsg("Reading failed — try sharing the video again.");
+        } finally {
+          setScanning(false);
+        }
+      }, 0);
+    } else if (initialImagePath) {
+      setTimeout(async () => {
+        setScanning(true);
+        setMsg("Reading your screenshot…");
+        try {
+          const res = await scanRecipeImageFromPath(initialImagePath);
+          applyResult(res);
+        } catch {
+          setMsg("Reading failed — share the screenshot again.");
         } finally {
           setScanning(false);
         }

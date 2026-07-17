@@ -16,6 +16,22 @@ export type ScannedRecipe = {
 };
 
 /** Read a cookbook page / recipe screenshot with Claude into a structured recipe. */
+/** A screenshot shared via the share sheet lands in video-temp — read it with zero user steps. */
+export async function scanRecipeImageFromPath(path: string): Promise<ScannedRecipe> {
+  const { membership } = await requireModule("recipes", "edit");
+  if (!path.startsWith(`${membership.household_id}/`))
+    return { ok: false, error: "That shared image has expired — share it again." };
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from("video-temp").download(path);
+  if (error || !data) return { ok: false, error: "Couldn't open the shared image — share it again." };
+  const buf = Buffer.from(await data.arrayBuffer());
+  const ext = (path.split(".").pop() ?? "").toLowerCase();
+  const mediaType =
+    ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+  return scanRecipeImage(buf.toString("base64"), mediaType);
+}
+
 export async function scanRecipeImage(
   imageBase64: string,
   mediaType: string
