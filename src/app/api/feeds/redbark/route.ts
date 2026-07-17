@@ -41,6 +41,38 @@ function guessAccountType(name: string): string {
   return "bank";
 }
 
+/* ── pending-settlement matching (mig 046) ─────────────────────────────────
+ * When "Include pending transactions" is on in Redbark, a purchase arrives
+ * twice: first with status "pending", later settled — usually with a NEW bank
+ * id, and often a rewritten description (CDR makes no guarantees). So the
+ * hard match key is account + amount + a settlement window; description
+ * similarity only RANKS candidates, oldest-first breaks ties. The winning
+ * pending row is upgraded in place — the ledger never shows the purchase
+ * twice, and anything the user already set (category, payee, notes, scope)
+ * survives settlement. */
+
+const SETTLE_WINDOW_DAYS = 8; // pending may settle up to this many days later
+const PENDING_EXPIRY_DAYS = 14; // never-settled auths (declined/reversed) get swept
+
+function normDesc(s: string | null | undefined): string[] {
+  return (s ?? "")
+    .toLowerCase()
+    .replace(/[0-9]+/g, " ")
+    .replace(/[^a-z ]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+}
+
+/** Token Jaccard similarity 0..1 between two descriptions. */
+function descSim(a: string | null | undefined, b: string | null | undefined): number {
+  const ta = new Set(normDesc(a));
+  const tb = new Set(normDesc(b));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let inter = 0;
+  for (const w of ta) if (tb.has(w)) inter++;
+  return inter / (ta.size + tb.size - inter);
+}
+
 export async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get("x-redbark-signature") ?? "";
@@ -201,20 +233,104 @@ export async function POST(req: Request) {
           (payee ? scopeByPayee.get(payee.id) : null) ??
           (visById.get(accountId) === "private" ? "personal" : "household"),
         suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
+        status: t.status === "pending" ? "pending" : "posted",
         external_id: t.id,
         import_hash: createHash("sha256").update(`redbark|${t.id}`).digest("hex"),
       };
     })
     .filter(Boolean) as Record<string, unknown>[];
 
+  // ── settle pending rows: a posted arrival upgrades its pending twin ──
+  let settled = 0;
+  const settledRecords = new Set<Record<string, unknown>>();
+  const postedRecords = records.filter((r) => r.status === "posted");
+  if (postedRecords.length > 0) {
+    // rows this delivery already knows by id (re-delivery / same-id settle) —
+    // those take the plain upsert path, no matching needed
+    const { data: known } = await admin
+      .from("finance_transactions")
+      .select("import_hash")
+      .eq("household_id", householdId)
+      .in("import_hash", postedRecords.map((r) => r.import_hash as string));
+    const knownHashes = new Set((known ?? []).map((k) => k.import_hash));
+
+    const { data: pendings } = await admin
+      .from("finance_transactions")
+      .select("id, account_id, amount, posted_at, description, category_id, payee_id, suggestion_source")
+      .eq("household_id", householdId)
+      .eq("status", "pending")
+      .eq("source", "feed");
+    const pool = (pendings ?? []).filter(Boolean);
+    const claimed = new Set<string>();
+
+    for (const r of records) {
+      if (r.status !== "posted" || knownHashes.has(r.import_hash as string)) continue;
+      const postedDate = new Date(`${String(r.posted_at)}T00:00:00Z`).getTime();
+      const candidates = pool
+        .filter((p) => {
+          if (claimed.has(p.id) || p.account_id !== r.account_id) return false;
+          if (Math.abs(Number(p.amount) - Number(r.amount)) >= 0.005) return false;
+          const pendDate = new Date(`${p.posted_at}T00:00:00Z`).getTime();
+          const daysLater = (postedDate - pendDate) / 86400000;
+          return daysLater >= -1 && daysLater <= SETTLE_WINDOW_DAYS; // settles after auth (1-day tz slack)
+        })
+        .sort((a, b) => {
+          const sim = descSim(b.description, r.description as string) - descSim(a.description, r.description as string);
+          if (Math.abs(sim) > 0.001) return sim < 0 ? -1 : 1; // closest description first
+          return a.posted_at < b.posted_at ? -1 : 1; // then oldest pending (FIFO)
+        });
+      const match = candidates[0];
+      if (!match) continue;
+
+      claimed.add(match.id);
+      // Upgrade in place: bank-truth fields refresh, human choices survive.
+      const userCategorised = match.category_id && match.suggestion_source === null;
+      const { error: upErr } = await admin
+        .from("finance_transactions")
+        .update({
+          status: "posted",
+          posted_at: r.posted_at,
+          description: r.description,
+          merchant: r.merchant,
+          bank_category: r.bank_category,
+          txn_type: r.txn_type,
+          external_id: r.external_id,
+          import_hash: r.import_hash,
+          ...(userCategorised ? {} : { category_id: r.category_id, suggestion_source: r.suggestion_source }),
+          ...(match.payee_id ? {} : { payee_id: r.payee_id }),
+        })
+        .eq("id", match.id);
+      if (!upErr) {
+        settled++;
+        settledRecords.add(r); // drop from the insert batch below
+      }
+    }
+  }
+
+  const toUpsert = records.filter((r) => !settledRecords.has(r));
+
   // upsert on (household_id, import_hash): new rows insert, re-deliveries and
-  // updated transactions refresh the stored copy
+  // updated transactions refresh the stored copy (incl. same-id settlements)
   const { error, count } = await admin
     .from("finance_transactions")
-    .upsert(records, { onConflict: "household_id,import_hash", ignoreDuplicates: false, count: "exact" });
+    .upsert(toUpsert, { onConflict: "household_id,import_hash", ignoreDuplicates: false, count: "exact" });
   if (error) {
     console.error("redbark feed upsert failed:", error.message);
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 }); // 5xx → Redbark retries
+  }
+
+  // sweep never-settled auths (declined / reversed) — best effort
+  try {
+    const cutoff = new Date(Date.now() - PENDING_EXPIRY_DAYS * 86400000).toISOString().slice(0, 10);
+    await admin
+      .from("finance_transactions")
+      .delete()
+      .eq("household_id", householdId)
+      .eq("status", "pending")
+      .eq("source", "feed")
+      .lt("posted_at", cutoff);
+  } catch {
+    /* next delivery sweeps again */
   }
 
   // pair up internal transfers among recent transactions (best effort)
@@ -227,5 +343,11 @@ export async function POST(req: Request) {
     /* next sync will catch them */
   }
 
-  return NextResponse.json({ ok: true, received: records.length, upserted: count ?? records.length, transfers });
+  return NextResponse.json({
+    ok: true,
+    received: records.length,
+    upserted: count ?? toUpsert.length,
+    settled,
+    transfers,
+  });
 }

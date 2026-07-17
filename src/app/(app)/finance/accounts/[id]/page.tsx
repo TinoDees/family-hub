@@ -16,7 +16,7 @@ const TYPE_ICON: Record<string, string> = {
 };
 
 const TXN_FIELDS =
-  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope";
+  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status";
 
 type Txn = {
   id: string;

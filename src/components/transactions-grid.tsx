@@ -27,6 +27,8 @@ type Row = {
   is_transfer: boolean;
   scope: "household" | "personal";
   account_id: string | null;
+  /** 'pending' = bank hasn't settled it yet (mig 046); absent/'posted' = final */
+  status?: string | null;
 };
 type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Acc = { id: string; name: string };
@@ -747,6 +749,14 @@ export function TransactionsGrid({
             {t.merchant ?? t.description}
             {t.source !== "manual" && (
               <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] uppercase text-stone-400">{t.source}</span>
+            )}
+            {t.status === "pending" && (
+              <span
+                className="ml-2 rounded-full border border-dashed border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                title="Not settled by the bank yet — details may change; it upgrades in place when it posts."
+              >
+                ⏳ Pending
+              </span>
             )}
             {statusPill &&
               (!t.category_id && !t.is_transfer ? (
