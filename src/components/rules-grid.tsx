@@ -20,6 +20,7 @@ type Row = {
 };
 type SortKey = "match" | "field" | "category" | "created";
 type SortDir = "asc" | "desc";
+type RulePatchClient = { match_text?: string; match_field?: string; category_id?: string; enabled?: boolean };
 
 type ColDef = {
   key: SortKey | "enabled" | "actions";
@@ -171,6 +172,7 @@ export function RulesGrid({
   const [msg, setMsg] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [editRow, setEditRow] = useState<Row | null>(null);
   const [, startTransition] = useTransition();
 
   const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
@@ -240,7 +242,7 @@ export function RulesGrid({
           return ai - bi;
         })
       : baseCols;
-    return [...cols, { key: "actions", label: "", width: 56, minWidth: 50, align: "right", sortable: false, movable: false } as ColDef];
+    return [...cols, { key: "actions", label: "", width: 84, minWidth: 76, align: "right", sortable: false, movable: false } as ColDef];
   }, [baseCols, colOrder]);
 
   function reorderCols(srcKey: string, destKey: string) {
@@ -580,6 +582,14 @@ export function RulesGrid({
           <td key={col.key} className="whitespace-nowrap px-2 py-1.5 text-right">
             <button
               type="button"
+              onClick={() => setEditRow(r)}
+              className="rounded px-1.5 py-1 text-xs text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              title="Edit in a modal"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
               onClick={() => removeRow(r)}
               className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600"
               title="Delete rule"
@@ -681,6 +691,14 @@ export function RulesGrid({
                 </div>
                 <button
                   type="button"
+                  onClick={() => setEditRow(r)}
+                  className="rounded-lg px-2 py-1.5 text-sm text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                  title="Edit"
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
                   onClick={() => removeRow(r)}
                   className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-red-50 hover:text-red-600"
                   title="Delete rule"
@@ -769,6 +787,165 @@ export function RulesGrid({
           }}
         />
       )}
+
+      {editRow && (
+        <EditRuleModal
+          row={editRow}
+          categories={cats}
+          onCategoryCreated={addCat}
+          onClose={() => setEditRow(null)}
+          onSaved={(r, applied) => {
+            setData((d) => d.map((x) => (x.id === r.id ? r : x)));
+            setEditRow(null);
+            if (applied > 0)
+              setNotice(`Rule saved — suggested its category on ${applied} unsorted transaction${applied === 1 ? "" : "s"}.`);
+          }}
+          onDeleted={(id) => {
+            setData((d) => d.filter((x) => x.id !== id));
+            setEditRow(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Everything about one rule in a single modal — match, field, category, on/off, delete. */
+function EditRuleModal({
+  row,
+  categories,
+  onCategoryCreated,
+  onClose,
+  onSaved,
+  onDeleted,
+}: {
+  row: Row;
+  categories: Cat[];
+  onCategoryCreated?: (c: NewCat) => void;
+  onClose: () => void;
+  onSaved: (r: Row, applied: number) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [text, setText] = useState(row.match_text);
+  const [field, setField] = useState<Row["match_field"]>(row.match_field);
+  const [categoryId, setCategoryId] = useState(row.category_id);
+  const [enabled, setEnabled] = useState(row.enabled);
+  const [localCats, setLocalCats] = useState<Cat[]>(categories);
+  useEffect(() => setLocalCats(categories), [categories]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    const clean = text.trim();
+    if (clean.length < 2) { setError("Give the rule at least 2 characters to match on"); return; }
+    setBusy(true);
+    setError(null);
+    const patch: RulePatchClient = {};
+    if (clean !== row.match_text) patch.match_text = clean;
+    if (field !== row.match_field) patch.match_field = field;
+    if (categoryId !== row.category_id) patch.category_id = categoryId;
+    if (enabled !== row.enabled) patch.enabled = enabled;
+    if (Object.keys(patch).length === 0) { setBusy(false); onClose(); return; }
+    const res = await updateRuleInline(row.id, patch);
+    setBusy(false);
+    if (!res.ok) { setError(res.error ?? "Could not save the rule"); return; }
+    onSaved({ ...row, match_text: clean, match_field: field, category_id: categoryId, enabled }, res.applied ?? 0);
+  };
+
+  const del = async () => {
+    if (!window.confirm(`Delete this rule ("${row.match_text}")? Already-sorted transactions keep their categories.`)) return;
+    setBusy(true);
+    const res = await deleteRuleInline(row.id);
+    setBusy(false);
+    if (!res.ok) { setError(res.error ?? "Could not delete the rule"); return; }
+    onDeleted(row.id);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">📖 Edit rule</h2>
+          <button
+            type="button"
+            onClick={() => setEnabled((v) => !v)}
+            title={enabled ? "Rule is on — click to pause it" : "Rule is paused — click to turn it on"}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              enabled ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-stone-100 text-stone-400 hover:bg-stone-200"
+            }`}
+          >
+            {enabled ? "On" : "Paused"}
+          </button>
+        </div>
+        {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium">Contains</label>
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              autoFocus
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Looks at</label>
+            <select
+              value={field}
+              onChange={(e) => setField(e.target.value as Row["match_field"])}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="any">Description or merchant</option>
+              <option value="description">Description only</option>
+              <option value="merchant">Merchant only</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Allocates category</label>
+            <CategorySelect
+              categories={localCats}
+              value={categoryId}
+              onPick={setCategoryId}
+              onCategoryCreated={(c) => {
+                setLocalCats((p) =>
+                  [...p, c].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+                );
+                onCategoryCreated?.(c);
+              }}
+            />
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={del}
+            className="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
+          >
+            Delete
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy || text.trim().length < 2}
+              onClick={save}
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
