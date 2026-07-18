@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
+import { CATEGORY_ORDER, guessCategory } from "@/lib/groceries";
 
 export async function createList(formData: FormData) {
   const { membership, userId } = await requireModule("shopping", "edit");
@@ -33,6 +34,7 @@ export async function addItem(formData: FormData) {
     household_id: membership.household_id,
     name,
     qty: String(formData.get("qty") ?? "").trim() || null,
+    category: guessCategory(name),
     position: (count ?? 0) + 1,
   });
   revalidatePath(`/shopping/${listId}`);
@@ -71,6 +73,59 @@ export async function setListStatus(formData: FormData) {
     .eq("household_id", membership.household_id);
   revalidatePath("/shopping");
   redirect("/shopping");
+}
+
+/** Quietly recategorise an item (the guesser is best-effort). */
+export async function setItemCategoryInline(
+  itemId: string,
+  category: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireModule("shopping", "edit");
+  const cat = CATEGORY_ORDER.includes(category) ? category : "other";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("shopping_list_items")
+    .update({ category: cat })
+    .eq("id", itemId)
+    .eq("household_id", membership.household_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/shopping");
+  return { ok: true };
+}
+
+/** Add every pantry staple not already on the list (by name, case-insensitive). */
+export async function addStaplesToList(formData: FormData) {
+  const { membership } = await requireModule("shopping", "edit");
+  const listId = String(formData.get("list_id"));
+  const supabase = await createClient();
+
+  const [{ data: staples }, { data: existing }, { count }] = await Promise.all([
+    supabase
+      .from("pantry_items")
+      .select("name, category, unit")
+      .eq("household_id", membership.household_id),
+    supabase.from("shopping_list_items").select("name").eq("list_id", listId),
+    supabase
+      .from("shopping_list_items")
+      .select("id", { count: "exact", head: true })
+      .eq("list_id", listId),
+  ]);
+
+  const have = new Set((existing ?? []).map((i) => i.name.toLowerCase().trim()));
+  const missing = (staples ?? []).filter((s) => !have.has(s.name.toLowerCase().trim()));
+  if (missing.length > 0) {
+    await supabase.from("shopping_list_items").insert(
+      missing.map((s, idx) => ({
+        list_id: listId,
+        household_id: membership.household_id,
+        name: s.name,
+        category: s.category,
+        position: (count ?? 0) + 1 + idx,
+      }))
+    );
+  }
+  revalidatePath(`/shopping/${listId}`);
+  redirect(`/shopping/${listId}${missing.length === 0 ? "?info=All+staples+already+on+the+list" : ""}`);
 }
 
 /** Build a shopping list from the meal plan week's scaled ingredients. */
@@ -134,6 +189,7 @@ export async function shoppingListFromWeek(formData: FormData) {
       position: idx,
       name: i.name,
       qty: i.qty !== null ? `${Math.round(i.qty * 100) / 100}${i.unit ? ` ${i.unit}` : ""}` : null,
+      category: guessCategory(i.name),
     }));
   if (items.length > 0) await supabase.from("shopping_list_items").insert(items);
 

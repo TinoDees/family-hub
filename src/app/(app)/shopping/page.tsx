@@ -49,7 +49,15 @@ export default async function ShoppingPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-semibold">🛒 Shopping Lists</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">🛒 Shopping Lists</h1>
+        <Link
+          href="/shopping/pantry"
+          className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
+        >
+          🧺 Staples
+        </Link>
+      </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {canEdit && (
