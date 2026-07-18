@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
-import { addMealEntry, removeMealEntry } from "@/lib/actions/meals";
 import { shoppingListFromWeek } from "@/lib/actions/shopping";
+import { MealCellPicker, type CellEntry } from "@/components/meal-cell-picker";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 const SLOT_ICON: Record<string, string> = { breakfast: "🌅", lunch: "🥪", dinner: "🍽️", snack: "🍎" };
@@ -34,7 +34,6 @@ export default async function MealsPage({
     d.setDate(monday.getDate() + i);
     return d;
   });
-  const weekKey = iso(monday);
   const prev = new Date(monday); prev.setDate(monday.getDate() - 7);
   const next = new Date(monday); next.setDate(monday.getDate() + 7);
   const todayIso = iso(new Date());
@@ -61,6 +60,13 @@ export default async function MealsPage({
     const k = `${e.entry_date}|${e.slot}`;
     byCell.set(k, [...(byCell.get(k) ?? []), e]);
   }
+  const toCellEntry = (e: Entry): CellEntry => ({
+    id: e.id,
+    recipe_id: e.recipe_id,
+    custom_text: e.custom_text,
+    servings: e.servings,
+    recipe_name: (e.recipe as unknown as { name: string } | null)?.name ?? null,
+  });
 
   // week ingredient summary — scaled by each entry's planned servings
   const plannedRecipeIds = [...new Set((entries ?? []).map((e) => e.recipe_id).filter(Boolean))] as string[];
@@ -128,49 +134,16 @@ export default async function MealsPage({
                 </td>
                 {days.map((d) => {
                   const key = `${iso(d)}|${slot}`;
-                  const cellEntries = byCell.get(key) ?? [];
+                  const cellEntries = (byCell.get(key) ?? []).map(toCellEntry);
                   return (
                     <td key={key} className={`px-1.5 py-2 ${iso(d) === todayIso ? "bg-amber-50/50" : ""}`}>
-                      <div className="space-y-1">
-                        {cellEntries.map((e) => (
-                          <div key={e.id} className="group flex items-start justify-between gap-1 rounded-lg bg-stone-100 px-2 py-1 text-xs">
-                            {e.recipe_id ? (
-                              <Link href={`/recipes/${e.recipe_id}`} className="hover:underline">
-                                {(e.recipe as unknown as { name: string } | null)?.name ?? "Recipe"}
-                                {e.servings && <span className="text-stone-400"> ×{e.servings}</span>}
-                              </Link>
-                            ) : (
-                              <span>{e.custom_text}</span>
-                            )}
-                            {canEdit && (
-                              <form action={removeMealEntry}>
-                                <input type="hidden" name="entry_id" value={e.id} />
-                                <input type="hidden" name="w" value={weekKey} />
-                                <button className="text-stone-300 hover:text-red-600" title="Remove">✕</button>
-                              </form>
-                            )}
-                          </div>
-                        ))}
-                        {canEdit && (
-                          <details className="text-xs">
-                            <summary className="cursor-pointer rounded px-1 text-stone-300 hover:text-stone-500">+ add</summary>
-                            <form action={addMealEntry} className="mt-1 space-y-1">
-                              <input type="hidden" name="entry_date" value={iso(d)} />
-                              <input type="hidden" name="slot" value={slot} />
-                              <input type="hidden" name="w" value={weekKey} />
-                              <select name="recipe_id" className="w-full rounded border border-stone-200 bg-white px-1 py-1 text-xs">
-                                <option value="">— recipe —</option>
-                                {(recipes ?? []).map((r) => (
-                                  <option key={r.id} value={r.id}>{r.name}</option>
-                                ))}
-                              </select>
-                              <input name="servings" type="number" min="1" placeholder="serves (optional)" className="w-full rounded border border-stone-200 px-1 py-1 text-xs" />
-                              <input name="custom_text" placeholder="or free text" className="w-full rounded border border-stone-200 px-1 py-1 text-xs" />
-                              <button className="w-full rounded bg-stone-900 px-1 py-1 text-xs text-white hover:bg-stone-700">Add</button>
-                            </form>
-                          </details>
-                        )}
-                      </div>
+                      <MealCellPicker
+                        date={iso(d)}
+                        slot={slot}
+                        initialEntries={cellEntries}
+                        recipes={recipes ?? []}
+                        canEdit={canEdit}
+                      />
                     </td>
                   );
                 })}
@@ -179,6 +152,13 @@ export default async function MealsPage({
           </tbody>
         </table>
       </div>
+
+      {canEdit && (
+        <p className="text-xs text-stone-400">
+          Type any meal — it&apos;s remembered in your <Link href="/recipes" className="underline hover:text-stone-600">recipe book</Link> and
+          autocompletes next time. Ingredients are optional; add them whenever you like to power the shopping list.
+        </p>
+      )}
 
       {agg.size > 0 && (
         <div className="rounded-xl border border-stone-200 bg-white p-6">
@@ -195,7 +175,7 @@ export default async function MealsPage({
             )}
           </div>
           <p className="mt-1 text-xs text-stone-400">
-            Aggregated from planned recipes, scaled by planned servings.
+            Aggregated from planned recipes that have ingredients, scaled by planned servings.
           </p>
           <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {[...agg.values()]
