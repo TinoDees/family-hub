@@ -61,38 +61,6 @@ Ways a transaction gets sorted:
    accept ✓ / dismiss ✕ pills; accepting counts as confirmed.
 4. **It's a transfer** between your own accounts (🔁, or the *Find transfers* scanner) —
    transfers are neither spending nor income and count as dealt with.
-5. **Bulk assign** — tick the checkboxes (the header box selects all shown;
-   Shift+click ticks a whole range), and a bar appears to assign one category to every
-   selected row at once. Great for historical clean-up: sort by Description, select a
-   run of the same merchant, one pick sorts them all — and Nestly remembers the choice
-   for those merchants going forward.
-
-### How Nestly tells money movements apart
-
-Four kinds of rows, and only the first two touch your budgets:
-
-- **Spending** — a negative, non-transfer, household-scoped transaction with a category.
-- **Income** — the positive equivalent (Salary, Interest…).
-- **Personal** (split finances) — in the owner's balance but out of family reporting.
-- **Transfers** — money between your own accounts. Both legs are flagged (auto-detected
-  by amount/date pairing, or the 🔁 button) and excluded from income, spending, budgets
-  and reviews — while account balances still include them, so everything reconciles.
-
-Transfers additionally say **what they were for**, worked out from the two accounts'
-types — no extra data entry:
-
-- **💰 To savings / Into savings** — everyday → savings account: money put away. Not
-  spending; it never was — it's still your money, just parked.
-- **🏦 From savings** — savings → everyday: drawing savings down. Not income; whatever
-  it gets spent on will appear as its own (categorised) transactions.
-- **💳 Card payment** — everyday → credit card: paying the card off. The *actual*
-  spending was already recorded as the card account's own transactions (Woolworths,
-  fuel, …), so the payment must not count again — it's just settling the bill.
-- **🔁 Transfer** — any other own-account move (e.g. between two everyday accounts).
-
-Hover any transfer pill for the explanation. Practical upshot: categorise the *card's*
-transactions like any other account, and let the payment stay a transfer; savings moves
-need no category at all.
 
 ### Auto-rules (how Nestly learns)
 
@@ -125,11 +93,6 @@ export. Edit inline (click a name, emoji or kind), or hit ✎ for the full edit 
 Emojis come from a searchable library (or paste any emoji — Win + . opens the system
 picker).
 
-Everywhere a category is picked or created — the categories sheet, the rule book, a
-transaction's type-ahead — it's the *same* shared picker and the *same* new-category
-dialog (searchable list with "＋ New category" right inside it), so they always look and
-behave identically.
-
 **Sub-categories:** drag a category's ⠿ grip onto another to nest it one level deep
 (e.g. Groceries → Butcher). Drag onto the dashed drop zone (or use the modal's
 "Sub-category of" selector) to make it top-level again. Nesting matches the child's kind
@@ -138,22 +101,6 @@ their parent in the sheet.
 
 **Monthly budgets** are set per expense category right in the grid (type an amount in the
 row). They power the Finance overview's budget bars and the monthly review.
-
-### 📊 Insights (Finance → Insights)
-
-A six-month dashboard of household money (transfers and personal spending excluded, same
-rules as budgets), navigable back through time with ←/→:
-
-- **KPI tiles** — money in, money out, left over, net put into savings, average monthly spend.
-- **Income vs spending** — paired bars per month (teal income, amber spending).
-- **Savings flow** — money into (▲) and out of (▼) savings accounts per month, derived
-  from the labelled transfers.
-- **Spending by category, month by month** — the matrix: categories down, months across,
-  heat-tinted amounts. Click any amount for a drill-in modal listing the exact
-  transactions behind it; click a category name for its whole six months. An income
-  matrix sits below it, and ◌ Uncategorised rows keep the picture honest.
-- **Top merchants** — the ten biggest spending destinations with bars; click for the
-  transactions.
 
 ### Everything else in Finance
 
@@ -172,8 +119,27 @@ rules as budgets), navigable back through time with ←/→:
 - **Documents** — the family filing cabinet: scans/photos of important documents with
   types, expiry dates and quick capture via the doc scanner.
 - **Recipes & Meals** — recipe collection (from URLs, photos, even videos), cook mode,
-  scaling, and a meal planner that feeds the shopping list.
-- **Shopping lists** — shared lists, connected to the meal planner.
+  scaling, and a meal planner that feeds the shopping list. **You never have to set up
+  recipes first**: in the planner, click a cell and just type — matching recipes
+  autocomplete (pick several for one meal), and anything new can be created on the spot
+  with only a name. Ingredients are an optional brain-dump (one per line, "500g beef
+  mince" or just "gherkins" — quantities parsed loosely, never demanded); the method can
+  wait forever. Every typed meal is remembered in the recipe book and autocompletes next
+  time. One-offs like *Leftovers* or *Eating out* stay plain text and deliberately out of
+  the recipe book. Planned servings sit on each entry (the ×N badge — click to change);
+  the week's ingredient summary and the shopping-list button only draw from recipes that
+  have ingredients.
+- **Shopping** — its own hub with tabs: **Overview** (dashboard: open lists, pantry
+  summary, plan-the-shop entry), **Lists**, and **Pantry**. The Pantry is the master
+  catalog of everything the household buys — a bare name is a complete entry, with
+  optional layers on top: categories & sub-categories (seeded defaults, fully editable
+  via ⚙️ Categories & retailers), a **preferred retailer** per item ("mince → the
+  butcher"), and min/max/unit targets that power suggested order quantities. Lists are
+  **grouped by grocery category** in store-walk order; every item is auto-categorised
+  as it's typed or generated (quiet per-item selector to correct a guess), and **Add
+  staples** pulls pantry items onto any open list. See `docs/shopping-list-v2.md` for
+  what's next (the planning table with per-retailer list splitting, aisle order,
+  nearby specials).
 - **Photos** — family albums with per-photo visibility, sections and a chat under each.
 - **Messages** — family chat rooms and DMs with push notifications.
 - **Holidays & Trips** — trip planning with shared expenses, split/settlement maths,

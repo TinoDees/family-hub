@@ -15,7 +15,7 @@ export async function createList(formData: FormData) {
     .insert({ household_id: membership.household_id, name, created_by: userId })
     .select("id")
     .single();
-  if (error || !data) redirect(`/shopping?error=${encodeURIComponent(error?.message ?? "failed")}`);
+  if (error || !data) redirect(`/shopping/lists?error=${encodeURIComponent(error?.message ?? "failed")}`);
   redirect(`/shopping/${data.id}`);
 }
 
@@ -72,7 +72,7 @@ export async function setListStatus(formData: FormData) {
     .eq("id", String(formData.get("list_id")))
     .eq("household_id", membership.household_id);
   revalidatePath("/shopping");
-  redirect("/shopping");
+  redirect("/shopping/lists");
 }
 
 /** Quietly recategorise an item (the guesser is best-effort). */

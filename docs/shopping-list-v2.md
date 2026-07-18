@@ -24,6 +24,18 @@ The Kati principle applies everywhere: someone who ignores staples, never counts
 and skips the review gets exactly today's experience. Every rung is opt-in and pays for
 itself.
 
+**Flow rework (19 Jul 2026, agreed with Tino):** the Pantry is the **master item
+catalog** (all ingredients + household items), not just an extras list. Shopping gets
+its own hub — `/shopping` = Overview dashboard, with Lists and Pantry tabs (Plan joins
+in S2). Categories are **household-owned**: seeded from the built-in set, fully editable
+both levels (one sub-level, e.g. Meat → Beef), managed in the Pantry's ⚙️ panel — the
+auto-guesser keeps working via `builtin_slug`. Households define **retailers**; each
+pantry item can prefer one. The S2 planning table gets a retailer column (pre-filled
+from the pantry, overridable) and **Create shopping list produces one list per retailer**
+(PO-style: "Woolies — week of 20 Jul", "Butcher — …", plus an "Anywhere" list), each
+completable independently. Mig 053 ships retailers, grocery_categories,
+pantry.category_id/retailer_id and shopping_lists.retailer_id.
+
 ---
 
 ## S1 — Staples + categories + the grouped list *(built first)*

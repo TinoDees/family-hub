@@ -54,7 +54,7 @@ export default async function ShoppingListPage({
     <div className="mx-auto max-w-2xl space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/shopping" className="text-xs text-stone-400 hover:underline">← Lists</Link>
+          <Link href="/shopping/lists" className="text-xs text-stone-400 hover:underline">← Lists</Link>
           <h1 className="text-2xl font-semibold">{list.name}</h1>
           <p className="text-sm text-stone-500">
             {remaining === 0 ? "All done! 🎉" : `${remaining} item${remaining === 1 ? "" : "s"} to go`}
