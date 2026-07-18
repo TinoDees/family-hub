@@ -7,6 +7,7 @@ import {
   deleteCategoryInline,
   setBudgetInline,
 } from "@/lib/actions/finance";
+import { EmojiPicker } from "@/components/emoji-picker";
 
 type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Row = Cat & { budget: number | null };
@@ -24,8 +25,6 @@ type ColDef = {
   /** Can be dragged to a new position. The actions column stays pinned last. */
   movable: boolean;
 };
-
-const EMOJIS = ["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕","🎰","🏦","💳","🧾"];
 
 // ── MultiSelectFilter — same compact checkbox popover as the transactions grid ─
 
@@ -172,10 +171,9 @@ function BudgetCell({
   );
 }
 
-/** Emoji cell — click to open a picker popover (quick picks + any emoji). */
+/** Emoji cell — click to open the full emoji library in a popover. */
 function EmojiCell({ value, onCommit }: { value: string | null; onCommit: (v: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [custom, setCustom] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,13 +184,6 @@ function EmojiCell({ value, onCommit }: { value: string | null; onCommit: (v: st
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
-
-  const pick = (v: string) => {
-    const clean = v.trim().slice(0, 8);
-    if (clean) onCommit(clean);
-    setCustom("");
-    setOpen(false);
-  };
 
   return (
     <div className="relative" ref={ref}>
@@ -205,25 +196,14 @@ function EmojiCell({ value, onCommit }: { value: string | null; onCommit: (v: st
         {value ?? "🏷️"}
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
-          <div className="flex flex-wrap gap-1">
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => pick(e)}
-                className={`rounded-lg border px-1.5 py-0.5 text-base ${e === value ? "border-stone-900 ring-1 ring-stone-900" : "border-stone-200 hover:bg-stone-50"}`}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
-          <input
-            value={custom}
-            onChange={(e) => setCustom(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") pick(custom); }}
-            placeholder="…or any emoji, then Enter"
-            className="mt-2 w-full rounded-lg border border-stone-300 px-2 py-1 text-xs outline-none focus:border-stone-500"
+        <div className="absolute left-0 top-full z-30 mt-1 rounded-xl border border-stone-200 bg-white p-2.5 shadow-lg">
+          <EmojiPicker
+            current={value}
+            autoFocus
+            onPick={(e) => {
+              onCommit(e);
+              setOpen(false);
+            }}
           />
         </div>
       )}
@@ -263,6 +243,7 @@ export function CategoriesGrid({
   ]);
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [editRow, setEditRow] = useState<Row | null>(null);
   const [, startTransition] = useTransition();
 
   const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
@@ -331,8 +312,8 @@ export function CategoriesGrid({
           return ai - bi;
         })
       : baseCols;
-    // The actions column (delete) is pinned last and never moves.
-    return [...cols, { key: "actions", label: "", width: 56, minWidth: 50, align: "right", sortable: false, movable: false } as ColDef];
+    // The actions column (edit + delete) is pinned last and never moves.
+    return [...cols, { key: "actions", label: "", width: 84, minWidth: 76, align: "right", sortable: false, movable: false } as ColDef];
   }, [baseCols, colOrder]);
 
   function reorderCols(srcKey: string, destKey: string) {
@@ -681,6 +662,14 @@ export function CategoriesGrid({
           <td key={col.key} className="whitespace-nowrap px-2 py-1.5 text-right">
             <button
               type="button"
+              onClick={() => setEditRow(r)}
+              className="rounded px-1.5 py-1 text-xs text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              title="Edit in a modal"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
               onClick={() => removeRow(r)}
               className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-red-50 hover:text-red-600"
               title="Delete category"
@@ -767,6 +756,14 @@ export function CategoriesGrid({
                 </div>
                 <button
                   type="button"
+                  onClick={() => setEditRow(r)}
+                  className="rounded-lg px-2 py-1.5 text-sm text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                  title="Edit"
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
                   onClick={() => removeRow(r)}
                   className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-red-50 hover:text-red-600"
                   title="Delete category"
@@ -846,6 +843,205 @@ export function CategoriesGrid({
           }}
         />
       )}
+
+      {editRow && (
+        <EditCategoryModal
+          row={editRow}
+          currency={currency}
+          onClose={() => setEditRow(null)}
+          onSaved={(r) => {
+            setData((d) => d.map((x) => (x.id === r.id ? r : x)));
+            setEditRow(null);
+          }}
+          onDeleted={(id) => {
+            setData((d) => d.filter((x) => x.id !== id));
+            setEditRow(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Everything about one category in a single modal — name, emoji, kind, budget, delete. */
+function EditCategoryModal({
+  row,
+  currency,
+  onClose,
+  onSaved,
+  onDeleted,
+}: {
+  row: Row;
+  currency: string;
+  onClose: () => void;
+  onSaved: (r: Row) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [name, setName] = useState(row.name);
+  const [icon, setIcon] = useState(row.icon ?? "");
+  const [kind, setKind] = useState(row.kind);
+  const [budget, setBudgetStr] = useState(row.budget == null ? "" : String(row.budget));
+  const [showPicker, setShowPicker] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
+
+  const save = async () => {
+    const cleanName = name.trim();
+    if (!cleanName) { setError("Give the category a name"); return; }
+    setBusy(true);
+    setError(null);
+
+    const patch: { name?: string; icon?: string; kind?: string } = {};
+    if (cleanName !== row.name) patch.name = cleanName;
+    if (icon.trim() && icon.trim() !== (row.icon ?? "")) patch.icon = icon.trim();
+    if (kind !== row.kind) patch.kind = kind;
+
+    if (Object.keys(patch).length > 0) {
+      const res = await updateCategoryInline(row.id, patch);
+      if (!res.ok) { setBusy(false); setError(res.error ?? "Could not save"); return; }
+    }
+
+    // budget: expense rows keep what's typed; switching to income clears it
+    const wantBudget = kind === "income" ? 0 : budget.trim() === "" ? 0 : Number(budget);
+    if (Number.isNaN(wantBudget) || wantBudget < 0) {
+      setBusy(false); setError("Budget must be a positive number (or empty)"); return;
+    }
+    if (wantBudget !== (row.budget ?? 0)) {
+      const res = await setBudgetInline(row.id, wantBudget);
+      if (!res.ok) { setBusy(false); setError(res.error ?? "Could not save the budget"); return; }
+    }
+
+    setBusy(false);
+    onSaved({
+      ...row,
+      name: cleanName,
+      icon: icon.trim() || row.icon,
+      kind,
+      budget: wantBudget > 0 ? wantBudget : null,
+    });
+  };
+
+  const del = async () => {
+    if (!window.confirm(`Delete "${row.name}"? Transactions keep their history but lose this label; any budget for it is removed.`)) return;
+    setBusy(true);
+    const res = await deleteCategoryInline(row.id);
+    setBusy(false);
+    if (!res.ok) { setError(res.error ?? "Could not delete"); return; }
+    onDeleted(row.id);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold">Edit category</h2>
+        {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="mt-4 space-y-3">
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium">Emoji</label>
+              <button
+                type="button"
+                onClick={() => setShowPicker((s) => !s)}
+                title="Choose from the library"
+                className="rounded-xl border border-stone-300 px-3 py-1.5 text-2xl hover:bg-stone-50"
+              >
+                {icon || "🏷️"}
+              </button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <label className="mb-1 block text-xs font-medium">Name</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+              />
+            </div>
+          </div>
+          {showPicker && (
+            <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-2.5">
+              <EmojiPicker
+                current={icon || null}
+                onPick={(e) => {
+                  setIcon(e);
+                  setShowPicker(false);
+                }}
+              />
+            </div>
+          )}
+          <div>
+            <label className="mb-1 block text-xs font-medium">Kind</label>
+            <div className="flex gap-2">
+              {(["expense", "income"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm capitalize ${
+                    kind === k ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          </div>
+          {kind === "expense" ? (
+            <div>
+              <label className="mb-1 block text-xs font-medium">Monthly budget</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={budget}
+                  onChange={(e) => setBudgetStr(e.target.value)}
+                  placeholder="none"
+                  className="w-32 rounded-lg border border-stone-300 px-3 py-2 text-right text-sm tabular-nums outline-none focus:border-stone-500"
+                />
+                <span className="text-xs text-stone-400">
+                  {budget.trim() !== "" && !Number.isNaN(Number(budget)) && Number(budget) > 0
+                    ? `${fmt(Number(budget))}/mo — empty removes it`
+                    : "empty = no budget"}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-stone-400">Budgets apply to expense categories only{row.budget != null ? " — saving will remove this one's budget" : ""}.</p>
+          )}
+        </div>
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={del}
+            className="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
+          >
+            Delete
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy || !name.trim()}
+              onClick={save}
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -859,7 +1055,6 @@ function NewCategoryModal({
 }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
-  const [custom, setCustom] = useState("");
   const [kind, setKind] = useState("expense");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -867,7 +1062,7 @@ function NewCategoryModal({
   const save = async () => {
     setBusy(true);
     setError(null);
-    const res = await createCategoryInline(name, custom.trim() || icon, kind);
+    const res = await createCategoryInline(name, icon, kind);
     setBusy(false);
     if (!res.ok || !res.category) {
       setError(res.error ?? "Could not create category");
@@ -879,7 +1074,7 @@ function NewCategoryModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold">＋ New category</h2>
@@ -897,30 +1092,12 @@ function NewCategoryModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium">Pick an emoji</label>
-            <div className="flex flex-wrap gap-1">
-              {EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    setIcon(e);
-                    setCustom("");
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-lg ${
-                    icon === e && !custom ? "border-stone-900 ring-1 ring-stone-900" : "border-stone-200 hover:bg-stone-50"
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
+            <label className="mb-1 block text-xs font-medium">
+              Emoji {icon && <span className="ml-1 text-base">{icon}</span>}
+            </label>
+            <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-2.5">
+              <EmojiPicker current={icon || null} onPick={setIcon} />
             </div>
-            <input
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              placeholder="…or type any emoji"
-              className="mt-2 w-40 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
-            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium">Kind</label>
