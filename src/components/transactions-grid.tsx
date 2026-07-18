@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   assignCategoryInline,
+  assignCategoryBulkInline,
   deleteTransactionInline,
   confirmCategoryInline,
   confirmAllInline,
@@ -19,6 +20,7 @@ import { setScopeInline } from "@/lib/actions/scope";
 import { ruleMatches } from "@/lib/rules";
 import { NewRuleModal } from "@/components/rules-grid";
 import { NewCategoryModal } from "@/components/category-modal";
+import { CategorySelect } from "@/components/category-select";
 
 type Row = {
   id: string;
@@ -43,7 +45,7 @@ type SortKey = "date" | "desc" | "account" | "category" | "amount";
 type SortDir = "asc" | "desc";
 
 type ColDef = {
-  key: SortKey | "actions";
+  key: SortKey | "actions" | "sel";
   label: string;
   /** Default width in px. Undefined = flex (takes the remaining space). */
   width?: number;
@@ -195,8 +197,16 @@ export function TransactionsGrid({
 }) {
   const [data, setData] = useState(rows);
   const [cats, setCats] = useState(categories);
-  useEffect(() => setData(rows), [rows]);
+  useEffect(() => {
+    setData(rows);
+    setSelected(new Set()); // fresh server rows invalidate the selection
+    setLastIdx(null);
+  }, [rows]);
   useEffect(() => setCats(categories), [categories]);
+
+  // Multi-select for bulk categorisation (select-all + shift-click range)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastIdx, setLastIdx] = useState<number | null>(null);
 
   const [q, setQ] = useState("");
   const [accSel, setAccSel] = useState<Set<string>>(new Set());
@@ -292,9 +302,13 @@ export function TransactionsGrid({
           return ai - bi;
         })
       : baseCols;
-    // The actions column (transfer / delete) is pinned last and never moves.
+    // Select column pinned first, actions column pinned last — neither moves.
     return canEdit
-      ? [...cols, { key: "actions", label: "", width: 118, minWidth: 108, align: "right", sortable: false, movable: false } as ColDef]
+      ? [
+          { key: "sel", label: "", width: 36, minWidth: 32, align: "left", sortable: false, movable: false } as ColDef,
+          ...cols,
+          { key: "actions", label: "", width: 118, minWidth: 108, align: "right", sortable: false, movable: false } as ColDef,
+        ]
       : cols;
   }, [baseCols, colOrder, canEdit]);
 
@@ -496,6 +510,40 @@ export function TransactionsGrid({
     [data]
   );
 
+  // ── Multi-select helpers (selection walks the VISIBLE order, per house kit) ─
+
+  const bulkAssign = (categoryId: string) => {
+    const cat = catById.get(categoryId);
+    const ids = data
+      .filter((r) => selected.has(r.id) && !r.is_transfer)
+      .map((r) => r.id);
+    if (ids.length === 0 || !cat) return;
+    const idSet = new Set(ids);
+    const prev = data;
+    setData((d) =>
+      removeWhenSorted
+        ? d.filter((r) => !idSet.has(r.id))
+        : d.map((r) =>
+            idSet.has(r.id)
+              ? { ...r, category_id: categoryId, reviewed: true, suggested_category_id: null }
+              : r
+          )
+    );
+    setSelected(new Set());
+    setLastIdx(null);
+    startTransition(async () => {
+      const res = await assignCategoryBulkInline(ids, categoryId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not assign the category");
+        return;
+      }
+      setNotice(
+        `${cat.icon ?? "🏷️"} ${cat.name} assigned to ${res.updated} transaction${res.updated === 1 ? "" : "s"} — and Nestly will remember it for these merchants.`
+      );
+    });
+  };
+
   const toggleTransfer = (txnId: string, makeTransfer: boolean) => {
     const prev = data;
     setData((d) =>
@@ -619,6 +667,46 @@ export function TransactionsGrid({
     return { inn, out, net: inn + out, n: filtered.length, transfers };
   }, [filtered]);
 
+  // "shown" = the filtered/sorted view minus transfers (they take no category)
+  const selectable = filtered.filter((r) => !r.is_transfer);
+  const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.id));
+  const toggleAll = (check: boolean) => {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      selectable.forEach((r) => {
+        if (check) n.add(r.id);
+        else n.delete(r.id);
+      });
+      return n;
+    });
+  };
+  // Shift-click selects the contiguous range in the VISIBLE order — walking
+  // `filtered`, not `data`, so it respects the active sort and filters.
+  const clickRow = (i: number, r: Row, checked: boolean, shift: boolean) => {
+    if (shift && lastIdx != null) {
+      const a = Math.min(lastIdx, i), b = Math.max(lastIdx, i);
+      setSelected((prev) => {
+        const n = new Set(prev);
+        for (let k = a; k <= b; k++) {
+          const rr = filtered[k];
+          if (rr && !rr.is_transfer) {
+            if (checked) n.add(rr.id);
+            else n.delete(rr.id);
+          }
+        }
+        return n;
+      });
+    } else {
+      setSelected((prev) => {
+        const n = new Set(prev);
+        if (checked) n.add(r.id);
+        else n.delete(r.id);
+        return n;
+      });
+    }
+    setLastIdx(i);
+  };
+
   // Plain click: sort by this column alone, 3-state asc -> desc -> off.
   // Ctrl/Cmd+click: append as the next priority, then cycle asc -> desc -> remove.
   const handleSort = (key: SortKey, additive: boolean) => {
@@ -673,6 +761,19 @@ export function TransactionsGrid({
   // ── Header cell (sort + drag-reorder + resize, mirrors Tracey's DataTable) ──
 
   const renderTh = (col: ColDef) => {
+    if (col.key === "sel") {
+      return (
+        <th key={col.key} className="px-2 py-2.5 text-center">
+          <input
+            type="checkbox"
+            title="Select all shown"
+            checked={allSelected}
+            onChange={(e) => toggleAll(e.target.checked)}
+            className="h-3.5 w-3.5 accent-teal-600"
+          />
+        </th>
+      );
+    }
     const sortIdx = col.sortable ? sortSpec.findIndex((s) => s.key === col.key) : -1;
     const isSorted = sortIdx >= 0;
     const sortDirHere = isSorted ? sortSpec[sortIdx].dir : null;
@@ -796,8 +897,21 @@ export function TransactionsGrid({
 
   // ── Body cell per column key ────────────────────────────────────────────────
 
-  const renderTd = (t: Row, col: ColDef) => {
+  const renderTd = (t: Row, col: ColDef, i: number) => {
     switch (col.key) {
+      case "sel":
+        return (
+          <td key={col.key} className="px-2 py-2 text-center">
+            {!t.is_transfer && (
+              <input
+                type="checkbox"
+                checked={selected.has(t.id)}
+                onChange={(e) => clickRow(i, t, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey)}
+                className="h-3.5 w-3.5 accent-teal-600"
+              />
+            )}
+          </td>
+        );
       case "date":
         return (
           <td key={col.key} className="overflow-hidden whitespace-nowrap px-3 py-2 tabular-nums text-stone-500">
@@ -1096,6 +1210,37 @@ export function TransactionsGrid({
         )}
       </div>
 
+      {/* Bulk bar — pick one category for every selected row */}
+      {canEdit && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 p-3">
+          <span className="text-sm font-medium text-teal-800">
+            {selected.size} selected
+          </span>
+          <div className="w-full sm:w-72">
+            <CategorySelect
+              categories={cats}
+              value=""
+              placeholder="Assign a category to all selected…"
+              onPick={bulkAssign}
+              onCategoryCreated={(c) =>
+                setCats((p) => [...p, c].sort((a, b) => a.name.localeCompare(b.name)))
+              }
+            />
+          </div>
+          <span className="hidden text-xs text-teal-700 sm:inline">Tip: Shift+click ticks a whole range.</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSelected(new Set());
+              setLastIdx(null);
+            }}
+            className="ml-auto rounded-lg border border-teal-300 px-2.5 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-100"
+          >
+            ✕ Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Mobile: card rows — everything visible, no sideways hunting */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
@@ -1104,13 +1249,21 @@ export function TransactionsGrid({
           </p>
         ) : (
           <>
-            {filtered.map((t) => {
+            {filtered.map((t, i) => {
               const sugg = !t.category_id && t.suggested_category_id ? catById.get(t.suggested_category_id) : null;
               const cat = t.category_id ? catById.get(t.category_id) : null;
               return (
                 <div key={t.id} className="rounded-xl border border-stone-200 bg-white p-3">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-xs text-stone-400">
+                    <span className="flex items-center gap-2 text-xs text-stone-400">
+                      {canEdit && !t.is_transfer && (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(t.id)}
+                          onChange={(e) => clickRow(i, t, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey)}
+                          className="h-3.5 w-3.5 accent-teal-600"
+                        />
+                      )}
                       {fmtDate(t.posted_at)}
                       {!hideAccountColumn && t.account_id && (
                         <span> · {accName.get(t.account_id)}</span>
@@ -1240,7 +1393,7 @@ export function TransactionsGrid({
             <tbody>
               {filtered.map((t, i) => (
                 <tr key={t.id} className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}>
-                  {orderedCols.map((c) => renderTd(t, c))}
+                  {orderedCols.map((c) => renderTd(t, c, i))}
                 </tr>
               ))}
             </tbody>

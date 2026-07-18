@@ -61,6 +61,11 @@ Ways a transaction gets sorted:
    accept ✓ / dismiss ✕ pills; accepting counts as confirmed.
 4. **It's a transfer** between your own accounts (🔁, or the *Find transfers* scanner) —
    transfers are neither spending nor income and count as dealt with.
+5. **Bulk assign** — tick the checkboxes (the header box selects all shown;
+   Shift+click ticks a whole range), and a bar appears to assign one category to every
+   selected row at once. Great for historical clean-up: sort by Description, select a
+   run of the same merchant, one pick sorts them all — and Nestly remembers the choice
+   for those merchants going forward.
 
 ### Auto-rules (how Nestly learns)
 
@@ -93,6 +98,11 @@ export. Edit inline (click a name, emoji or kind), or hit ✎ for the full edit 
 Emojis come from a searchable library (or paste any emoji — Win + . opens the system
 picker).
 
+Everywhere a category is picked or created — the categories sheet, the rule book, a
+transaction's type-ahead — it's the *same* shared picker and the *same* new-category
+dialog (searchable list with "＋ New category" right inside it), so they always look and
+behave identically.
+
 **Sub-categories:** drag a category's ⠿ grip onto another to nest it one level deep
 (e.g. Groceries → Butcher). Drag onto the dashed drop zone (or use the modal's
 "Sub-category of" selector) to make it top-level again. Nesting matches the child's kind
@@ -119,16 +129,7 @@ row). They power the Finance overview's budget bars and the monthly review.
 - **Documents** — the family filing cabinet: scans/photos of important documents with
   types, expiry dates and quick capture via the doc scanner.
 - **Recipes & Meals** — recipe collection (from URLs, photos, even videos), cook mode,
-  scaling, and a meal planner that feeds the shopping list. **You never have to set up
-  recipes first**: in the planner, click a cell and just type — matching recipes
-  autocomplete (pick several for one meal), and anything new can be created on the spot
-  with only a name. Ingredients are an optional brain-dump (one per line, "500g beef
-  mince" or just "gherkins" — quantities parsed loosely, never demanded); the method can
-  wait forever. Every typed meal is remembered in the recipe book and autocompletes next
-  time. One-offs like *Leftovers* or *Eating out* stay plain text and deliberately out of
-  the recipe book. Planned servings sit on each entry (the ×N badge — click to change);
-  the week's ingredient summary and the shopping-list button only draw from recipes that
-  have ingredients.
+  scaling, and a meal planner that feeds the shopping list.
 - **Shopping lists** — shared lists, connected to the meal planner.
 - **Photos** — family albums with per-photo visibility, sections and a chat under each.
 - **Messages** — family chat rooms and DMs with push notifications.

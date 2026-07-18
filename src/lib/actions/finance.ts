@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance } from "@/lib/finance";
-import { resolvePayees, payeeMatchKey, learnPayeeDefault } from "@/lib/payees";
+import { resolvePayees, payeeMatchKey, learnPayeeDefault, propagatePayeeSuggestions } from "@/lib/payees";
 import { loadRules, matchRules } from "@/lib/rules";
 
 function enc(s: string) {
@@ -397,6 +397,59 @@ export async function assignCategoryInline(
   if (error) return { ok: false, error: error.message };
   await learnPayeeDefault(supabase, membership.household_id, txnId, categoryId);
   return { ok: true };
+}
+
+/**
+ * Bulk categorisation: assign ONE category to many selected transactions at
+ * once (historical clean-up). Counts as confirmed (a person chose it), teaches
+ * the payee memory for each distinct merchant, and suggests the category on
+ * those merchants' remaining unsorted rows.
+ */
+export async function assignCategoryBulkInline(
+  txnIds: string[],
+  categoryId: string
+): Promise<{ ok: boolean; updated: number; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  if (!categoryId) return { ok: false, updated: 0, error: "Pick a category" };
+  if (txnIds.length === 0 || txnIds.length > 1000)
+    return { ok: false, updated: 0, error: "Nothing selected" };
+
+  const { data, error } = await supabase
+    .from("finance_transactions")
+    .update({
+      category_id: categoryId,
+      reviewed: true, // a person chose it — that IS the confirmation
+      suggested_category_id: null,
+      suggestion_source: null,
+      suggestion_confidence: null,
+    })
+    .eq("household_id", membership.household_id)
+    .in("id", txnIds)
+    .eq("is_transfer", false)
+    .select("id, payee_id");
+  if (error) return { ok: false, updated: 0, error: error.message };
+
+  // teach the payee memory (last choice wins), then suggest on the merchants'
+  // remaining unsorted rows — capped so a huge selection can't stall the save
+  const payeeIds = [...new Set((data ?? []).map((t) => t.payee_id).filter(Boolean))] as string[];
+  if (payeeIds.length > 0) {
+    await supabase
+      .from("finance_payees")
+      .update({ default_category_id: categoryId })
+      .in("id", payeeIds)
+      .eq("household_id", membership.household_id);
+    if (payeeIds.length <= 25) {
+      await Promise.all(
+        payeeIds.map((pid) =>
+          propagatePayeeSuggestions(supabase, membership.household_id, pid, categoryId)
+        )
+      );
+    }
+  }
+
+  revalidatePath("/finance");
+  return { ok: true, updated: data?.length ?? 0 };
 }
 
 /** Confirm a rule-applied category (payee memory / bank match) — the tick. */
