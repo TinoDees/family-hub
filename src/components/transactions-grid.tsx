@@ -38,9 +38,11 @@ type Row = {
   status?: string | null;
   /** mig 050: a person confirmed the category. Rule-applied rows are false until ticked. */
   reviewed: boolean;
+  /** the matching transfer leg's account (mig 043) — tells us what a transfer means */
+  pair_account_id?: string | null;
 };
 type Cat = { id: string; name: string; icon: string | null; kind: string };
-type Acc = { id: string; name: string };
+type Acc = { id: string; name: string; type?: string | null };
 type SortKey = "date" | "desc" | "account" | "category" | "amount";
 type SortDir = "asc" | "desc";
 
@@ -229,6 +231,36 @@ export function TransactionsGrid({
 
   const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
   const accName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
+  const accType = useMemo(() => new Map(accounts.map((a) => [a.id, a.type ?? null])), [accounts]);
+
+  /**
+   * What a transfer MEANS, derived from the two accounts' types — no extra
+   * bookkeeping needed. Money landing in a savings account = put away; leaving
+   * savings = drawn down; landing on a credit card = paying the card off (the
+   * actual spending was already recorded as the card's own transactions).
+   */
+  const transferLabel = (t: Row): { icon: string; text: string; hint: string } => {
+    const own = t.account_id ? accType.get(t.account_id) : null;
+    const other = t.pair_account_id ? accType.get(t.pair_account_id) : null;
+    const otherName = t.pair_account_id ? accName.get(t.pair_account_id) : null;
+    const via = otherName ? ` (${t.amount < 0 ? "to" : "from"} ${otherName})` : "";
+    if (t.amount < 0) {
+      if (other === "savings")
+        return { icon: "💰", text: "To savings", hint: `Money put away${via} — not spending.` };
+      if (other === "credit")
+        return { icon: "💳", text: "Card payment", hint: `Paying off the card${via} — the actual purchases are recorded on the card's account, so this doesn't count again.` };
+      if (own === "savings")
+        return { icon: "🏦", text: "From savings", hint: `Drawn out of savings${via} — what it's spent on shows up as its own transactions.` };
+      return { icon: "🔁", text: "Transfer", hint: `Between your own accounts${via} — neither income nor spending.` };
+    }
+    if (own === "savings")
+      return { icon: "💰", text: "Into savings", hint: `Money put away${via} — not income.` };
+    if (own === "credit")
+      return { icon: "💳", text: "Card payment", hint: `The card being paid off${via} — the purchases are this account's own transactions.` };
+    if (other === "savings")
+      return { icon: "🏦", text: "From savings", hint: `Drawn out of savings${via} — not income.` };
+    return { icon: "🔁", text: "Transfer", hint: `Between your own accounts${via} — neither income nor spending.` };
+  };
   const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" });
@@ -953,19 +985,27 @@ export function TransactionsGrid({
         return (
           <td key={col.key} className="px-3 py-2">
             {t.is_transfer ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
-                🔁 Transfer
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => toggleTransfer(t.id, false)}
-                    title="Not a transfer — count it again"
-                    className="text-sky-400 hover:text-sky-700"
+              (() => {
+                const tl = transferLabel(t);
+                return (
+                  <span
+                    title={tl.hint}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
                   >
-                    ✕
-                  </button>
-                )}
-              </span>
+                    {tl.icon} {tl.text}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => toggleTransfer(t.id, false)}
+                        title="Not a transfer — count it again"
+                        className="text-sky-400 hover:text-sky-700"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </span>
+                );
+              })()
             ) : canEdit ? (
               <div>
                 <CategoryPicker
@@ -1282,12 +1322,20 @@ export function TransactionsGrid({
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       {t.is_transfer ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
-                          🔁 Transfer
-                          {canEdit && (
-                            <button type="button" onClick={() => toggleTransfer(t.id, false)} className="text-sky-400" title="Not a transfer">✕</button>
-                          )}
-                        </span>
+                        (() => {
+                          const tl = transferLabel(t);
+                          return (
+                            <span
+                              title={tl.hint}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
+                            >
+                              {tl.icon} {tl.text}
+                              {canEdit && (
+                                <button type="button" onClick={() => toggleTransfer(t.id, false)} className="text-sky-400" title="Not a transfer">✕</button>
+                              )}
+                            </span>
+                          );
+                        })()
                       ) : canEdit ? (
                         <div>
                           <CategoryPicker

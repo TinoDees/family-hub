@@ -117,32 +117,6 @@ function MultiSelectFilter({
   );
 }
 
-/** Text cell — local string while focused, commit on blur/Enter. */
-function MatchCell({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
-  const [s, setS] = useState(value);
-  useEffect(() => setS(value), [value]);
-  const commit = () => {
-    const clean = s.trim();
-    if (clean.length >= 2 && clean !== value) onCommit(clean);
-    else setS(value);
-  };
-  return (
-    <input
-      value={s}
-      onChange={(e) => setS(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") { setS(value); (e.target as HTMLInputElement).blur(); }
-      }}
-      className="w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm hover:border-stone-200 focus:border-stone-400 focus:bg-white focus:outline-none"
-    />
-  );
-}
-
-const selectCls =
-  "w-full rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-sm hover:border-stone-200 focus:border-stone-400 focus:bg-white focus:outline-none";
-
 export function RulesGrid({
   rules,
   categories,
@@ -300,21 +274,7 @@ export function RulesGrid({
 
   const layoutCustomised = colOrder.length > 0 || Object.keys(colWidths).length > 0;
 
-  // ── Mutations — optimistic with rollback ───────────────────────────────────
-
-  const patchRow = (id: string, patch: Partial<Row>) => {
-    const prev = data;
-    setData((d) => d.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    startTransition(async () => {
-      const res = await updateRuleInline(id, patch);
-      if (!res.ok) {
-        setData(prev);
-        setMsg(res.error ?? "Could not save the rule");
-      } else if (res.applied && res.applied > 0) {
-        setNotice(`Rule saved — suggested its category on ${res.applied} unsorted transaction${res.applied === 1 ? "" : "s"}.`);
-      }
-    });
-  };
+  // ── Mutations — optimistic with rollback (edits happen in the ✎ modal) ─────
 
   const removeRow = (row: Row) => {
     if (!window.confirm(`Delete this rule ("${row.match_text}")? Already-sorted transactions keep their categories.`)) return;
@@ -523,52 +483,31 @@ export function RulesGrid({
       case "enabled":
         return (
           <td key={col.key} className="px-3 py-1.5">
-            <button
-              type="button"
-              onClick={() => patchRow(r.id, { enabled: !r.enabled })}
-              title={r.enabled ? "Rule is on — click to pause it" : "Rule is paused — click to turn it on"}
+            <span
               className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                r.enabled ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-stone-100 text-stone-400 hover:bg-stone-200"
+                r.enabled ? "bg-teal-50 text-teal-700" : "bg-stone-100 text-stone-400"
               }`}
             >
               {r.enabled ? "On" : "Off"}
-            </button>
+            </span>
           </td>
         );
       case "match":
         return (
-          <td key={col.key} className="px-1 py-1.5">
-            <MatchCell value={r.match_text} onCommit={(v) => patchRow(r.id, { match_text: v })} />
+          <td key={col.key} className="truncate px-3 py-2" title={r.match_text}>
+            {r.match_text}
           </td>
         );
       case "field":
         return (
-          <td key={col.key} className="px-1.5 py-1.5">
-            <select
-              value={r.match_field}
-              onChange={(e) => patchRow(r.id, { match_field: e.target.value as Row["match_field"] })}
-              className={selectCls}
-            >
-              <option value="any">Description or merchant</option>
-              <option value="description">Description only</option>
-              <option value="merchant">Merchant only</option>
-            </select>
+          <td key={col.key} className="truncate px-3 py-2 text-stone-500">
+            {FIELD_LABEL[r.match_field]}
           </td>
         );
       case "category":
         return (
-          <td key={col.key} className="px-1.5 py-1.5">
-            <select
-              value={r.category_id}
-              onChange={(e) => patchRow(r.id, { category_id: e.target.value })}
-              className={selectCls}
-            >
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon ?? "🏷️"} {c.name}
-                </option>
-              ))}
-            </select>
+          <td key={col.key} className="truncate px-3 py-2">
+            {catLabel(r.category_id)}
           </td>
         );
       case "created":
@@ -677,18 +616,14 @@ export function RulesGrid({
           filtered.map((r) => (
             <div key={r.id} className="rounded-xl border border-stone-200 bg-white p-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => patchRow(r.id, { enabled: !r.enabled })}
+                <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     r.enabled ? "bg-teal-50 text-teal-700" : "bg-stone-100 text-stone-400"
                   }`}
                 >
                   {r.enabled ? "On" : "Off"}
-                </button>
-                <div className="min-w-0 flex-1">
-                  <MatchCell value={r.match_text} onCommit={(v) => patchRow(r.id, { match_text: v })} />
-                </div>
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.match_text}</span>
                 <button
                   type="button"
                   onClick={() => setEditRow(r)}
@@ -706,28 +641,9 @@ export function RulesGrid({
                   ✕
                 </button>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <select
-                  value={r.match_field}
-                  onChange={(e) => patchRow(r.id, { match_field: e.target.value as Row["match_field"] })}
-                  className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs"
-                >
-                  <option value="any">Description or merchant</option>
-                  <option value="description">Description only</option>
-                  <option value="merchant">Merchant only</option>
-                </select>
-                <select
-                  value={r.category_id}
-                  onChange={(e) => patchRow(r.id, { category_id: e.target.value })}
-                  className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs"
-                >
-                  {cats.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.icon ?? "🏷️"} {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <p className="mt-1.5 text-xs text-stone-500">
+                {FIELD_LABEL[r.match_field]} → {catLabel(r.category_id)}
+              </p>
             </div>
           ))
         )}

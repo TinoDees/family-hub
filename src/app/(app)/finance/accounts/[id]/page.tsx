@@ -16,7 +16,7 @@ const TYPE_ICON: Record<string, string> = {
 };
 
 const TXN_FIELDS =
-  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status, reviewed";
+  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status, reviewed, transfer_pair:transfer_pair_id(account_id)";
 
 type Txn = {
   id: string;
@@ -31,7 +31,16 @@ type Txn = {
   is_transfer: boolean;
   scope: "household" | "personal";
   reviewed: boolean;
+  /** the matching leg's account — lets the grid say WHAT a transfer is (savings, card payment).
+   *  PostgREST types embedded FK joins as arrays even when to-one, so accept both shapes. */
+  transfer_pair: { account_id: string | null } | { account_id: string | null }[] | null;
 };
+
+/** Normalise the embedded pair join (object at runtime, array per the types). */
+function pairAccountId(p: Txn["transfer_pair"]): string | null {
+  if (!p) return null;
+  return Array.isArray(p) ? (p[0]?.account_id ?? null) : p.account_id;
+}
 
 function syncedAgo(iso: string) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -62,7 +71,7 @@ export default async function AccountDetailPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: account }, { data: sums }, { data: inbox }, { data: monthTxns }, { data: categories }] =
+  const [{ data: account }, { data: sums }, { data: inbox }, { data: monthTxns }, { data: categories }, { data: allAccounts }] =
     await Promise.all([
       supabase
         .from("finance_accounts")
@@ -103,6 +112,12 @@ export default async function AccountDetailPage({
         .select("id, name, icon, kind")
         .eq("household_id", membership.household_id)
         .order("name"),
+      // every account's type, so transfer pills can say "To savings" / "Card payment"
+      supabase
+        .from("finance_accounts")
+        .select("id, name, type")
+        .eq("household_id", membership.household_id)
+        .order("name"),
     ]);
 
   // account must belong to this household
@@ -140,6 +155,7 @@ export default async function AccountDetailPage({
     scope: t.scope,
     account_id: t.account_id,
     reviewed: t.reviewed,
+    pair_account_id: pairAccountId(t.transfer_pair),
   }));
 
   const tab = (active: boolean) =>
@@ -238,7 +254,7 @@ export default async function AccountDetailPage({
           <TransactionsGrid
             rows={gridRows}
             categories={categories ?? []}
-            accounts={[{ id: account.id, name: account.name }]}
+            accounts={allAccounts ?? [{ id: account.id, name: account.name, type: account.type }]}
             canEdit={canEdit}
             currency={currency}
             monthKey={month.key}

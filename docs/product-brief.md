@@ -67,6 +67,33 @@ Ways a transaction gets sorted:
    run of the same merchant, one pick sorts them all — and Nestly remembers the choice
    for those merchants going forward.
 
+### How Nestly tells money movements apart
+
+Four kinds of rows, and only the first two touch your budgets:
+
+- **Spending** — a negative, non-transfer, household-scoped transaction with a category.
+- **Income** — the positive equivalent (Salary, Interest…).
+- **Personal** (split finances) — in the owner's balance but out of family reporting.
+- **Transfers** — money between your own accounts. Both legs are flagged (auto-detected
+  by amount/date pairing, or the 🔁 button) and excluded from income, spending, budgets
+  and reviews — while account balances still include them, so everything reconciles.
+
+Transfers additionally say **what they were for**, worked out from the two accounts'
+types — no extra data entry:
+
+- **💰 To savings / Into savings** — everyday → savings account: money put away. Not
+  spending; it never was — it's still your money, just parked.
+- **🏦 From savings** — savings → everyday: drawing savings down. Not income; whatever
+  it gets spent on will appear as its own (categorised) transactions.
+- **💳 Card payment** — everyday → credit card: paying the card off. The *actual*
+  spending was already recorded as the card account's own transactions (Woolworths,
+  fuel, …), so the payment must not count again — it's just settling the bill.
+- **🔁 Transfer** — any other own-account move (e.g. between two everyday accounts).
+
+Hover any transfer pill for the explanation. Practical upshot: categorise the *card's*
+transactions like any other account, and let the payment stay a transfer; savings moves
+need no category at all.
+
 ### Auto-rules (how Nestly learns)
 
 Three layers, strongest first:

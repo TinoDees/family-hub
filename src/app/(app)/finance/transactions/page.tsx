@@ -27,7 +27,7 @@ export default async function TransactionsPage({
   const [{ data: txns }, { data: categories }, { data: accounts }] = await Promise.all([
     supabase
       .from("finance_transactions")
-      .select("id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status, reviewed")
+      .select("id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status, reviewed, transfer_pair:transfer_pair_id(account_id)")
       .eq("household_id", membership.household_id)
       .gte("posted_at", month.start)
       .lte("posted_at", month.end)
@@ -40,7 +40,7 @@ export default async function TransactionsPage({
       .order("name"),
     supabase
       .from("finance_accounts")
-      .select("id, name")
+      .select("id, name, type")
       .eq("household_id", membership.household_id)
       .order("name"),
   ]);
@@ -141,6 +141,11 @@ export default async function TransactionsPage({
           scope: t.scope,
           account_id: t.account_id,
           reviewed: t.reviewed,
+          pair_account_id: ((p: unknown): string | null => {
+            if (!p) return null;
+            if (Array.isArray(p)) return (p[0] as { account_id: string | null } | undefined)?.account_id ?? null;
+            return (p as { account_id: string | null }).account_id;
+          })(t.transfer_pair),
         }))}
         categories={categories ?? []}
         accounts={accounts ?? []}
