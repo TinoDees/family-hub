@@ -24,7 +24,7 @@ export default async function FinanceSetupPage({
   const supabase = await createClient();
   const [{ data: accounts }, { data: categories }, { data: budgets }] = await Promise.all([
     supabase.from("finance_accounts").select("id, name, type, institution").eq("household_id", membership.household_id).order("name"),
-    supabase.from("finance_categories").select("id, name, icon, kind").eq("household_id", membership.household_id).order("kind").order("name"),
+    supabase.from("finance_categories").select("id, name, icon, kind, parent_id").eq("household_id", membership.household_id).order("kind").order("name"),
     supabase.from("finance_budgets").select("category_id, amount").eq("household_id", membership.household_id),
   ]);
   const budgetMap = Object.fromEntries((budgets ?? []).map((b) => [b.category_id, Number(b.amount)]));

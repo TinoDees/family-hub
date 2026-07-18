@@ -141,6 +141,7 @@ export async function acceptSuggestion(txnId: string): Promise<{ ok: boolean; er
     .from("finance_transactions")
     .update({
       category_id: txn.suggested_category_id,
+      reviewed: true, // accepting a suggestion IS the confirmation
       suggested_category_id: null,
       suggestion_source: null,
       suggestion_confidence: null,
@@ -186,6 +187,7 @@ export async function acceptAllSuggestions(
       .from("finance_transactions")
       .update({
         category_id: t.suggested_category_id,
+        reviewed: true, // accepting a suggestion IS the confirmation
         suggested_category_id: null,
         suggestion_source: null,
         suggestion_confidence: null,

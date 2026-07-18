@@ -155,6 +155,7 @@ export async function addTransaction(formData: FormData) {
     amount,
     currency: membership.household.base_currency,
     category_id: String(formData.get("category_id") || "") || null,
+    reviewed: !!String(formData.get("category_id") || ""), // manually entered = confirmed
     source: "manual",
     created_by: userId,
   });
@@ -209,6 +210,7 @@ export async function setTransactionCategory(formData: FormData) {
     .from("finance_transactions")
     .update({
       category_id: categoryId,
+      reviewed: !!categoryId, // a person chose it — that IS the confirmation
       suggested_category_id: null,
       suggestion_source: null,
       suggestion_confidence: null,
@@ -225,7 +227,7 @@ export async function createCategoryInline(
   name: string,
   icon: string,
   kind: string
-): Promise<{ ok: boolean; error?: string; category?: { id: string; name: string; icon: string | null; kind: string } }> {
+): Promise<{ ok: boolean; error?: string; category?: { id: string; name: string; icon: string | null; kind: string; parent_id: string | null } }> {
   const { membership } = await requireFinance("edit");
   const supabase = await createClient();
   const clean = name.trim().slice(0, 60);
@@ -238,7 +240,7 @@ export async function createCategoryInline(
       icon: icon.trim().slice(0, 8) || null,
       kind: kind === "income" ? "income" : "expense",
     })
-    .select("id, name, icon, kind")
+    .select("id, name, icon, kind, parent_id")
     .single();
   if (error || !data)
     return { ok: false, error: /duplicate/i.test(error?.message ?? "") ? "That category already exists" : (error?.message ?? "Failed") };
@@ -270,6 +272,53 @@ export async function updateCategoryInline(
     .eq("id", categoryId)
     .eq("household_id", membership.household_id);
   if (error) return { ok: false, error: friendly(error.message) };
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/**
+ * Nest / un-nest a category (one level deep). Nesting aligns the child's kind
+ * with the parent's so expense/income never mix inside one group.
+ */
+export async function setCategoryParentInline(
+  categoryId: string,
+  parentId: string | null
+): Promise<{ ok: boolean; error?: string; kind?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  if (parentId === categoryId) return { ok: false, error: "A category can't be its own parent" };
+  if (parentId) {
+    const { data: parent } = await supabase
+      .from("finance_categories")
+      .select("id, parent_id, kind")
+      .eq("id", parentId)
+      .eq("household_id", membership.household_id)
+      .maybeSingle();
+    if (!parent) return { ok: false, error: "Parent category not found" };
+    if (parent.parent_id) return { ok: false, error: "Only one level of sub-categories — pick a top-level category" };
+    const { data: kids } = await supabase
+      .from("finance_categories")
+      .select("id")
+      .eq("parent_id", categoryId)
+      .eq("household_id", membership.household_id)
+      .limit(1);
+    if (kids && kids.length > 0)
+      return { ok: false, error: "This category has sub-categories of its own — move those out first" };
+    const { error } = await supabase
+      .from("finance_categories")
+      .update({ parent_id: parentId, kind: parent.kind })
+      .eq("id", categoryId)
+      .eq("household_id", membership.household_id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/finance");
+    return { ok: true, kind: parent.kind };
+  }
+  const { error } = await supabase
+    .from("finance_categories")
+    .update({ parent_id: null })
+    .eq("id", categoryId)
+    .eq("household_id", membership.household_id);
+  if (error) return { ok: false, error: error.message };
   revalidatePath("/finance");
   return { ok: true };
 }
@@ -337,6 +386,7 @@ export async function assignCategoryInline(
     .from("finance_transactions")
     .update({
       category_id: categoryId,
+      reviewed: !!categoryId, // a person chose it — that IS the confirmation
       suggested_category_id: null,
       suggestion_source: null,
       suggestion_confidence: null,
@@ -346,6 +396,45 @@ export async function assignCategoryInline(
   if (error) return { ok: false, error: error.message };
   await learnPayeeDefault(supabase, membership.household_id, txnId, categoryId);
   return { ok: true };
+}
+
+/** Confirm a rule-applied category (payee memory / bank match) — the tick. */
+export async function confirmCategoryInline(txnId: string): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("finance_transactions")
+    .update({ reviewed: true, suggestion_source: null, suggestion_confidence: null })
+    .eq("id", txnId)
+    .eq("household_id", membership.household_id)
+    .not("category_id", "is", null)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Nothing to confirm — give it a category first" };
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/** Confirm every rule-applied category in one go ("Confirm all shown"). */
+export async function confirmAllInline(
+  txnIds: string[]
+): Promise<{ ok: boolean; confirmed: number; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  if (txnIds.length === 0 || txnIds.length > 1000)
+    return { ok: false, confirmed: 0, error: "Nothing to confirm" };
+  const { data, error } = await supabase
+    .from("finance_transactions")
+    .update({ reviewed: true, suggestion_source: null, suggestion_confidence: null })
+    .eq("household_id", membership.household_id)
+    .in("id", txnIds)
+    .not("category_id", "is", null)
+    .eq("reviewed", false)
+    .select("id");
+  if (error) return { ok: false, confirmed: 0, error: error.message };
+  revalidatePath("/finance");
+  return { ok: true, confirmed: data?.length ?? 0 };
 }
 
 export async function deleteTransactionInline(txnId: string): Promise<{ ok: boolean; error?: string }> {

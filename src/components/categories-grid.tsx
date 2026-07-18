@@ -6,10 +6,11 @@ import {
   updateCategoryInline,
   deleteCategoryInline,
   setBudgetInline,
+  setCategoryParentInline,
 } from "@/lib/actions/finance";
 import { EmojiPicker } from "@/components/emoji-picker";
 
-type Cat = { id: string; name: string; icon: string | null; kind: string };
+type Cat = { id: string; name: string; icon: string | null; kind: string; parent_id: string | null };
 type Row = Cat & { budget: number | null };
 type SortKey = "name" | "kind" | "budget";
 type SortDir = "asc" | "desc";
@@ -244,7 +245,11 @@ export function CategoriesGrid({
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [editRow, setEditRow] = useState<Row | null>(null);
+  const [dragCatId, setDragCatId] = useState<string | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const dataById = useMemo(() => new Map(data.map((r) => [r.id, r])), [data]);
 
   const fmt = (n: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(n);
 
@@ -397,6 +402,35 @@ export function CategoriesGrid({
   const setBudget = (id: string, amount: number) =>
     patchRow(id, { budget: amount > 0 ? amount : null }, () => setBudgetInline(id, amount));
 
+  /** Drag-and-drop nesting: drop a category onto another to make it a sub-category. */
+  const nestUnder = (childId: string, parentId: string | null) => {
+    const child = dataById.get(childId);
+    if (!child) return;
+    if (parentId === childId) return;
+    if (parentId && data.some((r) => r.parent_id === childId)) {
+      setMsg("That category has sub-categories of its own — move those out first.");
+      return;
+    }
+    const target = parentId ? dataById.get(parentId) : null;
+    if (parentId && !target) return;
+    if (child.parent_id === parentId) return;
+    const prev = data;
+    setData((d) =>
+      d.map((r) =>
+        r.id === childId
+          ? { ...r, parent_id: parentId, kind: target ? target.kind : r.kind }
+          : r
+      )
+    );
+    startTransition(async () => {
+      const res = await setCategoryParentInline(childId, parentId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not move the category");
+      }
+    });
+  };
+
   const removeRow = (row: Row) => {
     if (!window.confirm(`Delete "${row.name}"? Transactions keep their history but lose this label; any budget for it is removed.`)) return;
     const prev = data;
@@ -444,6 +478,30 @@ export function CategoriesGrid({
       return 0;
     });
   }, [data, q, kindSel, budgetSel, sortSpec]);
+
+  // Tree arrangement: sub-categories sit directly under their parent (both
+  // levels keep the active sort among themselves). A child whose parent is
+  // filtered out shows on its own.
+  const arranged = useMemo(() => {
+    const idSet = new Set(filtered.map((r) => r.id));
+    const childrenOf = new Map<string, Row[]>();
+    const roots: Row[] = [];
+    for (const r of filtered) {
+      if (r.parent_id && idSet.has(r.parent_id)) {
+        const arr = childrenOf.get(r.parent_id) ?? [];
+        arr.push(r);
+        childrenOf.set(r.parent_id, arr);
+      } else {
+        roots.push(r);
+      }
+    }
+    const out: Row[] = [];
+    for (const r of roots) {
+      out.push(r);
+      for (const c of childrenOf.get(r.id) ?? []) out.push(c);
+    }
+    return out;
+  }, [filtered]);
 
   const totals = useMemo(() => {
     let expense = 0, income = 0, budgeted = 0;
@@ -624,12 +682,43 @@ export function CategoriesGrid({
             <EmojiCell value={r.icon} onCommit={(v) => setIcon(r.id, v)} />
           </td>
         );
-      case "name":
+      case "name": {
+        const isChild = !!r.parent_id;
+        const parentName = isChild ? dataById.get(r.parent_id!)?.name : null;
         return (
           <td key={col.key} className="px-1 py-1.5">
-            <NameCell value={r.name} onCommit={(v) => rename(r.id, v)} />
+            <div className={`flex items-center gap-1 ${isChild ? "pl-6" : ""}`}>
+              <span
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData("text/plain", `cat:${r.id}`);
+                  e.dataTransfer.effectAllowed = "move";
+                  setDragCatId(r.id);
+                }}
+                onDragEnd={() => {
+                  setDragCatId(null);
+                  setDragOverRowId(null);
+                }}
+                title="Drag onto another category to nest it under it"
+                className="shrink-0 cursor-grab px-0.5 text-stone-300 hover:text-stone-500"
+                style={{ fontSize: "0.8rem", lineHeight: 1 }}
+              >
+                ⠿
+              </span>
+              {isChild && <span className="shrink-0 text-stone-300">↳</span>}
+              <div className="min-w-0 flex-1">
+                <NameCell value={r.name} onCommit={(v) => rename(r.id, v)} />
+              </div>
+              {isChild && parentName && q.trim() && (
+                <span className="shrink-0 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500">
+                  {parentName}
+                </span>
+              )}
+            </div>
           </td>
         );
+      }
       case "kind":
         return (
           <td key={col.key} className="px-3 py-1.5">
@@ -740,6 +829,22 @@ export function CategoriesGrid({
         </button>
       </div>
 
+      {/* Un-nest drop zone — appears while dragging a sub-category */}
+      {dragCatId && dataById.get(dragCatId)?.parent_id && (
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            nestUnder(dragCatId, null);
+            setDragCatId(null);
+            setDragOverRowId(null);
+          }}
+          className="rounded-xl border-2 border-dashed border-teal-300 bg-teal-50 px-4 py-3 text-center text-sm font-medium text-teal-700"
+        >
+          ⬆ Drop here to make it a top-level category again
+        </div>
+      )}
+
       {/* Mobile: card rows */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
@@ -747,8 +852,13 @@ export function CategoriesGrid({
             {data.length === 0 ? "No categories yet — add one above." : "Nothing matches these filters."}
           </p>
         ) : (
-          filtered.map((r) => (
-            <div key={r.id} className="rounded-xl border border-stone-200 bg-white p-3">
+          arranged.map((r) => (
+            <div key={r.id} className={`rounded-xl border border-stone-200 bg-white p-3 ${r.parent_id ? "ml-4" : ""}`}>
+              {r.parent_id && dataById.get(r.parent_id) && (
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-stone-400">
+                  ↳ under {dataById.get(r.parent_id)!.name}
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <EmojiCell value={r.icon} onCommit={(v) => setIcon(r.id, v)} />
                 <div className="min-w-0 flex-1">
@@ -809,8 +919,38 @@ export function CategoriesGrid({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, i) => (
-                <tr key={r.id} className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}>
+              {arranged.map((r, i) => (
+                <tr
+                  key={r.id}
+                  onDragOver={
+                    dragCatId && dragCatId !== r.id
+                      ? (e) => {
+                          e.preventDefault();
+                          if (dragOverRowId !== r.id) setDragOverRowId(r.id);
+                        }
+                      : undefined
+                  }
+                  onDragLeave={() => {
+                    if (dragOverRowId === r.id) setDragOverRowId(null);
+                  }}
+                  onDrop={
+                    dragCatId && dragCatId !== r.id
+                      ? (e) => {
+                          e.preventDefault();
+                          // dropping on a root nests under it; on a child, joins that child's parent
+                          nestUnder(dragCatId, r.parent_id ?? r.id);
+                          setDragCatId(null);
+                          setDragOverRowId(null);
+                        }
+                      : undefined
+                  }
+                  className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}
+                  style={
+                    dragOverRowId === r.id && dragCatId && dragCatId !== r.id
+                      ? { boxShadow: "inset 3px 0 0 #0d9488", background: "rgba(204,251,241,0.5)" }
+                      : undefined
+                  }
+                >
                   {orderedCols.map((c) => renderTd(r, c))}
                 </tr>
               ))}
@@ -848,6 +988,8 @@ export function CategoriesGrid({
         <EditCategoryModal
           row={editRow}
           currency={currency}
+          rootOptions={data.filter((x) => !x.parent_id && x.id !== editRow.id)}
+          hasChildren={data.some((x) => x.parent_id === editRow.id)}
           onClose={() => setEditRow(null)}
           onSaved={(r) => {
             setData((d) => d.map((x) => (x.id === r.id ? r : x)));
@@ -863,16 +1005,22 @@ export function CategoriesGrid({
   );
 }
 
-/** Everything about one category in a single modal — name, emoji, kind, budget, delete. */
+/** Everything about one category in a single modal — name, emoji, kind, parent, budget, delete. */
 function EditCategoryModal({
   row,
   currency,
+  rootOptions,
+  hasChildren,
   onClose,
   onSaved,
   onDeleted,
 }: {
   row: Row;
   currency: string;
+  /** Top-level categories this one could sit under (excludes itself). */
+  rootOptions: Row[];
+  /** True when this category has sub-categories (so it can't be nested itself). */
+  hasChildren: boolean;
   onClose: () => void;
   onSaved: (r: Row) => void;
   onDeleted: (id: string) => void;
@@ -880,6 +1028,7 @@ function EditCategoryModal({
   const [name, setName] = useState(row.name);
   const [icon, setIcon] = useState(row.icon ?? "");
   const [kind, setKind] = useState(row.kind);
+  const [parentSel, setParentSel] = useState(row.parent_id ?? "");
   const [budget, setBudgetStr] = useState(row.budget == null ? "" : String(row.budget));
   const [showPicker, setShowPicker] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -903,8 +1052,16 @@ function EditCategoryModal({
       if (!res.ok) { setBusy(false); setError(res.error ?? "Could not save"); return; }
     }
 
+    // nesting (may realign kind with the parent's, server-side)
+    let effectiveKind = kind;
+    if (parentSel !== (row.parent_id ?? "")) {
+      const res = await setCategoryParentInline(row.id, parentSel || null);
+      if (!res.ok) { setBusy(false); setError(res.error ?? "Could not move the category"); return; }
+      if (res.kind) effectiveKind = res.kind;
+    }
+
     // budget: expense rows keep what's typed; switching to income clears it
-    const wantBudget = kind === "income" ? 0 : budget.trim() === "" ? 0 : Number(budget);
+    const wantBudget = effectiveKind === "income" ? 0 : budget.trim() === "" ? 0 : Number(budget);
     if (Number.isNaN(wantBudget) || wantBudget < 0) {
       setBusy(false); setError("Budget must be a positive number (or empty)"); return;
     }
@@ -918,7 +1075,8 @@ function EditCategoryModal({
       ...row,
       name: cleanName,
       icon: icon.trim() || row.icon,
-      kind,
+      kind: effectiveKind,
+      parent_id: parentSel || null,
       budget: wantBudget > 0 ? wantBudget : null,
     });
   };
@@ -989,6 +1147,34 @@ function EditCategoryModal({
                 </button>
               ))}
             </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">Sub-category of</label>
+            {hasChildren ? (
+              <p className="text-xs text-stone-400">
+                This category has sub-categories, so it stays top-level. Move those out first to nest it.
+              </p>
+            ) : (
+              <>
+                <select
+                  value={parentSel}
+                  onChange={(e) => setParentSel(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">— top-level —</option>
+                  {rootOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icon ?? "🏷️"} {c.name}
+                    </option>
+                  ))}
+                </select>
+                {parentSel && (
+                  <p className="mt-1 text-[11px] text-stone-400">
+                    Nesting matches its kind to the parent&apos;s automatically. Tip: you can also drag ⠿ in the sheet.
+                  </p>
+                )}
+              </>
+            )}
           </div>
           {kind === "expense" ? (
             <div>

@@ -5,6 +5,8 @@ import {
   createCategoryInline,
   assignCategoryInline,
   deleteTransactionInline,
+  confirmCategoryInline,
+  confirmAllInline,
 } from "@/lib/actions/finance";
 import {
   suggestCategories,
@@ -29,6 +31,8 @@ type Row = {
   account_id: string | null;
   /** 'pending' = bank hasn't settled it yet (mig 046); absent/'posted' = final */
   status?: string | null;
+  /** mig 050: a person confirmed the category. Rule-applied rows are false until ticked. */
+  reviewed: boolean;
 };
 type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Acc = { id: string; name: string };
@@ -51,10 +55,18 @@ const EMOJIS = ["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","�
 
 const STATUS_OPTIONS = [
   { value: "unsorted", label: "To sort" },
-  { value: "sorted", label: "Sorted" },
+  { value: "toconfirm", label: "🪄 To confirm" },
+  { value: "sorted", label: "✓ Sorted" },
   { value: "transfer", label: "Transfers" },
   { value: "personal", label: "👤 Personal" },
 ];
+
+/** Sorting state of one row: unsorted → (toconfirm) → sorted; transfers live apart. */
+function rowStatus(r: Row): "transfer" | "unsorted" | "toconfirm" | "sorted" {
+  if (r.is_transfer) return "transfer";
+  if (!r.category_id) return "unsorted";
+  return r.reviewed ? "sorted" : "toconfirm";
+}
 
 // ── MultiSelectFilter — compact checkbox popover for toolbar filters ─────────
 
@@ -163,6 +175,7 @@ export function TransactionsGrid({
   statusPill = false,
   hideAccountColumn = false,
   storageKey = "txns",
+  removeWhenSorted = false,
 }: {
   rows: Row[];
   categories: Cat[];
@@ -176,6 +189,8 @@ export function TransactionsGrid({
   hideAccountColumn?: boolean;
   /** Namespaces the persisted column layout (widths + order) in localStorage. */
   storageKey?: string;
+  /** "To sort" inbox mode: a row that becomes sorted disappears from the list. */
+  removeWhenSorted?: boolean;
 }) {
   const [data, setData] = useState(rows);
   const [cats, setCats] = useState(categories);
@@ -347,9 +362,13 @@ export function TransactionsGrid({
   const applyCategory = (txnId: string, category: Cat | null) => {
     const prev = data;
     setData((d) =>
-      d.map((r) =>
-        r.id === txnId ? { ...r, category_id: category?.id ?? null, suggested_category_id: null } : r
-      )
+      removeWhenSorted && category
+        ? d.filter((r) => r.id !== txnId) // sorted — it leaves the inbox
+        : d.map((r) =>
+            r.id === txnId
+              ? { ...r, category_id: category?.id ?? null, reviewed: !!category, suggested_category_id: null }
+              : r
+          )
     );
     startTransition(async () => {
       const res = await assignCategoryInline(txnId, category?.id ?? null);
@@ -363,17 +382,55 @@ export function TransactionsGrid({
   const acceptOne = (txnId: string) => {
     const prev = data;
     setData((d) =>
-      d.map((r) =>
-        r.id === txnId
-          ? { ...r, category_id: r.suggested_category_id, suggested_category_id: null }
-          : r
-      )
+      removeWhenSorted
+        ? d.filter((r) => r.id !== txnId)
+        : d.map((r) =>
+            r.id === txnId
+              ? { ...r, category_id: r.suggested_category_id, reviewed: true, suggested_category_id: null }
+              : r
+          )
     );
     startTransition(async () => {
       const res = await acceptSuggestion(txnId);
       if (!res.ok) {
         setData(prev);
         setMsg(res.error ?? "Could not accept suggestion");
+      }
+    });
+  };
+
+  /** The tick: confirm a rule-applied category (payee memory / bank match). */
+  const confirmOne = (txnId: string) => {
+    const prev = data;
+    setData((d) =>
+      removeWhenSorted
+        ? d.filter((r) => r.id !== txnId)
+        : d.map((r) => (r.id === txnId ? { ...r, reviewed: true } : r))
+    );
+    startTransition(async () => {
+      const res = await confirmCategoryInline(txnId);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not confirm");
+      }
+    });
+  };
+
+  /** Confirm every visible rule-applied category in one go. */
+  const confirmShown = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const prev = data;
+    setData((d) =>
+      removeWhenSorted
+        ? d.filter((r) => !idSet.has(r.id))
+        : d.map((r) => (idSet.has(r.id) ? { ...r, reviewed: true } : r))
+    );
+    startTransition(async () => {
+      const res = await confirmAllInline(ids);
+      if (!res.ok) {
+        setData(prev);
+        setMsg(res.error ?? "Could not confirm");
       }
     });
   };
@@ -431,6 +488,10 @@ export function TransactionsGrid({
   };
 
   const suggestionCount = data.filter((r) => !r.category_id && r.suggested_category_id && !r.is_transfer).length;
+  const confirmableIds = useMemo(
+    () => data.filter((r) => rowStatus(r) === "toconfirm").map((r) => r.id),
+    [data]
+  );
 
   const toggleTransfer = (txnId: string, makeTransfer: boolean) => {
     const prev = data;
@@ -513,10 +574,7 @@ export function TransactionsGrid({
         // whatever other statuses are ticked instead of ORing alongside them.
         if (statusSel.has("personal") && r.scope !== "personal") return false;
         const others = [...statusSel].filter((v) => v !== "personal");
-        if (others.length > 0) {
-          const status = r.is_transfer ? "transfer" : r.category_id ? "sorted" : "unsorted";
-          if (!others.includes(status)) return false;
-        }
+        if (others.length > 0 && !others.includes(rowStatus(r))) return false;
       }
       if (from && r.posted_at < from) return false;
       if (to && r.posted_at > to) return false;
@@ -759,8 +817,10 @@ export function TransactionsGrid({
               </span>
             )}
             {statusPill &&
-              (!t.category_id && !t.is_transfer ? (
+              (rowStatus(t) === "unsorted" ? (
                 <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">To sort</span>
+              ) : rowStatus(t) === "toconfirm" ? (
+                <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">🪄 To confirm</span>
               ) : (
                 <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">✓ Sorted</span>
               ))}
@@ -816,6 +876,29 @@ export function TransactionsGrid({
                       onClick={() => dismissOne(t.id)}
                       className="rounded px-1 py-0.5 text-stone-400 hover:bg-stone-100"
                       title="Dismiss suggestion"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                {t.category_id && !t.reviewed && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-violet-700">
+                    <span className="truncate" title="Filled in automatically from what you picked for this merchant before">
+                      🪄 auto-filled
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => confirmOne(t.id)}
+                      className="rounded bg-violet-100 px-1.5 py-0.5 font-medium hover:bg-violet-200"
+                      title="Looks right — confirm it"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyCategory(t.id, null)}
+                      className="rounded px-1 py-0.5 text-stone-400 hover:bg-stone-100"
+                      title="Not right — clear it and pick another"
                     >
                       ✕
                     </button>
@@ -962,6 +1045,16 @@ export function TransactionsGrid({
             ✓ Accept all {suggestionCount}
           </button>
         )}
+        {canEdit && confirmableIds.length > 0 && (
+          <button
+            type="button"
+            onClick={() => confirmShown(confirmableIds)}
+            title="Confirm every auto-filled category in this list"
+            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
+          >
+            🪄 Confirm all {confirmableIds.length}
+          </button>
+        )}
         {canEdit && (
           <button
             type="button"
@@ -1029,6 +1122,13 @@ export function TransactionsGrid({
                               <button type="button" onClick={() => dismissOne(t.id)} className="rounded px-1.5 py-0.5 text-stone-400" title="Dismiss">✕</button>
                             </div>
                           )}
+                          {t.category_id && !t.reviewed && (
+                            <div className="mt-1 flex items-center gap-1.5 text-[12px] text-violet-700">
+                              <span className="truncate" title="Filled in automatically from what you picked for this merchant before">🪄 auto-filled</span>
+                              <button type="button" onClick={() => confirmOne(t.id)} className="rounded bg-violet-100 px-2 py-0.5 font-medium" title="Looks right — confirm it">✓</button>
+                              <button type="button" onClick={() => applyCategory(t.id, null)} className="rounded px-1.5 py-0.5 text-stone-400" title="Not right — clear it">✕</button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-xs text-stone-500">
@@ -1049,8 +1149,16 @@ export function TransactionsGrid({
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {statusPill && (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${!t.category_id && !t.is_transfer ? "bg-amber-50 text-amber-700" : "bg-teal-50 text-teal-700"}`}>
-                          {!t.category_id && !t.is_transfer ? "To sort" : "✓ Sorted"}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            rowStatus(t) === "unsorted"
+                              ? "bg-amber-50 text-amber-700"
+                              : rowStatus(t) === "toconfirm"
+                                ? "bg-violet-50 text-violet-700"
+                                : "bg-teal-50 text-teal-700"
+                          }`}
+                        >
+                          {rowStatus(t) === "unsorted" ? "To sort" : rowStatus(t) === "toconfirm" ? "🪄 To confirm" : "✓ Sorted"}
                         </span>
                       )}
                       {canEdit && !t.is_transfer && (

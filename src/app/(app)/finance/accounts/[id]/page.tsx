@@ -16,7 +16,7 @@ const TYPE_ICON: Record<string, string> = {
 };
 
 const TXN_FIELDS =
-  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status";
+  "id, posted_at, description, merchant, amount, category_id, suggested_category_id, source, account_id, is_transfer, scope, status, reviewed";
 
 type Txn = {
   id: string;
@@ -30,6 +30,7 @@ type Txn = {
   account_id: string | null;
   is_transfer: boolean;
   scope: "household" | "personal";
+  reviewed: boolean;
 };
 
 function syncedAgo(iso: string) {
@@ -40,7 +41,12 @@ function syncedAgo(iso: string) {
   return `synced ${hrs} hour${hrs === 1 ? "" : "s"} ago`;
 }
 
-/** One account: its balance, plus the "To sort" inbox and the full history. */
+/** A row is fully dealt with: confirmed category, or flagged as a transfer. */
+function isSorted(t: Txn) {
+  return t.is_transfer || (t.category_id !== null && t.reviewed);
+}
+
+/** One account: balance, the "To sort" inbox, the Sorted history, and All. */
 export default async function AccountDetailPage({
   params,
   searchParams,
@@ -56,7 +62,7 @@ export default async function AccountDetailPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: account }, { data: sums }, { data: unsorted }, { data: monthTxns }, { data: categories }] =
+  const [{ data: account }, { data: sums }, { data: inbox }, { data: monthTxns }, { data: categories }] =
     await Promise.all([
       supabase
         .from("finance_accounts")
@@ -71,14 +77,15 @@ export default async function AccountDetailPage({
         .select("amount")
         .eq("household_id", membership.household_id)
         .eq("account_id", id),
-      // the inbox: everything not yet sorted, any month
+      // the inbox: needs a person's attention — no category yet, OR a rule
+      // filled the category and it still awaits its confirmation tick
       supabase
         .from("finance_transactions")
         .select(TXN_FIELDS)
         .eq("household_id", membership.household_id)
         .eq("account_id", id)
         .eq("is_transfer", false)
-        .is("category_id", null)
+        .or("category_id.is.null,reviewed.is.false")
         .order("posted_at", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(500),
@@ -109,11 +116,18 @@ export default async function AccountDetailPage({
       ? Number(account.bank_available)
       : null;
 
-  const toSort = (unsorted ?? []) as Txn[];
+  const toSort = (inbox ?? []) as Txn[];
   const toSortCount = toSort.length;
-  const view = viewParam === "all" ? "all" : viewParam === "sort" ? "sort" : toSortCount > 0 ? "sort" : "all";
+  const monthRows = (monthTxns ?? []) as Txn[];
+  const sortedRows = monthRows.filter(isSorted);
+  const view =
+    viewParam === "all" ? "all"
+    : viewParam === "sorted" ? "sorted"
+    : viewParam === "sort" ? "sort"
+    : toSortCount > 0 ? "sort" : "all";
 
-  const gridRows = ((view === "sort" ? toSort : ((monthTxns ?? []) as Txn[]))).map((t) => ({
+  const sourceRows = view === "sort" ? toSort : view === "sorted" ? sortedRows : monthRows;
+  const gridRows = sourceRows.map((t) => ({
     id: t.id,
     posted_at: t.posted_at,
     description: t.description,
@@ -125,6 +139,7 @@ export default async function AccountDetailPage({
     is_transfer: t.is_transfer,
     scope: t.scope,
     account_id: t.account_id,
+    reviewed: t.reviewed,
   }));
 
   const tab = (active: boolean) =>
@@ -162,27 +177,30 @@ export default async function AccountDetailPage({
         </div>
       </div>
 
-      {/* Segmented control + month nav (All view only) */}
+      {/* Segmented control + month nav (Sorted and All views) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white p-1">
           <Link href={`/finance/accounts/${account.id}?view=sort`} className={tab(view === "sort")}>
             To sort ({toSortCount})
           </Link>
+          <Link href={`/finance/accounts/${account.id}?view=sorted&m=${month.key}`} className={tab(view === "sorted")}>
+            ✓ Sorted
+          </Link>
           <Link href={`/finance/accounts/${account.id}?view=all&m=${month.key}`} className={tab(view === "all")}>
             All
           </Link>
         </div>
-        {view === "all" && (
+        {view !== "sort" && (
           <div className="flex items-center gap-3">
             <Link
-              href={`/finance/accounts/${account.id}?view=all&m=${shiftMonth(month.key, -1)}`}
+              href={`/finance/accounts/${account.id}?view=${view}&m=${shiftMonth(month.key, -1)}`}
               className="rounded-lg border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100"
             >
               ←
             </Link>
             <span className="min-w-36 text-center text-sm font-medium">{month.label}</span>
             <Link
-              href={`/finance/accounts/${account.id}?view=all&m=${shiftMonth(month.key, 1)}`}
+              href={`/finance/accounts/${account.id}?view=${view}&m=${shiftMonth(month.key, 1)}`}
               className="rounded-lg border border-stone-300 px-2.5 py-1 text-sm hover:bg-stone-100"
             >
               →
@@ -196,9 +214,9 @@ export default async function AccountDetailPage({
           <div className="text-2xl">🎉</div>
           <p className="mt-1 text-sm font-medium text-teal-800">All sorted!</p>
           <p className="mt-1 text-sm text-teal-700">
-            Every transaction on this account has a category or is marked as a transfer.{" "}
-            <Link href={`/finance/accounts/${account.id}?view=all`} className="underline">
-              See all transactions
+            Every transaction on this account is confirmed or marked as a transfer.{" "}
+            <Link href={`/finance/accounts/${account.id}?view=sorted`} className="underline">
+              See what&apos;s sorted
             </Link>
             .
           </p>
@@ -207,9 +225,14 @@ export default async function AccountDetailPage({
         <>
           {view === "sort" && (
             <p className="text-sm text-stone-500">
-              {toSortCount === 500 ? "Showing the newest 500 unsorted transactions — sort these first." : (
-                <>These transactions still need a category (or the 🔁 transfer flag) — from any month, newest first.</>
+              {toSortCount === 500 ? "Showing the newest 500 — sort these first." : (
+                <>Needs a person&apos;s eye — pick a category, or tick 🪄 auto-filled ones to confirm. Sorted rows leave this list straight away.</>
               )}
+            </p>
+          )}
+          {view === "sorted" && (
+            <p className="text-sm text-stone-500">
+              Everything confirmed (or flagged as a transfer) in {month.label} — your reconciled history.
             </p>
           )}
           <TransactionsGrid
@@ -219,11 +242,12 @@ export default async function AccountDetailPage({
             canEdit={canEdit}
             currency={currency}
             monthKey={month.key}
-            statusPill={view === "all"}
+            statusPill={view !== "sort"}
             hideAccountColumn
             storageKey="account"
+            removeWhenSorted={view === "sort"}
           />
-              </>
+        </>
       )}
     </div>
   );
