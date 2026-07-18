@@ -55,7 +55,7 @@ function parseNumber(raw: string): number | null {
 
 /** Parse a single free-typed line. Never throws; worst case the line is all name. */
 export function parseIngredientLine(line: string): ParsedIngredient | null {
-  let s = line.trim().replace(/^[-*•·]\s*/, ""); // allow "- beef" bullet style
+  const s = line.trim().replace(/^[-*•·]\s*/, ""); // allow "- beef" bullet style
   if (!s) return null;
 
   // leading quantity: "500g x", "1/2 x", "1 1/2 cups x", "2 x chicken"
