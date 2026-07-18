@@ -129,8 +129,14 @@ row). They power the Finance overview's budget bars and the monthly review.
   the recipe book. Planned servings sit on each entry (the ×N badge — click to change);
   the week's ingredient summary and the shopping-list button only draw from recipes that
   have ingredients.
-- **Shopping** — its own hub with tabs: **Overview** (dashboard: open lists, pantry
-  summary, plan-the-shop entry), **Lists**, and **Pantry**. The Pantry is the master
+- **Shopping** — its own hub with tabs: **Overview** (dashboard), **Plan**, **Lists**,
+  and **Pantry**. **Plan** is the worksheet between the meal planner and the lists
+  (the planner's 🛒 button lands here): the week's recipe ingredients plus any staples
+  below their pantry minimum, with Needed / SOH / Min-Max / Suggested / To-buy /
+  Retailer columns — everything pre-filled and overridable, and hitting Create without
+  touching anything gives the simple one-tap outcome. SOH entered here is remembered in
+  the pantry. **Create makes one list per retailer** (PO-style — "Butcher — week of 20
+  Jul") plus a Groceries list for items without a retailer. The Pantry is the master
   catalog of everything the household buys — a bare name is a complete entry, with
   optional layers on top: categories & sub-categories (seeded defaults, fully editable
   via ⚙️ Categories & retailers), a **preferred retailer** per item ("mince → the

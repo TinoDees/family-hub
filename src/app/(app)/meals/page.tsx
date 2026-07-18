@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
-import { shoppingListFromWeek } from "@/lib/actions/shopping";
 import { MealCellPicker, type CellEntry } from "@/components/meal-cell-picker";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
@@ -167,13 +166,12 @@ export default async function MealsPage({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">This week&apos;s ingredients</h2>
             {access === "edit" && (
-              <form action={shoppingListFromWeek}>
-                <input type="hidden" name="week_start" value={iso(days[0])} />
-                <input type="hidden" name="week_end" value={iso(days[6])} />
-                <button className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700">
-                  🛒 Create shopping list
-                </button>
-              </form>
+              <Link
+                href={`/shopping/plan?from=${iso(days[0])}&to=${iso(days[6])}`}
+                className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700"
+              >
+                🛒 Plan the shop
+              </Link>
             )}
           </div>
           <p className="mt-1 text-xs text-stone-400">

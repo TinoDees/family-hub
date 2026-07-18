@@ -111,9 +111,16 @@ RLS: household-scoped via `module_access('shopping', …)`, mirroring shopping t
 | # | Chunk | Status |
 |---|---|---|
 | S1 | Staples page, taxonomy + guesser, grouped list, Add staples | **built 19 Jul 2026** |
-| S2 | Review worksheet + SOH write-back + skip preference | next |
-| S3 | Stores & aisle ordering | after S2 |
+| S1.5 | Shopping hub: household cats/subcats, retailers, pantry master catalog, dashboard tabs (migs 052+053 applied) | **built 19 Jul 2026** |
+| S2 | Planning worksheet `/shopping/plan`: seeded from week recipes + below-min staples; SOH write-back; one list per retailer | **built 19 Jul 2026** |
+| S3 | Stores & aisle ordering | next |
 | S4 | Specials spike → engine | needs data-source research |
+
+S2 notes: the meals page's 🛒 button now routes to `/shopping/plan?from=…&to=…` (the
+worksheet is the drive-through — untouched + Create = one simple list). Recipe rows
+match pantry items by case-insensitive name to prefill SOH/min-max/retailer; SOH edited
+in the worksheet writes back to `pantry_items.soh` on Create. A per-user "skip the
+worksheet" preference is still open (small; add if Kati finds even one click too many).
 
 Meal-planner chunks still open (library dashboard, views, voting) queue behind S2 —
 shopping is the reward end of the ladder, voting can wait.

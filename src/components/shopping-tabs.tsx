@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/shopping", label: "Overview" },
+  { href: "/shopping/plan", label: "Plan" },
   { href: "/shopping/lists", label: "Lists" },
   { href: "/shopping/pantry", label: "Pantry" },
 ];
@@ -17,7 +18,9 @@ export function ShoppingTabs() {
       // list detail pages (/shopping/<uuid>) belong to the Lists tab
       return (
         pathname.startsWith("/shopping/lists") ||
-        (pathname.startsWith("/shopping/") && !pathname.startsWith("/shopping/pantry"))
+        (pathname.startsWith("/shopping/") &&
+          !pathname.startsWith("/shopping/pantry") &&
+          !pathname.startsWith("/shopping/plan"))
       );
     return pathname.startsWith(href);
   };

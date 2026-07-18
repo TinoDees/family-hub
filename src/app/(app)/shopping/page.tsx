@@ -28,10 +28,10 @@ export default async function ShoppingOverviewPage() {
 
   const cards = [
     {
-      href: "/meals",
-      emoji: "📅",
+      href: "/shopping/plan",
+      emoji: "🧮",
       title: "Plan the shop",
-      text: "Set the week's meals — the planner turns them into a shopping list. A full planning table (needed / stock / suggested, split per retailer) is coming next.",
+      text: "The week's recipe ingredients plus low staples in one worksheet — check stock, adjust quantities, split per retailer, create the lists.",
     },
     {
       href: "/shopping/lists",
