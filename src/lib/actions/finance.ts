@@ -245,6 +245,88 @@ export async function createCategoryInline(
   return { ok: true, category: data };
 }
 
+/** Inline category edit for the setup grid — patch only the fields provided. */
+export async function updateCategoryInline(
+  categoryId: string,
+  patch: { name?: string; icon?: string; kind?: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  const update: { name?: string; icon?: string; kind?: string } = {};
+  if (patch.name !== undefined) {
+    const clean = patch.name.trim().slice(0, 60);
+    if (!clean) return { ok: false, error: "Give the category a name" };
+    update.name = clean;
+  }
+  if (patch.icon !== undefined) {
+    const icon = patch.icon.trim().slice(0, 8);
+    if (icon) update.icon = icon;
+  }
+  if (patch.kind !== undefined) update.kind = patch.kind === "income" ? "income" : "expense";
+  if (Object.keys(update).length === 0) return { ok: true };
+  const { error } = await supabase
+    .from("finance_categories")
+    .update(update)
+    .eq("id", categoryId)
+    .eq("household_id", membership.household_id);
+  if (error) return { ok: false, error: friendly(error.message) };
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/** Inline delete for the setup grid — keep transactions, drop budgets, then the category. */
+export async function deleteCategoryInline(categoryId: string): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  await supabase
+    .from("finance_transactions")
+    .update({ category_id: null })
+    .eq("category_id", categoryId)
+    .eq("household_id", membership.household_id);
+  await supabase
+    .from("finance_budgets")
+    .delete()
+    .eq("category_id", categoryId)
+    .eq("household_id", membership.household_id);
+  const { error } = await supabase
+    .from("finance_categories")
+    .delete()
+    .eq("id", categoryId)
+    .eq("household_id", membership.household_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
+/** Inline budget upsert for the setup grid — 0 or less removes the budget. */
+export async function setBudgetInline(
+  categoryId: string,
+  amount: number
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireFinance("edit");
+  const supabase = await createClient();
+  if (!Number.isFinite(amount) || amount <= 0) {
+    const { error } = await supabase
+      .from("finance_budgets")
+      .delete()
+      .eq("household_id", membership.household_id)
+      .eq("category_id", categoryId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from("finance_budgets").upsert(
+      {
+        household_id: membership.household_id,
+        category_id: categoryId,
+        amount,
+      },
+      { onConflict: "household_id,category_id" }
+    );
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath("/finance");
+  return { ok: true };
+}
+
 export async function assignCategoryInline(
   txnId: string,
   categoryId: string | null
