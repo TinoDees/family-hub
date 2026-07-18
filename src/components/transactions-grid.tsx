@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  createCategoryInline,
   assignCategoryInline,
   deleteTransactionInline,
   confirmCategoryInline,
@@ -19,6 +18,7 @@ import { findTransfersInline, setTransferInline } from "@/lib/actions/transfers"
 import { setScopeInline } from "@/lib/actions/scope";
 import { ruleMatches } from "@/lib/rules";
 import { NewRuleModal } from "@/components/rules-grid";
+import { NewCategoryModal } from "@/components/category-modal";
 
 type Row = {
   id: string;
@@ -53,8 +53,6 @@ type ColDef = {
   /** Can be dragged to a new position. The actions column stays pinned last. */
   movable: boolean;
 };
-
-const EMOJIS = ["🐾","🔌","🛠️","🚗","🏠","🛒","🍽️","🎬","👕","💊","✈️","🎁","📱","🎓","⚡","💧","🏋️","🎮","🧸","☕","🎰","🏦","💳","🧾"];
 
 const STATUS_OPTIONS = [
   { value: "unsorted", label: "To sort" },
@@ -1286,6 +1284,9 @@ export function TransactionsGrid({
       {ruleModal && (
         <NewRuleModal
           categories={cats}
+          onCategoryCreated={(c) =>
+            setCats((p) => [...p, c].sort((a, b) => a.name.localeCompare(b.name)))
+          }
           initialText={(ruleModal.merchant ?? ruleModal.description).trim().slice(0, 120)}
           initialCategoryId={ruleModal.category_id ?? ruleModal.suggested_category_id ?? ""}
           onClose={() => setRuleModal(null)}
@@ -1399,119 +1400,6 @@ function CategoryPicker({
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function NewCategoryModal({
-  initialName,
-  onClose,
-  onCreated,
-}: {
-  initialName: string;
-  onClose: () => void;
-  onCreated: (c: Cat) => void;
-}) {
-  const [name, setName] = useState(initialName);
-  const [icon, setIcon] = useState("");
-  const [custom, setCustom] = useState("");
-  const [kind, setKind] = useState("expense");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    const res = await createCategoryInline(name, custom.trim() || icon, kind);
-    setBusy(false);
-    if (!res.ok || !res.category) {
-      setError(res.error ?? "Could not create category");
-      return;
-    }
-    onCreated(res.category as Cat);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-base font-semibold">＋ New category</h2>
-        {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              placeholder="e.g. Lotto"
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium">Pick an emoji</label>
-            <div className="flex flex-wrap gap-1">
-              {EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    setIcon(e);
-                    setCustom("");
-                  }}
-                  className={`rounded-lg border px-2 py-1 text-lg ${
-                    icon === e && !custom ? "border-stone-900 ring-1 ring-stone-900" : "border-stone-200 hover:bg-stone-50"
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-            <input
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              placeholder="…or type any emoji"
-              className="mt-2 w-40 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium">Kind</label>
-            <div className="flex gap-2">
-              {(["expense", "income"] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm capitalize ${
-                    kind === k ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 hover:bg-stone-50"
-                  }`}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy || !name.trim()}
-            onClick={save}
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
-          >
-            {busy ? "Creating…" : "Create & apply"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

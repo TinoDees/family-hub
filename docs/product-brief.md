@@ -93,6 +93,11 @@ export. Edit inline (click a name, emoji or kind), or hit ✎ for the full edit 
 Emojis come from a searchable library (or paste any emoji — Win + . opens the system
 picker).
 
+Everywhere a category is picked or created — the categories sheet, the rule book, a
+transaction's type-ahead — it's the *same* shared picker and the *same* new-category
+dialog (searchable list with "＋ New category" right inside it), so they always look and
+behave identically.
+
 **Sub-categories:** drag a category's ⠿ grip onto another to nest it one level deep
 (e.g. Groceries → Butcher). Drag onto the dashed drop zone (or use the modal's
 "Sub-category of" selector) to make it top-level again. Nesting matches the child's kind

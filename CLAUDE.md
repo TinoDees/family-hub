@@ -28,7 +28,15 @@ sequentially; apply via the Supabase MCP `apply_migration` with this project id.
 - **Mutations from grids are inline server actions** (`*Inline` in `src/lib/actions/*`)
   returning `{ ok, error? }`, applied optimistically with rollback — not form+redirect.
   Form+redirect (with `?sec=` banners) is fine for plain page forms.
-- **Emoji pickers** use `src/components/emoji-picker.tsx` + `src/lib/emoji-library.ts`.
+- **Shared modals & pickers — never fork them.** One component per concept, reused
+  everywhere, so a restyle in one file updates the whole app:
+  `category-modal.tsx` (NewCategoryModal — THE new-category dialog: emoji library +
+  name + kind), `category-select.tsx` (CategorySelect — THE searchable category
+  combobox with "＋ New category…" inside, for modals/forms), and
+  `emoji-picker.tsx` + `src/lib/emoji-library.ts` (THE emoji library panel).
+  If a flow needs a category chosen or created, wire it to these — do not write a
+  local `<select>` or a local modal. When a design change is requested for one of
+  these, change the shared component only.
 - **Finance sorting model (mig 050):** `finance_transactions.reviewed` = a person
   confirmed the category. Rule-applied categories (payee memory / bank match) stay
   `reviewed=false` ("🪄 to confirm") until ticked. Manual picks and accepted suggestions

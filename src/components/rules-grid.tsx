@@ -6,6 +6,8 @@ import {
   updateRuleInline,
   deleteRuleInline,
 } from "@/lib/actions/rules";
+import { CategorySelect } from "@/components/category-select";
+import type { NewCat } from "@/components/category-modal";
 
 type Cat = { id: string; name: string; icon: string | null; kind: string };
 type Row = {
@@ -151,6 +153,14 @@ export function RulesGrid({
 }) {
   const [data, setData] = useState<Row[]>(rules);
   useEffect(() => setData(rules), [rules]);
+  // categories are stateful so a category created inline (from the rule modal)
+  // shows up in every select straight away
+  const [cats, setCatsState] = useState<Cat[]>(categories);
+  useEffect(() => setCatsState(categories), [categories]);
+  const addCat = (c: NewCat) =>
+    setCatsState((p) =>
+      [...p, c].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+    );
 
   const [q, setQ] = useState("");
   const [fieldSel, setFieldSel] = useState<Set<string>>(new Set());
@@ -163,7 +173,7 @@ export function RulesGrid({
   const [showNew, setShowNew] = useState(false);
   const [, startTransition] = useTransition();
 
-  const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const catById = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
   const catLabel = (id: string) => {
     const c = catById.get(id);
     return c ? `${c.icon ?? "🏷️"} ${c.name}` : "—";
@@ -551,7 +561,7 @@ export function RulesGrid({
               onChange={(e) => patchRow(r.id, { category_id: e.target.value })}
               className={selectCls}
             >
-              {categories.map((c) => (
+              {cats.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.icon ?? "🏷️"} {c.name}
                 </option>
@@ -693,7 +703,7 @@ export function RulesGrid({
                   onChange={(e) => patchRow(r.id, { category_id: e.target.value })}
                   className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs"
                 >
-                  {categories.map((c) => (
+                  {cats.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.icon ?? "🏷️"} {c.name}
                     </option>
@@ -748,7 +758,8 @@ export function RulesGrid({
 
       {showNew && (
         <NewRuleModal
-          categories={categories}
+          categories={cats}
+          onCategoryCreated={addCat}
           onClose={() => setShowNew(false)}
           onCreated={(rule, applied) => {
             setData((d) => [rule, ...d]);
@@ -768,16 +779,21 @@ export function NewRuleModal({
   initialCategoryId = "",
   onClose,
   onCreated,
+  onCategoryCreated,
 }: {
   categories: Cat[];
   initialText?: string;
   initialCategoryId?: string;
   onClose: () => void;
   onCreated: (rule: Row, applied: number) => void;
+  /** Bubble up a category created inline so the caller's lists stay current. */
+  onCategoryCreated?: (c: NewCat) => void;
 }) {
   const [text, setText] = useState(initialText);
   const [field, setField] = useState("any");
   const [categoryId, setCategoryId] = useState(initialCategoryId);
+  const [localCats, setLocalCats] = useState<Cat[]>(categories);
+  useEffect(() => setLocalCats(categories), [categories]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -829,18 +845,17 @@ export function NewRuleModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium">Allocates category</label>
-            <select
+            <CategorySelect
+              categories={localCats}
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">— pick a category —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon ?? "🏷️"} {c.name}
-                </option>
-              ))}
-            </select>
+              onPick={setCategoryId}
+              onCategoryCreated={(c) => {
+                setLocalCats((p) =>
+                  [...p, c].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+                );
+                onCategoryCreated?.(c);
+              }}
+            />
           </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
