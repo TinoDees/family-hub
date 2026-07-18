@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireFinance } from "@/lib/finance";
 import { resolvePayees, payeeMatchKey, learnPayeeDefault } from "@/lib/payees";
+import { loadRules, matchRules } from "@/lib/rules";
 
 function enc(s: string) {
   return encodeURIComponent(s);
@@ -487,6 +488,7 @@ export async function importTransactions(
     .eq("household_id", membership.household_id);
   const catByName = new Map((cats ?? []).map((c) => [c.name.trim().toLowerCase(), c.id]));
   const payees = await resolvePayees(supabase, membership.household_id, rows.map((r) => r.merchant));
+  const rules = await loadRules(supabase, membership.household_id); // the rule book beats payee memory
 
   // split finances: default scope per row — the payee's learned choice wins,
   // else rows on a private account are 'personal', otherwise 'household'
@@ -511,7 +513,9 @@ export async function importTransactions(
   const records = rows.map((r) => {
     const matchKey = payeeMatchKey(r.merchant);
     const payee = matchKey ? payees.get(matchKey) : undefined;
+    const ruleCategoryId = matchRules(rules, r.description, r.merchant);
     const categoryId =
+      ruleCategoryId ??
       payee?.default_category_id ??
       (r.bankCategory ? (catByName.get(r.bankCategory.trim().toLowerCase()) ?? null) : null);
     return {
@@ -528,7 +532,13 @@ export async function importTransactions(
     payee_id: payee?.id ?? null,
     category_id: categoryId,
     scope: (payee ? scopeByPayee.get(payee.id) : null) ?? accountScope,
-    suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
+    suggestion_source: categoryId
+      ? ruleCategoryId
+        ? "rule"
+        : payee?.default_category_id
+          ? "payee"
+          : "bank"
+      : null,
     import_hash: createHash("sha256")
       .update(
         `${membership.household_id}|${accountId}|${r.date}|${r.amount.toFixed(2)}|${r.description.trim().toLowerCase()}`

@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual, createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolvePayees, payeeMatchKey } from "@/lib/payees";
+import { loadRules, matchRules } from "@/lib/rules";
 import { detectTransfers } from "@/lib/transfers";
 import { logSecurityEvent } from "@/lib/telemetry";
 import { requestIpHash } from "@/lib/hash";
@@ -194,6 +195,9 @@ export async function POST(req: Request) {
   // --- payees: find-or-create per merchant; a learned payee default beats the bank's label ---
   const payees = await resolvePayees(admin, householdId, incoming.map((t) => t.merchant_name));
 
+  // --- the rule book (mig 051): explicit user rules beat the payee memory ---
+  const rules = await loadRules(admin, householdId);
+
   // scope memory: a payee's last household/personal choice wins for new rows;
   // otherwise rows on a private account default to 'personal'
   const payeeIds = [...new Set([...payees.values()].map((p) => p.id))];
@@ -213,7 +217,9 @@ export async function POST(req: Request) {
       const bankCategory = t.custom_category ?? (t.category ? humanise(t.category) : null);
       const matchKey = payeeMatchKey(t.merchant_name);
       const payee = matchKey ? payees.get(matchKey) : undefined;
+      const ruleCategoryId = matchRules(rules, t.description, t.merchant_name);
       const categoryId =
+        ruleCategoryId ??
         payee?.default_category_id ??
         (bankCategory ? (catByName.get(bankCategory.trim().toLowerCase()) ?? null) : null);
       return {
@@ -232,7 +238,13 @@ export async function POST(req: Request) {
         scope:
           (payee ? scopeByPayee.get(payee.id) : null) ??
           (visById.get(accountId) === "private" ? "personal" : "household"),
-        suggestion_source: categoryId ? (payee?.default_category_id ? "payee" : "bank") : null,
+        suggestion_source: categoryId
+          ? ruleCategoryId
+            ? "rule"
+            : payee?.default_category_id
+              ? "payee"
+              : "bank"
+          : null,
         status: t.status === "pending" ? "pending" : "posted",
         external_id: t.id,
         import_hash: createHash("sha256").update(`redbark|${t.id}`).digest("hex"),

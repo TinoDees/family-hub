@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   createCategoryInline,
@@ -16,6 +17,8 @@ import {
 } from "@/lib/actions/classify";
 import { findTransfersInline, setTransferInline } from "@/lib/actions/transfers";
 import { setScopeInline } from "@/lib/actions/scope";
+import { ruleMatches } from "@/lib/rules";
+import { NewRuleModal } from "@/components/rules-grid";
 
 type Row = {
   id: string;
@@ -209,7 +212,9 @@ export function TransactionsGrid({
     { key: "date", dir: "desc" },
   ]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<{ txnId: string; name: string } | null>(null);
+  const [ruleModal, setRuleModal] = useState<Row | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [transferBusy, setTransferBusy] = useState(false);
   const [, startTransition] = useTransition();
@@ -291,7 +296,7 @@ export function TransactionsGrid({
       : baseCols;
     // The actions column (transfer / delete) is pinned last and never moves.
     return canEdit
-      ? [...cols, { key: "actions", label: "", width: 92, minWidth: 84, align: "right", sortable: false, movable: false } as ColDef]
+      ? [...cols, { key: "actions", label: "", width: 118, minWidth: 108, align: "right", sortable: false, movable: false } as ColDef]
       : cols;
   }, [baseCols, colOrder, canEdit]);
 
@@ -938,6 +943,16 @@ export function TransactionsGrid({
             {!t.is_transfer && (
               <button
                 type="button"
+                onClick={() => setRuleModal(t)}
+                className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-teal-50 hover:text-teal-700"
+                title="Make a rule from this transaction (rule book)"
+              >
+                📖
+              </button>
+            )}
+            {!t.is_transfer && (
+              <button
+                type="button"
                 onClick={() => toggleTransfer(t.id, true)}
                 className="rounded px-1.5 py-1 text-xs text-stone-300 hover:bg-sky-50 hover:text-sky-600"
                 title="This is a transfer between our own accounts"
@@ -974,6 +989,12 @@ export function TransactionsGrid({
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {msg}{" "}
           <button className="underline" onClick={() => setMsg(null)}>dismiss</button>
+        </p>
+      )}
+      {notice && (
+        <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-700">
+          {notice}{" "}
+          <button className="underline" onClick={() => setNotice(null)}>dismiss</button>
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white p-3">
@@ -1016,6 +1037,15 @@ export function TransactionsGrid({
         <button type="button" onClick={exportCsv} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100">
           ⬇ CSV
         </button>
+        {canEdit && (
+          <Link
+            href="/finance/rules"
+            title="The rule book — your standing category rules"
+            className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-100"
+          >
+            📖 Rule book
+          </Link>
+        )}
         {layoutCustomised && (
           <button
             type="button"
@@ -1162,6 +1192,9 @@ export function TransactionsGrid({
                         </span>
                       )}
                       {canEdit && !t.is_transfer && (
+                        <button type="button" onClick={() => setRuleModal(t)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-teal-50 hover:text-teal-700" title="Make a rule from this transaction">📖</button>
+                      )}
+                      {canEdit && !t.is_transfer && (
                         <button type="button" onClick={() => toggleTransfer(t.id, true)} className="rounded-lg px-2 py-1.5 text-sm text-stone-300 hover:bg-sky-50 hover:text-sky-600" title="Transfer between our accounts">🔁</button>
                       )}
                       {canEdit && !t.is_transfer && (
@@ -1246,6 +1279,31 @@ export function TransactionsGrid({
             setCats((c) => [...c, category].sort((a, b) => a.name.localeCompare(b.name)));
             applyCategory(modal.txnId, category);
             setModal(null);
+          }}
+        />
+      )}
+
+      {ruleModal && (
+        <NewRuleModal
+          categories={cats}
+          initialText={(ruleModal.merchant ?? ruleModal.description).trim().slice(0, 120)}
+          initialCategoryId={ruleModal.category_id ?? ruleModal.suggested_category_id ?? ""}
+          onClose={() => setRuleModal(null)}
+          onCreated={(rule, applied) => {
+            // reflect the retro-applied suggestions in this list straight away
+            setData((d) =>
+              d.map((r) =>
+                !r.category_id && !r.is_transfer && ruleMatches(rule, r.description, r.merchant)
+                  ? { ...r, suggested_category_id: rule.category_id }
+                  : r
+              )
+            );
+            setRuleModal(null);
+            setNotice(
+              applied > 0
+                ? `Rule saved — its category is now suggested on ${applied} unsorted transaction${applied === 1 ? "" : "s"} (accept with ✓). New arrivals matching it will come in pre-filled.`
+                : "Rule saved — new arrivals matching it will come in pre-filled, ready for your tick."
+            );
           }}
         />
       )}

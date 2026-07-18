@@ -36,6 +36,10 @@ sequentially; apply via the Supabase MCP `apply_migration` with this project id.
   (no category OR unreviewed).
 - **Sub-categories (mig 050):** `finance_categories.parent_id`, one level deep only;
   nesting aligns the child's kind with the parent's (`setCategoryParentInline`).
+- **Rule book (mig 051):** `finance_rules` — user-written contains-rules. Matching logic
+  lives ONLY in `src/lib/rules.ts` (shared by CSV import, feed webhook, retro-apply) —
+  never duplicate it. Precedence: rule > payee memory > bank label; results always land
+  unreviewed (🪄) or as suggestions (`suggestion_source` 'rule'), never silently final.
 - **Never expose one household's data to another** — every query filters
   `household_id`, RLS backs it up. Private accounts (mig 047) must stay invisible to
   non-owners.

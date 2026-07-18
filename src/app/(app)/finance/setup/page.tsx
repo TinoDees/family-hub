@@ -94,13 +94,21 @@ export default async function FinanceSetupPage({
               Edit straight in the sheet — click a name, emoji or kind to change it, and type a monthly budget on any expense row.
             </p>
           </div>
-          {(categories ?? []).length === 0 && (
-            <form action={seedCategories}>
-              <button className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700">
-                Load starter categories
-              </button>
-            </form>
-          )}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/finance/rules"
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100"
+            >
+              📖 Rule book →
+            </Link>
+            {(categories ?? []).length === 0 && (
+              <form action={seedCategories}>
+                <button className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700">
+                  Load starter categories
+                </button>
+              </form>
+            )}
+          </div>
         </div>
         {banner("categories")}
         <CategoriesGrid categories={categories ?? []} budgets={budgetMap} currency={currency} />

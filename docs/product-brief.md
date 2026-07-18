@@ -64,12 +64,26 @@ Ways a transaction gets sorted:
 
 ### Auto-rules (how Nestly learns)
 
-Nestly builds one **payee** per merchant per household. When you categorise a merchant's
-transaction, the payee remembers that category; from then on, new imports and feed
-transactions from that merchant arrive **pre-categorised as 🪄 to-confirm** — allocated
-for you, needing only the tick. The same memory applies the household/personal choice.
-The bank's own category is used as a fallback rule when it matches one of yours. So the
-first month involves real sorting; after that it's mostly ticks.
+Three layers, strongest first:
+
+1. **📖 The rule book** (Finance → Rule book) — your written rules, Xero-style: *when the
+   description (or merchant) contains X, allocate category Y*. Add rules in the rule book
+   grid, or hit the **📖 button on any transaction** to start a rule pre-filled from it.
+   When you save a rule it immediately *suggests* its category on every matching unsorted
+   transaction (accept with ✓), and every future arrival matching it comes in
+   pre-allocated as 🪄 to-confirm. Rules can look at the description, the merchant, or
+   both; they can be paused (On/Off) and edited inline. An explicit rule always beats the
+   automatic learning below.
+2. **Payee memory** — Nestly builds one payee per merchant. When you categorise a
+   merchant's transaction, the payee remembers it; future arrivals from that merchant
+   come in pre-categorised as 🪄 to-confirm. The same memory applies your
+   household/personal choice.
+3. **The bank's own label** — used as a last resort when it matches one of your
+   category names.
+
+Nothing auto-allocated is ever silently final — it always lands as 🪄 to-confirm (or as a
+✨/rule suggestion), so a person keeps the last word. First month is real sorting; after
+that it's mostly ticks.
 
 ### Categories, sub-categories & budgets
 
@@ -122,5 +136,6 @@ row). They power the Finance overview's budget bars and the monthly review.
 - **Shared-living mode** (share houses: per-tenant contribution rules, house pot,
   settle-up) — see `docs/shared-costs-concept.md`.
 - Category roll-up reporting (parent totals that include their sub-categories).
-- Bank-rule editor UI (name/amount based rules on top of payee memory).
+- Rule book v2: amount conditions ("contains X AND amount is exactly $30"), scope
+  (household/personal) as a rule outcome, per-rule hit counts.
 - Save-money vision — see `docs/save-money-vision.md`.
