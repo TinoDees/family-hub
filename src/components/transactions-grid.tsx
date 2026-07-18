@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   assignCategoryInline,
   assignCategoryBulkInline,
@@ -1526,7 +1527,34 @@ function CategoryPicker({
 }) {
   const [q, setQ] = useState(current?.name ?? "");
   const [open, setOpen] = useState(false);
+  // The list renders in a document-body portal with fixed positioning, so the
+  // table's overflow container can never clip it (short lists used to hide it).
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   useEffect(() => setQ(current?.name ?? ""), [current]);
+
+  const openList = () => {
+    const r = inputRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    // page scroll/resize would desync the fixed position — close instead
+    const onScroll = (e: Event) => {
+      if (listRef.current?.contains(e.target as Node)) return; // scrolling the list itself is fine
+      setOpen(false);
+    };
+    const onResize = () => setOpen(false);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
 
   const needle = q.trim().toLowerCase();
   const filtered = needle ? categories.filter((c) => c.name.toLowerCase().includes(needle)) : categories;
@@ -1535,12 +1563,13 @@ function CategoryPicker({
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         value={q}
         onChange={(e) => {
           setQ(e.target.value);
-          setOpen(true);
+          openList();
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={openList}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -1556,8 +1585,12 @@ function CategoryPicker({
           current ? "border-stone-200 bg-white" : "border-amber-300 bg-amber-50"
         }`}
       />
-      {open && (
-        <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div
+          ref={listRef}
+          className="fixed z-50 w-56 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg"
+          style={{ top: pos.top, left: pos.left }}
+        >
           <div className="max-h-52 overflow-y-auto py-1">
             <button
               type="button"
@@ -1599,7 +1632,8 @@ function CategoryPicker({
           >
             ＋ New category{needle && !exact ? ` “${q.trim()}”` : "…"}
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -153,6 +153,9 @@ export default async function FinanceDashboard({
           <p className="text-sm text-stone-500">{membership.household.name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/finance/insights" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
+            📊 Insights
+          </Link>
           {canEdit && (
             <>
               <Link href="/finance/setup?sec=categories#categories" className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100">
@@ -323,9 +326,14 @@ export default async function FinanceDashboard({
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Spending by category</h2>
-          <Link href={`/finance/transactions?m=${month.key}`} className="text-sm text-stone-500 underline">
-            All transactions ({all.length})
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href={`/finance/insights?m=${month.key}`} className="text-sm text-stone-500 underline">
+              Month by month →
+            </Link>
+            <Link href={`/finance/transactions?m=${month.key}`} className="text-sm text-stone-500 underline">
+              All transactions ({all.length})
+            </Link>
+          </div>
         </div>
         {catRows.length === 0 ? (
           <p className="py-6 text-center text-sm text-stone-400">No categorised spending this month yet.</p>
