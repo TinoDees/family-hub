@@ -137,13 +137,15 @@ export default async function MealsPage({
                   const cellEntries = (byCell.get(key) ?? []).map(toCellEntry);
                   return (
                     <td key={key} className={`px-1.5 py-2 ${iso(d) === todayIso ? "bg-amber-50/50" : ""}`}>
-                      <MealCellPicker
-                        date={iso(d)}
-                        slot={slot}
-                        initialEntries={cellEntries}
-                        recipes={recipes ?? []}
-                        canEdit={canEdit}
-                      />
+                      <div className="min-h-14">
+                        <MealCellPicker
+                          date={iso(d)}
+                          slot={slot}
+                          initialEntries={cellEntries}
+                          recipes={recipes ?? []}
+                          canEdit={canEdit}
+                        />
+                      </div>
                     </td>
                   );
                 })}

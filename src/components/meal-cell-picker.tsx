@@ -54,8 +54,10 @@ export function MealCellPicker({
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<{ name: string; ingredients: string; method: string } | null>(null);
   const [servingsEdit, setServingsEdit] = useState<{ id: string; value: string } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
   const tmpSeq = useRef(0);
 
   const initialKey = JSON.stringify(initialEntries);
@@ -73,6 +75,42 @@ export function MealCellPicker({
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  // The popover is fixed-positioned so the table's scroll container can't clip
+  // it; close it if the page scrolls or resizes underneath (its anchor moves).
+  useEffect(() => {
+    if (!open) return;
+    const onMove = (e: Event) => {
+      if (boxRef.current && e.target instanceof Node && boxRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [open]);
+
+  function openPicker() {
+    const r = addBtnRef.current?.getBoundingClientRect();
+    if (r) {
+      const width = 224; // matches w-56
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+      const spaceBelow = window.innerHeight - r.bottom;
+      // flip above the button when the space below is tight
+      if (spaceBelow < 360 && r.top > spaceBelow) {
+        setPos({ left, bottom: window.innerHeight - r.top + 4 });
+      } else {
+        setPos({ left, top: r.bottom + 4 });
+      }
+    } else {
+      setPos(null);
+    }
+    setOpen(true);
+    setError(null);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
 
   const q = query.trim();
   const matches = useMemo(() => {
@@ -228,20 +266,19 @@ export function MealCellPicker({
 
       {canEdit && (
         <div className="relative" ref={boxRef}>
-          {!open ? (
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(true);
-                setError(null);
-                setTimeout(() => inputRef.current?.focus(), 0);
-              }}
-              className="rounded px-1 text-xs text-stone-300 hover:text-stone-500"
+          <button
+            ref={addBtnRef}
+            type="button"
+            onClick={openPicker}
+            className={`rounded px-1 text-xs text-stone-300 hover:text-stone-500 ${open ? "invisible" : ""}`}
+          >
+            + add
+          </button>
+          {open && (
+            <div
+              className="fixed z-50 w-56 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg"
+              style={pos ? { left: pos.left, top: pos.top, bottom: pos.bottom } : undefined}
             >
-              + add
-            </button>
-          ) : (
-            <div className="absolute left-0 top-0 z-20 w-56 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg">
               <input
                 ref={inputRef}
                 value={query}
