@@ -36,6 +36,8 @@ export async function updateSession(request: NextRequest) {
     path === "/manifest.webmanifest" || // browsers fetch these without cookies —
     path === "/sw.js" ||                // blocking them breaks PWA install + push
     path.startsWith("/api/") || // API routes guard themselves (push secret, cron secret, session checks)
+    path === "/tour" ||        // public quick-tour page (rewrites to /tour.html)
+    path === "/tour.html" ||
     path === "/login" ||
     path === "/signup" ||
     path === "/pricing" ||
