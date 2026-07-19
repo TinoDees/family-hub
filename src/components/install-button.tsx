@@ -50,7 +50,7 @@ const GUIDES: Record<Platform, { steps: string[]; note?: string }> = {
   },
   samsung: {
     steps: ["Tap the ☰ menu (bottom right)", "Tap “Add page to” → “Home screen”"],
-    note: "Tip: open nestlyapp.co in Chrome instead for a true one-tap install.",
+    note: "On a phone, opening nestlyapp.co in Chrome gives a one-tap install. On a shared screen (fridge, TV, kitchen tablet) these two steps are the install — the app works exactly the same afterwards.",
   },
   "edge-android": {
     steps: ["Tap the ⋯ menu (bottom middle)", "Tap “Add to phone”, then confirm"],
@@ -65,6 +65,7 @@ const GUIDES: Record<Platform, { steps: string[]; note?: string }> = {
   },
   "android-other": {
     steps: ["Open your browser menu", "Choose “Install app” / “Add to Home screen”"],
+    note: "On shared screens (fridge, TV, kitchen tablet) the browser may not offer one-tap install — Add to Home screen is the install, and the app works exactly the same.",
   },
   "edge-desktop": {
     steps: [
@@ -147,7 +148,8 @@ export function InstallButton() {
         onClick={oneTap}
         className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-50"
       >
-        <span>📲</span> {busy ? "Installing…" : "Install app"}
+        <span>📲</span>{" "}
+        {busy ? "Installing…" : ready ? "Install app" : "How to install on this device"}
         {ready && (
           <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
             1 tap
