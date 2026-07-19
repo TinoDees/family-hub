@@ -65,6 +65,62 @@ export async function startVisitInline(
   return { ok: true, visit: data as ActiveVisit };
 }
 
+/**
+ * Retro visit — "we already shopped, here's the receipt". Created finished so
+ * it never shows as an active stop; the receipt apply fills it in.
+ */
+export async function createRetroVisitInline(
+  retailerId: string | null,
+  storeLabel: string | null
+): Promise<{ ok: boolean; error?: string; visit?: ActiveVisit }> {
+  const { membership, userId } = await requireModule("shopping", "edit");
+  const supabase = await createClient();
+
+  let label = storeLabel?.trim().slice(0, 60) || null;
+  if (retailerId) {
+    const { data: r } = await supabase
+      .from("retailers")
+      .select("id, name")
+      .eq("id", retailerId)
+      .eq("household_id", membership.household_id)
+      .maybeSingle();
+    if (!r) return { ok: false, error: "Retailer not found" };
+    label = r.name;
+  }
+  if (!retailerId && !label) return { ok: false, error: "Pick a store or type its name" };
+
+  const { data, error } = await supabase
+    .from("store_visits")
+    .insert({
+      household_id: membership.household_id,
+      retailer_id: retailerId,
+      store_label: label,
+      finished_at: new Date().toISOString(),
+      created_by: userId,
+    })
+    .select("id, retailer_id, store_label, started_at")
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? "Could not create" };
+  return { ok: true, visit: data as ActiveVisit };
+}
+
+/** Throw away a visit that never got its receipt (retro flow cancelled). */
+export async function discardVisitInline(
+  visitId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireModule("shopping", "edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("store_visits")
+    .delete()
+    .eq("id", visitId)
+    .eq("household_id", membership.household_id)
+    .is("receipt_path", null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/shopping");
+  return { ok: true };
+}
+
 /** Abandon a stop: ticks stay ticked, the visit just goes away. */
 export async function cancelVisitInline(
   visitId: string
@@ -134,22 +190,25 @@ export async function scanVisitReceipt(
     .upload(path, bytes, { contentType: mediaType });
   if (upErr) return { ok: false, error: upErr.message };
 
-  // candidates: every item on an open list (ticked-this-stop first)
+  // candidates: items on open lists plus recently finished ones (retro
+  // receipts often arrive after the list was marked done). Priority order for
+  // the prompt: ticked-this-stop → bought-but-unpriced → unticked → the rest.
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const { data: lists } = await supabase
     .from("shopping_lists")
-    .select("id")
+    .select("id, status, created_at")
     .eq("household_id", membership.household_id)
-    .eq("status", "open");
+    .or(`status.eq.open,created_at.gte.${weekAgo}`);
   const listIds = (lists ?? []).map((l) => l.id);
   const { data: items } = listIds.length
     ? await supabase
         .from("shopping_list_items")
-        .select("id, name, visit_id")
+        .select("id, name, visit_id, checked, price")
         .in("list_id", listIds)
     : { data: [] };
-  const sorted = [...(items ?? [])].sort((a, b) =>
-    (a.visit_id === visitId ? 0 : 1) - (b.visit_id === visitId ? 0 : 1)
-  );
+  const rank = (i: { visit_id: string | null; checked: boolean; price: number | null }) =>
+    i.visit_id === visitId ? 0 : i.checked && i.price === null ? 1 : !i.checked ? 2 : 3;
+  const sorted = [...(items ?? [])].sort((a, b) => rank(a) - rank(b));
   const itemIds = new Set(sorted.map((i) => i.id));
 
   try {

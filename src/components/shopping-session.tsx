@@ -7,6 +7,8 @@ import {
   startVisitInline,
   cancelVisitInline,
   finishVisitInline,
+  createRetroVisitInline,
+  discardVisitInline,
   scanVisitReceipt,
   applyVisitReceipt,
   type ActiveVisit,
@@ -36,7 +38,8 @@ export function ShoppingSession({
   const fileRef = useRef<HTMLInputElement>(null);
   const [choice, setChoice] = useState("");
   const [customStore, setCustomStore] = useState("");
-  const [busy, setBusy] = useState<null | "start" | "scan" | "apply" | "finish" | "cancel">(null);
+  const [retroVisit, setRetroVisit] = useState<ActiveVisit | null>(null);
+  const [busy, setBusy] = useState<null | "start" | "retro" | "scan" | "apply" | "finish" | "cancel">(null);
   const [error, setError] = useState<string | null>(null);
   const [scan, setScan] = useState<{
     path: string;
@@ -63,8 +66,29 @@ export function ShoppingSession({
     else router.refresh();
   }
 
+  async function startRetro() {
+    if (busy) return;
+    const retailerId = choice && choice !== "__other" ? choice : null;
+    const label = choice === "__other" ? customStore : null;
+    if (!retailerId && !label?.trim()) {
+      setError("Pick which store the receipt is from first");
+      return;
+    }
+    setBusy("retro");
+    setError(null);
+    const res = await createRetroVisitInline(retailerId, label);
+    setBusy(null);
+    if (!res.ok || !res.visit) {
+      setError(res.error ?? "Could not create");
+      return;
+    }
+    setRetroVisit(res.visit);
+    fileRef.current?.click();
+  }
+
   async function onFile(file: File) {
-    if (!activeVisit) return;
+    const visit = activeVisit ?? retroVisit;
+    if (!visit) return;
     setError(null);
     if (file.size > 5 * 1024 * 1024) {
       setError("Photo too large (max 5MB)");
@@ -83,7 +107,7 @@ export function ShoppingSession({
       setError("Could not read that file");
       return;
     }
-    const res = await scanVisitReceipt(activeVisit.id, m[2], m[1]);
+    const res = await scanVisitReceipt(visit.id, m[2], m[1]);
     setBusy(null);
     if (!res.ok || !res.path) {
       setError(res.error ?? "Scan failed");
@@ -91,19 +115,20 @@ export function ShoppingSession({
     }
     setScan({
       path: res.path,
-      store: res.store ?? activeVisit.store_label,
+      store: res.store ?? visit.store_label,
       total: res.total !== null && res.total !== undefined ? String(res.total) : "",
       lines: (res.lines ?? []).map((l) => ({ ...l, include: l.itemId !== null })),
     });
   }
 
   async function apply() {
-    if (!scan || !activeVisit || busy) return;
+    const visit = activeVisit ?? retroVisit;
+    if (!scan || !visit || busy) return;
     setBusy("apply");
     setError(null);
     const total = scan.total.trim() === "" ? null : parseFloat(scan.total);
     const res = await applyVisitReceipt(
-      activeVisit.id,
+      visit.id,
       scan.path,
       scan.store,
       total !== null && !isNaN(total) ? total : null,
@@ -117,6 +142,7 @@ export function ShoppingSession({
       return;
     }
     setScan(null);
+    setRetroVisit(null);
     router.refresh();
   }
 
@@ -130,6 +156,15 @@ export function ShoppingSession({
     setBusy(null);
     if (!res.ok) setError(res.error ?? "Something went wrong");
     else router.refresh();
+  }
+
+  async function closeScanModal() {
+    if (busy !== null) return;
+    setScan(null);
+    if (retroVisit) {
+      await discardVisitInline(retroVisit.id);
+      setRetroVisit(null);
+    }
   }
 
   const matched = scan?.lines.filter((l) => l.itemId && l.include).length ?? 0;
@@ -170,8 +205,17 @@ export function ShoppingSession({
           >
             {busy === "start" ? "Starting…" : "▶ Start"}
           </button>
+          <button
+            type="button"
+            disabled={busy !== null || !choice}
+            onClick={startRetro}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-stone-100 disabled:opacity-40"
+            title="Already shopped? Pick the store, then attach its receipt"
+          >
+            {busy === "retro" ? "…" : "📎 Add receipt afterwards"}
+          </button>
           <span className="text-xs text-stone-400">
-            — ticks get tagged to the stop, and the receipt prices what you bought.
+            — start live and ticks tag to the stop, or attach receipts after the shop; either way prices are recorded.
           </span>
         </div>
       ) : (
@@ -227,8 +271,8 @@ export function ShoppingSession({
         }}
       />
 
-      {scan && activeVisit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => busy === null && setScan(null)}>
+      {scan && (activeVisit || retroVisit) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closeScanModal}>
           <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-stone-100 px-5 py-4">
               <h3 className="text-sm font-semibold">🧾 {scan.store ?? "Receipt"} — finishing this stop</h3>
@@ -304,7 +348,7 @@ export function ShoppingSession({
                 <button
                   type="button"
                   disabled={busy !== null}
-                  onClick={() => setScan(null)}
+                  onClick={closeScanModal}
                   className="rounded-lg border border-stone-300 px-4 py-1.5 text-sm hover:bg-stone-50"
                 >
                   Cancel
