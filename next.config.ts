@@ -12,8 +12,15 @@ const nextConfig: NextConfig = {
     },
   },
   async rewrites() {
-    // Pretty URL for the static quick-tour page in /public
-    return [{ source: "/tour", destination: "/tour.html" }];
+    // Pretty URL for the static quick-tour page in /public.
+    // beforeFiles so /tour wins over the (app)/[module] dynamic route —
+    // with afterFiles, the client router matched [module] first and its
+    // auth layout bounced logged-out visitors to /login.
+    return {
+      beforeFiles: [{ source: "/tour", destination: "/tour.html" }],
+      afterFiles: [],
+      fallback: [],
+    };
   },
 };
 
