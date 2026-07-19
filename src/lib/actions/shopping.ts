@@ -77,16 +77,22 @@ export async function setListStatus(formData: FormData) {
   redirect("/shopping/lists");
 }
 
-/** Check an item off (or back on) without a redirect — for the combined view. */
+/** Check an item off (or back on) without a redirect — for the combined view.
+ * When a store visit is active, ticks are tagged with it (trip mode). */
 export async function toggleItemInline(
   itemId: string,
-  checked: boolean
+  checked: boolean,
+  visitId?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   const { membership, userId } = await requireModule("shopping", "edit");
   const supabase = await createClient();
   const { error } = await supabase
     .from("shopping_list_items")
-    .update({ checked, checked_by: checked ? userId : null })
+    .update({
+      checked,
+      checked_by: checked ? userId : null,
+      visit_id: checked ? visitId ?? null : null,
+    })
     .eq("id", itemId)
     .eq("household_id", membership.household_id);
   if (error) return { ok: false, error: error.message };

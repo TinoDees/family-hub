@@ -30,9 +30,11 @@ type GroupMode = "retailer" | "category";
 export function CombinedList({
   items: initial,
   canEdit,
+  activeVisitId = null,
 }: {
   items: CombinedItem[];
   canEdit: boolean;
+  activeVisitId?: string | null;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CombinedItem[]>(initial);
@@ -42,7 +44,7 @@ export function CombinedList({
   async function toggle(id: string, checked: boolean) {
     const prev = items;
     setItems((s) => s.map((i) => (i.id === id ? { ...i, checked } : i)));
-    const res = await toggleItemInline(id, checked);
+    const res = await toggleItemInline(id, checked, activeVisitId);
     if (!res.ok) setItems(prev);
     else router.refresh();
   }
