@@ -83,6 +83,12 @@ export default function Landing() {
         </div>
         <nav className="flex items-center gap-3">
           <Link
+            href="/tour"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900"
+          >
+            Tour
+          </Link>
+          <Link
             href="/pricing"
             className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900"
           >
@@ -129,7 +135,11 @@ export default function Landing() {
           </Link>
         </div>
         <p className="mt-4 text-sm text-stone-400">
-          Free while Nestly is in early access.{" "}
+          Curious first?{" "}
+          <Link href="/tour" className="font-medium text-teal-600 underline hover:text-teal-700">
+            Take the quick tour
+          </Link>{" "}
+          · Free while Nestly is in early access.{" "}
           <Link href="/pricing" className="underline hover:text-stone-600">
             See pricing
           </Link>
@@ -302,6 +312,9 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-4 text-sm text-stone-500">
+            <Link href="/tour" className="hover:text-stone-900">
+              Quick tour
+            </Link>
             <Link href="/pricing" className="hover:text-stone-900">
               Pricing
             </Link>

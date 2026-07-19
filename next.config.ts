@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "8mb",
     },
   },
+  async rewrites() {
+    // Pretty URL for the static quick-tour page in /public
+    return [{ source: "/tour", destination: "/tour.html" }];
+  },
 };
 
 export default nextConfig;

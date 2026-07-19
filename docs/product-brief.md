@@ -15,6 +15,13 @@ member gets their own login, and per-module permissions decide who sees and edit
 (children can be limited or locked out of modules entirely). It runs as a web app and
 installs to phones as a PWA.
 
+A public **quick-tour page** — the shareable intro for prospective families, with a
+section per module, blurred live screenshots and getting-started steps — is served at
+**nestlyapp.co/tour** (static file `public/tour.html`, pretty URL via a rewrite in
+`next.config.ts`). It's linked from the landing page (header "Tour", hero "Take the
+quick tour", footer). Each section carries a "Video coming soon" chip for future
+walkthrough videos.
+
 Modules today: **Dashboard · Finance · Documents · Recipes & Meals · Meal planner ·
 Shopping lists · Photos · Messages/Chat · Holidays & Trips · Parental controls ·
 Settings/Members**. Navigation is customisable per household (Settings → the nav builder).
