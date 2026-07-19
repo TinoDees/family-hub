@@ -82,6 +82,7 @@ export default function Landing() {
           />
         </div>
         <nav className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- /tour is a static file (public/tour.html), not an app route */}
           <a
             href="/tour"
             className="rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900"
@@ -136,6 +137,7 @@ export default function Landing() {
         </div>
         <p className="mt-4 text-sm text-stone-400">
           Curious first?{" "}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- /tour is a static file (public/tour.html), not an app route */}
           <a href="/tour" className="font-medium text-teal-600 underline hover:text-teal-700">
             Take the quick tour
           </a>{" "}
@@ -312,6 +314,7 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-4 text-sm text-stone-500">
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- /tour is a static file (public/tour.html), not an app route */}
             <a href="/tour" className="hover:text-stone-900">
               Quick tour
             </a>
