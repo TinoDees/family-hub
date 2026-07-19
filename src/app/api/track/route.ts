@@ -10,7 +10,7 @@ export const runtime = "nodejs";
  * IP hash. Events are allowlisted; everything else is dropped silently.
  */
 const ALLOWED_EVENTS = new Set(["page_view"]);
-const ALLOWED_PATHS = new Set(["/", "/pricing", "/signup", "/login"]);
+const ALLOWED_PATHS = new Set(["/", "/pricing", "/signup", "/login", "/tour"]);
 
 export async function POST(req: Request) {
   try {
