@@ -2,23 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
-import { addItem, toggleItem, deleteItem, setListStatus, addStaplesToList } from "@/lib/actions/shopping";
+import { addItem, toggleItem, deleteItem, setListStatus } from "@/lib/actions/shopping";
 import { inputCls } from "@/components/auth-card";
 import { ItemCategorySelect } from "@/components/item-category-select";
-import { AddMealsToList } from "@/components/add-meals-to-list";
+import { ReceiptCapture } from "@/components/receipt-capture";
 import { CATEGORY_ORDER, categoryById } from "@/lib/groceries";
-
-function iso(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function mondayOf(d: Date): Date {
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const m = new Date(d);
-  m.setDate(d.getDate() + diff);
-  m.setHours(0, 0, 0, 0);
-  return m;
-}
 
 export default async function ShoppingListPage({
   params,
@@ -36,13 +24,13 @@ export default async function ShoppingListPage({
   const [{ data: list }, { data: items }] = await Promise.all([
     supabase
       .from("shopping_lists")
-      .select("id, name, status")
+      .select("id, name, status, receipt_store, receipt_total")
       .eq("id", id)
       .eq("household_id", membership.household_id)
       .maybeSingle(),
     supabase
       .from("shopping_list_items")
-      .select("id, name, qty, checked, category, note")
+      .select("id, name, qty, checked, category, note, price")
       .eq("list_id", id)
       .order("checked")
       .order("position"),
@@ -71,27 +59,20 @@ export default async function ShoppingListPage({
           <h1 className="text-2xl font-semibold">{list.name}</h1>
           <p className="text-sm text-stone-500">
             {remaining === 0 ? "All done! 🎉" : `${remaining} item${remaining === 1 ? "" : "s"} to go`}
+            {list.receipt_total !== null && (
+              <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                💰 ${Number(list.receipt_total).toFixed(2)}
+                {list.receipt_store ? ` at ${list.receipt_store}` : ""}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {canEdit && list.status === "open" && (
-            <>
-              <AddMealsToList
-                listId={list.id}
-                defaultFrom={iso(mondayOf(new Date()))}
-                defaultTo={iso(new Date(mondayOf(new Date()).getTime() + 6 * 864e5))}
-              />
-              <form action={addStaplesToList}>
-                <input type="hidden" name="list_id" value={list.id} />
-                <button
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
-                  title="Add every staple that isn't on the list yet"
-                >
-                  🧺 Add staples
-                </button>
-              </form>
-            </>
-          )}
+          <ReceiptCapture
+            listId={list.id}
+            items={(items ?? []).map((i) => ({ id: i.id, name: i.name }))}
+            canEdit={canEdit}
+          />
           {canEdit && (
             <form action={setListStatus}>
               <input type="hidden" name="list_id" value={list.id} />
@@ -158,6 +139,11 @@ export default async function ShoppingListPage({
                     {i.name}
                     {i.note && (
                       <span className="ml-1.5 text-xs italic text-stone-400">— {i.note}</span>
+                    )}
+                    {i.price !== null && (
+                      <span className="ml-1.5 text-xs font-medium text-emerald-700">
+                        ${Number(i.price).toFixed(2)}
+                      </span>
                     )}
                   </span>
                   {canEdit && (

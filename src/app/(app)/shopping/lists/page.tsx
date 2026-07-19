@@ -17,7 +17,7 @@ export default async function ShoppingListsPage({
   const supabase = await createClient();
   const { data: lists } = await supabase
     .from("shopping_lists")
-    .select("id, name, status, created_at, shopping_list_items(count)")
+    .select("id, name, status, created_at, receipt_total, shopping_list_items(count)")
     .eq("household_id", membership.household_id)
     .order("created_at", { ascending: false })
     .limit(30);
@@ -33,6 +33,11 @@ export default async function ShoppingListsPage({
           <div className={`font-medium ${l.status === "done" ? "text-stone-400 line-through" : ""}`}>{l.name}</div>
           <div className="text-xs text-stone-400">
             {count} item{count === 1 ? "" : "s"} · {new Date(l.created_at).toLocaleDateString("en-AU")}
+            {l.receipt_total !== null && (
+              <span className="ml-1.5 font-medium text-emerald-700">
+                · 💰 ${Number(l.receipt_total).toFixed(2)}
+              </span>
+            )}
           </div>
         </Link>
         {canEdit && (
