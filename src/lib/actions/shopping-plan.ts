@@ -16,6 +16,7 @@ export type PlanRowInput = {
   name: string;
   category: string; // legacy slug for list grouping
   qtyText: string;
+  note: string | null;
   retailerId: string | null;
   pantryItemId: string | null;
 };
@@ -37,6 +38,7 @@ export async function createShoppingRunInline(
       name: r.name.trim().slice(0, 120),
       category: CATEGORY_ORDER.includes(r.category) ? r.category : "other",
       qtyText: r.qtyText.trim().slice(0, 40),
+      note: r.note?.trim().slice(0, 120) || null,
       retailerId: r.retailerId || null,
       pantryItemId: r.pantryItemId || null,
     }))
@@ -80,6 +82,7 @@ export async function createShoppingRunInline(
       position: idx,
       name: r.name,
       qty: r.qtyText || null,
+      note: r.note,
       category: r.category,
     }));
     const { error: itemsError } = await supabase.from("shopping_list_items").insert(items);

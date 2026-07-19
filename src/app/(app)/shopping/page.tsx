@@ -9,7 +9,7 @@ export default async function ShoppingOverviewPage() {
   const { membership, access } = await requireModule("shopping", "view");
 
   const supabase = await createClient();
-  const [{ data: openLists }, { count: pantryCount }, { count: retailerCount }, { data: notes }] =
+  const [{ data: openLists }, { data: pantryNames }, { count: retailerCount }, { data: notes }] =
     await Promise.all([
       supabase
         .from("shopping_lists")
@@ -20,8 +20,9 @@ export default async function ShoppingOverviewPage() {
         .limit(5),
       supabase
         .from("pantry_items")
-        .select("id", { count: "exact", head: true })
-        .eq("household_id", membership.household_id),
+        .select("name")
+        .eq("household_id", membership.household_id)
+        .order("name"),
       supabase
         .from("retailers")
         .select("id", { count: "exact", head: true })
@@ -33,6 +34,7 @@ export default async function ShoppingOverviewPage() {
         .order("created_at"),
     ]);
 
+  const pantryCount = pantryNames?.length ?? 0;
   const cards = [
     {
       href: "/shopping/plan",
@@ -59,7 +61,11 @@ export default async function ShoppingOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <RunningLow initial={(notes ?? []) as ShoppingNote[]} canEdit={access === "edit"} />
+      <RunningLow
+        initial={(notes ?? []) as ShoppingNote[]}
+        suggestions={(pantryNames ?? []).map((p) => p.name)}
+        canEdit={access === "edit"}
+      />
       <div className="grid gap-3 sm:grid-cols-3">
         {cards.map((c) => (
           <Link

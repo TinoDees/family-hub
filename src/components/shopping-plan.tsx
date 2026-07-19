@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GROCERY_CATEGORIES, categoryById, guessCategory } from "@/lib/groceries";
+import { GROCERY_CATEGORIES, UOMS, categoryById, guessCategory } from "@/lib/groceries";
 import type { Retailer } from "@/lib/grocery-data";
+import { SmartSheetShell, type SheetColumn, type SegmentedFilter } from "@/components/smart-sheet-shell";
 import {
   createShoppingRunInline,
   type PlanRowInput,
@@ -11,12 +12,15 @@ import {
 } from "@/lib/actions/shopping-plan";
 
 /**
- * The Plan step — three streams (📝 noted / 🧺 staples / 🍽️ meals), one
- * deduped worksheet. Simple checklist by default; stock columns behind a
- * toggle; search + filters + bulk tick in the toolbar; card layout on phones.
+ * The Plan worksheet on the SmartSheetShell (ported from Tracey): dark sticky
+ * header, search, filters, column picker (stock columns hidden by default),
+ * sort, resize, CSV, phone card view. Four streams, one deduped sheet:
+ *   📝 noted · 🧺 staples low · 🍽️ meals · 📦 the rest of the pantry catalog
+ * Numbers-only To buy + predefined Unit + a per-item comment that follows the
+ * item onto the list.
  */
 
-export type PlanSource = "noted" | "staple" | "recipes";
+export type PlanSource = "noted" | "staple" | "recipes" | "pantry";
 
 export type SeedRow = {
   key: string;
@@ -36,23 +40,25 @@ export type SeedRow = {
 
 type Row = SeedRow & {
   include: boolean;
-  qtyText: string;
+  qtyValue: string;
+  qtyUom: string;
   qtyDirty: boolean;
   sohText: string;
   sohDirty: boolean;
+  comment: string;
 };
 
-const GROUP_META: Record<PlanSource, { title: string; hint: string }> = {
-  noted: { title: "📝 Noted during the week", hint: "things someone jotted down" },
-  staple: { title: "🧺 Staples running low", hint: "below their pantry minimum" },
-  recipes: { title: "🍽️ For this week's meals", hint: "from the planned recipes" },
+const SOURCE_META: Record<PlanSource, { emoji: string; label: string; order: number }> = {
+  noted: { emoji: "📝", label: "Noted", order: 0 },
+  staple: { emoji: "🧺", label: "Staples low", order: 1 },
+  recipes: { emoji: "🍽️", label: "Meals", order: 2 },
+  pantry: { emoji: "📦", label: "Pantry catalog", order: 3 },
 };
-const SOURCE_EMOJI: Record<PlanSource, string> = { noted: "📝", staple: "🧺", recipes: "🍽️" };
-const GROUP_ORDER: PlanSource[] = ["noted", "staple", "recipes"];
+const SOURCE_ORDER: PlanSource[] = ["noted", "staple", "recipes", "pantry"];
 
 function primaryGroup(sources: PlanSource[]): PlanSource {
-  for (const g of GROUP_ORDER) if (sources.includes(g)) return g;
-  return "recipes";
+  for (const g of SOURCE_ORDER) if (sources.includes(g)) return g;
+  return "pantry";
 }
 
 function suggestedFor(r: {
@@ -67,17 +73,38 @@ function suggestedFor(r: {
     if (r.soh === null) return round(r.neededQty);
     return round(Math.max(r.neededQty - r.soh, 0));
   }
-  if (r.sources.includes("staple")) {
+  if (r.sources.includes("staple") || r.sources.includes("pantry")) {
     const target = r.maxQty ?? r.minQty;
     if (target !== null) return round(Math.max(target - (r.soh ?? 0), 0));
   }
   return null;
 }
 
-function defaultQtyText(r: SeedRow): string {
+function normalizeUom(u: string | null): string {
+  if (!u) return "";
+  const lower = u.trim().toLowerCase();
+  return UOMS.includes(lower) ? lower : u.trim();
+}
+
+function splitNoteQty(q: string | null): { value: string; uom: string } {
+  if (!q) return { value: "", uom: "" };
+  const m = q.trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+  if (!m) return { value: "", uom: normalizeUom(q) };
+  return { value: m[1].replace(",", "."), uom: normalizeUom(m[2] || null) };
+}
+
+function defaultQty(r: SeedRow): { value: string; uom: string } {
   const s = suggestedFor(r);
-  if (s !== null && s > 0) return `${s}${r.unit ? ` ${r.unit}` : ""}`;
-  return r.noteQty ?? "";
+  if (s !== null && s > 0) return { value: String(s), uom: normalizeUom(r.unit) };
+  if (r.noteQty) return splitNoteQty(r.noteQty);
+  return { value: "", uom: normalizeUom(r.unit) };
+}
+
+/** numbers only: digits + one decimal point */
+function cleanNumeric(v: string): string {
+  const s = v.replace(/,/g, ".").replace(/[^\d.]/g, "");
+  const firstDot = s.indexOf(".");
+  return firstDot === -1 ? s : s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
 }
 
 const fmtQty = (q: number | null, unit: string | null) =>
@@ -98,38 +125,46 @@ export function ShoppingPlan({
   const [rows, setRows] = useState<Row[]>(() =>
     seed.map((s) => {
       const suggested = suggestedFor(s);
+      const { value, uom } = defaultQty(s);
+      const pantryOnly = primaryGroup(s.sources) === "pantry";
       return {
         ...s,
-        include: suggested === null ? true : suggested > 0,
-        qtyText: defaultQtyText(s),
+        include: s.sources.includes("noted")
+          ? true
+          : pantryOnly
+            ? false
+            : suggested === null
+              ? true
+              : suggested > 0,
+        qtyValue: value,
+        qtyUom: uom,
         qtyDirty: false,
         sohText: s.soh === null ? "" : String(s.soh),
         sohDirty: false,
+        comment: "",
       };
     })
   );
-  const [details, setDetails] = useState(false);
-  const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<PlanSource | "all">("all");
-  const [catFilter, setCatFilter] = useState("");
-  const [retFilter, setRetFilter] = useState("");
-  const [sort, setSort] = useState<"source" | "name" | "category">("source");
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const viewRef = useRef<Row[]>([]);
 
   const patch = (key: string, fn: (r: Row) => Row) =>
     setRows((rs) => rs.map((r) => (r.key === key ? fn(r) : r)));
 
   function setSoh(key: string, text: string) {
+    const clean = cleanNumeric(text);
     patch(key, (r) => {
-      const n = text.trim() === "" ? null : parseFloat(text);
+      const n = clean === "" ? null : parseFloat(clean);
       const soh = n !== null && !isNaN(n) && n >= 0 ? n : null;
-      const next: Row = { ...r, sohText: text, sohDirty: true, soh };
+      const next: Row = { ...r, sohText: clean, sohDirty: true, soh };
       if (!r.qtyDirty) {
         const s = suggestedFor(next);
-        next.qtyText = defaultQtyText(next);
-        if (s !== null) next.include = s > 0;
+        const dq = defaultQty(next);
+        next.qtyValue = dq.value;
+        next.qtyUom = dq.uom;
+        if (s !== null && primaryGroup(r.sources) !== "pantry") next.include = s > 0;
       }
       return next;
     });
@@ -155,50 +190,16 @@ export function ShoppingPlan({
         maxQty: null,
         retailerId: null,
         include: true,
-        qtyText: "",
+        qtyValue: "",
+        qtyUom: "",
         qtyDirty: false,
         sohText: "",
         sohDirty: false,
+        comment: "",
       },
     ]);
     setNewName("");
   }
-
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = rows.filter((r) => {
-      if (q && !r.name.toLowerCase().includes(q)) return false;
-      if (sourceFilter !== "all" && !r.sources.includes(sourceFilter)) return false;
-      if (catFilter && r.category !== catFilter) return false;
-      if (retFilter === "none" ? r.retailerId !== null : retFilter && r.retailerId !== retFilter)
-        return false;
-      return true;
-    });
-    if (sort === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "category")
-      list = [...list].sort(
-        (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-      );
-    return list;
-  }, [rows, search, sourceFilter, catFilter, retFilter, sort]);
-
-  const visibleKeys = useMemo(() => new Set(visible.map((r) => r.key)), [visible]);
-  const setAllVisible = (include: boolean) =>
-    setRows((rs) => rs.map((r) => (visibleKeys.has(r.key) ? { ...r, include } : r)));
-
-  const grouped = useMemo(() => {
-    if (sort !== "source") return [{ group: null as PlanSource | null, rows: visible }];
-    return GROUP_ORDER.map((g) => ({
-      group: g as PlanSource | null,
-      rows: visible.filter((r) => primaryGroup(r.sources) === g),
-    })).filter((g) => g.rows.length > 0);
-  }, [visible, sort]);
-
-  const sourceCounts = useMemo(() => {
-    const c: Record<PlanSource, number> = { noted: 0, staple: 0, recipes: 0 };
-    for (const r of rows) for (const s of r.sources) c[s]++;
-    return c;
-  }, [rows]);
 
   async function create() {
     if (busy) return;
@@ -210,7 +211,8 @@ export function ShoppingPlan({
     const toBuy: PlanRowInput[] = included.map((r) => ({
       name: r.name,
       category: r.category,
-      qtyText: r.qtyText,
+      qtyText: [r.qtyValue.trim(), r.qtyUom.trim()].filter(Boolean).join(" "),
+      note: r.comment.trim() || null,
       retailerId: r.retailerId,
       pantryItemId: r.pantryItemId,
     }));
@@ -230,306 +232,254 @@ export function ShoppingPlan({
     router.refresh();
   }
 
+  const setVisible = (include: boolean) => {
+    const keys = new Set(viewRef.current.map((r) => r.key));
+    setRows((rs) => rs.map((r) => (keys.has(r.key) ? { ...r, include } : r)));
+  };
+
   const includedCount = rows.filter((r) => r.include).length;
   const retailerCount = new Set(rows.filter((r) => r.include).map((r) => r.retailerId ?? "")).size;
-  const retailerName = (id: string | null) =>
-    id ? retailers.find((r) => r.id === id)?.name ?? "anywhere" : "anywhere";
 
   const cellInput =
     "w-full rounded border border-stone-200 bg-white px-1.5 py-1 text-xs focus:border-teal-500 focus:outline-none disabled:bg-stone-50";
-  const pill = (active: boolean) =>
-    `rounded-full border px-2.5 py-1 text-xs font-medium ${
-      active
-        ? "border-stone-900 bg-stone-900 text-white"
-        : "border-stone-300 text-stone-500 hover:bg-stone-100"
-    }`;
-  const cols = details ? 9 : 6;
 
-  const RowBadges = ({ r }: { r: Row }) => {
-    const extra =
-      sort === "source" ? r.sources.filter((s) => s !== primaryGroup(r.sources)) : r.sources;
-    if (extra.length === 0) return null;
-    return (
-      <span className="ml-1.5 text-xs" title={extra.join(", ")}>
-        {extra.map((s) => SOURCE_EMOJI[s]).join(" ")}
-      </span>
-    );
-  };
+  const columns: SheetColumn<Row>[] = useMemo(() => [
+    {
+      key: "item", label: "Item", width: 210, sortable: true,
+      sortValue: (r) => r.name.toLowerCase(),
+      csv: (r) => r.name,
+      render: (r) => (
+        <span title={r.sources.map((s) => SOURCE_META[s].label).join(" + ")}>
+          {r.name}
+          {r.sources.length > 1 && (
+            <span className="ml-1 text-[10px]">
+              {r.sources.filter((s) => s !== primaryGroup(r.sources)).map((s) => SOURCE_META[s].emoji).join(" ")}
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "buy", label: "Buy?", width: 52, align: "center",
+      sortable: true, sortValue: (r) => (r.include ? 0 : 1),
+      csv: (r) => (r.include ? "yes" : "no"),
+      render: (r) => (
+        <input
+          type="checkbox"
+          checked={r.include}
+          disabled={!canEdit}
+          onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
+          className="h-4 w-4 accent-teal-700"
+        />
+      ),
+    },
+    {
+      key: "source", label: "Source", width: 78, align: "center",
+      sortable: true, sortValue: (r) => SOURCE_META[primaryGroup(r.sources)].order,
+      csv: (r) => SOURCE_META[primaryGroup(r.sources)].label,
+      render: (r) => (
+        <span title={SOURCE_META[primaryGroup(r.sources)].label}>
+          {SOURCE_META[primaryGroup(r.sources)].emoji}
+        </span>
+      ),
+    },
+    {
+      key: "needed", label: "Needed for meals", width: 110, align: "right",
+      sortable: true, sortValue: (r) => r.neededQty ?? -1,
+      csv: (r) => (!r.sources.includes("recipes") ? "" : r.neededQty === null ? "✓" : `${r.neededQty} ${r.unit ?? ""}`),
+      render: (r) => (
+        <span className="text-xs text-stone-500">
+          {!r.sources.includes("recipes") ? "—" : fmtQty(r.neededQty, r.unit)}
+        </span>
+      ),
+    },
+    {
+      key: "suggested", label: "Suggested", width: 92, align: "right",
+      sortable: true, sortValue: (r) => suggestedFor(r) ?? -1,
+      csv: (r) => { const s = suggestedFor(r); return s === null ? "" : `${s} ${r.unit ?? ""}`; },
+      render: (r) => {
+        const s = suggestedFor(r);
+        return <span className="text-xs font-medium text-stone-600">{s === null ? "✓" : fmtQty(s, r.unit)}</span>;
+      },
+    },
+    {
+      key: "tobuy", label: "To buy", width: 78, align: "right",
+      csv: (r) => r.qtyValue,
+      render: (r) => (
+        <input
+          value={r.qtyValue}
+          disabled={!canEdit}
+          onChange={(e) => {
+            const v = cleanNumeric(e.target.value);
+            patch(r.key, (x) => ({ ...x, qtyValue: v, qtyDirty: true }));
+          }}
+          inputMode="decimal"
+          placeholder="—"
+          className={`${cellInput} text-right`}
+        />
+      ),
+    },
+    {
+      key: "uom", label: "Unit", width: 88,
+      csv: (r) => r.qtyUom,
+      render: (r) => {
+        const custom = r.qtyUom && !UOMS.includes(r.qtyUom.toLowerCase()) ? r.qtyUom : null;
+        return (
+          <select
+            value={r.qtyUom}
+            disabled={!canEdit}
+            onChange={(e) => patch(r.key, (x) => ({ ...x, qtyUom: e.target.value, qtyDirty: true }))}
+            className={cellInput}
+          >
+            <option value="">—</option>
+            {custom && <option value={custom}>{custom}</option>}
+            {UOMS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+        );
+      },
+    },
+    {
+      key: "comment", label: "Comment", width: 160,
+      csv: (r) => r.comment,
+      render: (r) => (
+        <input
+          value={r.comment}
+          disabled={!canEdit}
+          onChange={(e) => patch(r.key, (x) => ({ ...x, comment: e.target.value.slice(0, 120) }))}
+          placeholder="—"
+          title="Goes onto the list with the item"
+          className={cellInput}
+        />
+      ),
+    },
+    {
+      key: "retailer", label: "Retailer", width: 120,
+      sortable: true,
+      sortValue: (r) => (r.retailerId ? retailers.find((x) => x.id === r.retailerId)?.name ?? "" : ""),
+      csv: (r) => (r.retailerId ? retailers.find((x) => x.id === r.retailerId)?.name ?? "" : "anywhere"),
+      render: (r) => (
+        <select
+          value={r.retailerId ?? ""}
+          disabled={!canEdit}
+          onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
+          className={cellInput}
+        >
+          <option value="">🏪 anywhere</option>
+          {retailers.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
+        </select>
+      ),
+    },
+    {
+      key: "category", label: "Category", width: 150, defaultHidden: true,
+      sortable: true, sortValue: (r) => r.category,
+      csv: (r) => categoryById(r.category).label,
+      render: (r) => (
+        <select
+          value={r.category}
+          disabled={!canEdit}
+          onChange={(e) => patch(r.key, (x) => ({ ...x, category: e.target.value }))}
+          className={cellInput}
+        >
+          {GROCERY_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+        </select>
+      ),
+    },
+    {
+      key: "soh", label: "SOH", width: 70, align: "right", defaultHidden: true,
+      csv: (r) => r.sohText,
+      render: (r) => (
+        <input
+          value={r.sohText}
+          disabled={!canEdit || !r.pantryItemId}
+          onChange={(e) => setSoh(r.key, e.target.value)}
+          inputMode="decimal"
+          placeholder={r.pantryItemId ? "—" : ""}
+          title={r.pantryItemId ? "Stock on hand — remembered in the pantry" : "Not in the pantry yet"}
+          className={`${cellInput} text-right`}
+        />
+      ),
+    },
+    {
+      key: "minmax", label: "Min/Max", width: 82, align: "right", defaultHidden: true,
+      csv: (r) => (r.minQty !== null || r.maxQty !== null ? `${r.minQty ?? ""}/${r.maxQty ?? ""}` : ""),
+      render: (r) => (
+        <span className="text-xs text-stone-500">
+          {r.minQty !== null || r.maxQty !== null ? `${r.minQty ?? "—"}/${r.maxQty ?? "—"}` : "—"}
+        </span>
+      ),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [canEdit, retailers]);
+
+  const filters: SegmentedFilter<Row>[] = useMemo(() => [
+    {
+      id: "source", label: "Source",
+      options: [
+        { value: "all", label: "All sources" },
+        ...SOURCE_ORDER.map((s) => ({ value: s, label: `${SOURCE_META[s].emoji} ${SOURCE_META[s].label}` })),
+      ],
+      match: (r, v) => r.sources.includes(v as PlanSource),
+    },
+    {
+      id: "cat", label: "Category", multi: true,
+      options: GROCERY_CATEGORIES.map((c) => ({ value: c.id, label: `${c.emoji} ${c.label}` })),
+      match: (r, v) => r.category === v,
+    },
+    {
+      id: "ret", label: "Retailer", multi: true,
+      options: [
+        { value: "__none", label: "🏪 anywhere" },
+        ...retailers.map((r) => ({ value: r.id, label: r.name })),
+      ],
+      match: (r, v) => (v === "__none" ? r.retailerId === null : r.retailerId === v),
+    },
+    {
+      id: "buy", label: "Buy?",
+      options: [
+        { value: "all", label: "All" },
+        { value: "yes", label: "Ticked" },
+        { value: "no", label: "Unticked" },
+      ],
+      match: (r, v) => (v === "yes" ? r.include : !r.include),
+    },
+  ], [retailers]);
 
   return (
     <div className="space-y-4">
       <p className="text-sm font-medium">
-        Here&apos;s what we think you need to buy — untick what you don&apos;t, adjust
-        the <span className="text-teal-700">To buy</span> amounts, then create your lists.
+        Here&apos;s what we think you need to buy — untick what you don&apos;t, adjust{" "}
+        <span className="text-teal-700">To buy</span>, then create your lists.{" "}
+        <span className="font-normal text-stone-400">
+          📝 noted · 🧺 staples low · 🍽️ meals · 📦 pantry catalog (unticked — tick what you need)
+        </span>
       </p>
 
-      {/* toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 Search items…"
-          className="w-40 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs focus:border-teal-500 focus:outline-none"
-        />
-        <div className="flex gap-1">
-          <button type="button" onClick={() => setSourceFilter("all")} className={pill(sourceFilter === "all")}>
-            All {rows.length}
-          </button>
-          {GROUP_ORDER.map((s) => (
-            <button key={s} type="button" onClick={() => setSourceFilter(s)} className={pill(sourceFilter === s)}>
-              {SOURCE_EMOJI[s]} {sourceCounts[s]}
-            </button>
-          ))}
-        </div>
-        <select
-          value={catFilter}
-          onChange={(e) => setCatFilter(e.target.value)}
-          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
-          title="Filter by category"
-        >
-          <option value="">All categories</option>
-          {GROCERY_CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
-          ))}
-        </select>
-        <select
-          value={retFilter}
-          onChange={(e) => setRetFilter(e.target.value)}
-          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
-          title="Filter by retailer"
-        >
-          <option value="">All retailers</option>
-          <option value="none">🏪 anywhere only</option>
-          {retailers.map((r) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
-          ))}
-        </select>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as typeof sort)}
-          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
-          title="Sort"
-        >
-          <option value="source">Group by source</option>
-          <option value="name">Name A–Z</option>
-          <option value="category">By category</option>
-        </select>
-        {canEdit && (
-          <div className="flex gap-1">
-            <button type="button" onClick={() => setAllVisible(true)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Tick every item currently shown">
-              ✓ all shown
-            </button>
-            <button type="button" onClick={() => setAllVisible(false)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Untick every item currently shown">
-              ✕ all shown
-            </button>
-          </div>
-        )}
-        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-stone-500">
-          <input
-            type="checkbox"
-            checked={details}
-            onChange={(e) => setDetails(e.target.checked)}
-            className="h-3.5 w-3.5 accent-stone-600"
-          />
-          Show stock details
-        </label>
-      </div>
-
-      {/* phone: cards */}
-      <div className="space-y-4 md:hidden">
-        {grouped.map(({ group, rows: groupRows }) => (
-          <div key={group ?? "flat"} className="space-y-2">
-            {group && (
-              <p className="text-xs font-semibold text-stone-500">
-                {GROUP_META[group].title}
-                <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
-              </p>
-            )}
-            {groupRows.map((r) => {
-              const suggested = suggestedFor(r);
-              return (
-                <div
-                  key={r.key}
-                  className={`rounded-xl border bg-white p-3 ${r.include ? "border-stone-200" : "border-stone-100 opacity-45"}`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={r.include}
-                      disabled={!canEdit}
-                      onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
-                      className="mt-0.5 h-5 w-5 accent-teal-700"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {r.name}
-                        <RowBadges r={r} />
-                      </p>
-                      <p className="mt-0.5 text-xs text-stone-400">
-                        {r.sources.includes("recipes") && (
-                          <>meals need {fmtQty(r.neededQty, r.unit)} · </>
-                        )}
-                        suggested {suggested === null ? "✓" : fmtQty(suggested, r.unit)}
-                        {" · "}{categoryById(r.category).emoji} {categoryById(r.category).label}
-                      </p>
-                    </div>
-                  </div>
-                  {r.include && canEdit && (
-                    <div className="mt-2 flex gap-2 pl-7">
-                      <input
-                        value={r.qtyText}
-                        onChange={(e) => patch(r.key, (x) => ({ ...x, qtyText: e.target.value, qtyDirty: true }))}
-                        placeholder="how much?"
-                        className="w-28 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-teal-500 focus:outline-none"
-                      />
-                      <select
-                        value={r.retailerId ?? ""}
-                        onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
-                        className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
-                      >
-                        <option value="">🏪 anywhere</option>
-                        {retailers.map((rt) => (
-                          <option key={rt.id} value={rt.id}>{rt.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-        {visible.length === 0 && (
-          <p className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
-            {rows.length === 0
-              ? "Nothing to plan yet — jot down what you're running low on, or plan some meals."
-              : "No items match the filters."}
-          </p>
-        )}
-      </div>
-
-      {/* desktop: table */}
-      <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white md:block">
-        <table className={`w-full text-sm ${details ? "min-w-[56rem]" : "min-w-[38rem]"}`}>
-          <thead>
-            <tr className="border-b border-stone-200 bg-stone-900 text-left text-xs text-white">
-              <th className="w-10 px-2 py-2.5 text-center" title="Buy it?">🛒</th>
-              <th className="px-2 py-2.5 font-medium">Item</th>
-              {details && <th className="w-36 px-2 py-2.5 font-medium">Category</th>}
-              <th className="w-24 px-2 py-2.5 text-right font-medium" title="What this week's meals need">Needed for meals</th>
-              {details && <th className="w-16 px-2 py-2.5 text-right font-medium" title="Stock on hand — remembered in the pantry">SOH</th>}
-              {details && <th className="w-20 px-2 py-2.5 text-right font-medium" title="Pantry min/max target">Min/Max</th>}
-              <th className="w-24 px-2 py-2.5 text-right font-medium" title="Our suggestion — overwrite in To buy">Suggested</th>
-              <th className="w-24 px-2 py-2.5 font-medium">To buy</th>
-              <th className="w-32 px-2 py-2.5 font-medium">Retailer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map(({ group, rows: groupRows }) => (
-              <FragmentGroup key={group ?? "flat"}>
-                {group && (
-                  <tr className="border-b border-stone-100 bg-stone-50">
-                    <td colSpan={cols} className="px-3 py-1.5 text-xs font-semibold text-stone-500">
-                      {GROUP_META[group].title}
-                      <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
-                    </td>
-                  </tr>
-                )}
-                {groupRows.map((r) => {
-                  const suggested = suggestedFor(r);
-                  return (
-                    <tr key={r.key} className={`border-b border-stone-100 ${r.include ? "" : "opacity-40"}`}>
-                      <td className="px-2 py-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={r.include}
-                          disabled={!canEdit}
-                          onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
-                          className="h-4 w-4 accent-teal-700"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        {r.name}
-                        <RowBadges r={r} />
-                      </td>
-                      {details && (
-                        <td className="px-2 py-1.5">
-                          <select
-                            value={r.category}
-                            disabled={!canEdit}
-                            onChange={(e) => patch(r.key, (x) => ({ ...x, category: e.target.value }))}
-                            className={cellInput}
-                          >
-                            {GROCERY_CATEGORIES.map((c) => (
-                              <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                      )}
-                      <td className="px-2 py-1.5 text-right text-xs text-stone-500">
-                        {!r.sources.includes("recipes") ? "—" : fmtQty(r.neededQty, r.unit)}
-                      </td>
-                      {details && (
-                        <td className="px-2 py-1.5">
-                          <input
-                            value={r.sohText}
-                            disabled={!canEdit || !r.pantryItemId}
-                            onChange={(e) => setSoh(r.key, e.target.value)}
-                            inputMode="decimal"
-                            placeholder={r.pantryItemId ? "—" : ""}
-                            title={r.pantryItemId ? "Stock on hand (remembered in the pantry)" : "Not in the pantry yet"}
-                            className={`${cellInput} text-right`}
-                          />
-                        </td>
-                      )}
-                      {details && (
-                        <td className="px-2 py-1.5 text-right text-xs text-stone-500">
-                          {r.minQty !== null || r.maxQty !== null ? `${r.minQty ?? "—"}/${r.maxQty ?? "—"}` : "—"}
-                        </td>
-                      )}
-                      <td className="px-2 py-1.5 text-right text-xs font-medium text-stone-600">
-                        {suggested === null ? "✓" : fmtQty(suggested, r.unit)}
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          value={r.qtyText}
-                          disabled={!canEdit}
-                          onChange={(e) => patch(r.key, (x) => ({ ...x, qtyText: e.target.value, qtyDirty: true }))}
-                          placeholder="—"
-                          className={cellInput}
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <select
-                          value={r.retailerId ?? ""}
-                          disabled={!canEdit}
-                          onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
-                          className={cellInput}
-                          title={retailerName(r.retailerId)}
-                        >
-                          <option value="">🏪 anywhere</option>
-                          {retailers.map((rt) => (
-                            <option key={rt.id} value={rt.id}>{rt.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </FragmentGroup>
-            ))}
-            {visible.length === 0 && (
-              <tr>
-                <td colSpan={cols} className="px-4 py-10 text-center text-sm text-stone-400">
-                  {rows.length === 0
-                    ? "Nothing to plan yet — jot down what you're running low on, plan some meals, or add items below."
-                    : "No items match the filters."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SmartSheetShell<Row>
+        rows={rows}
+        columns={columns}
+        getRowId={(r) => r.key}
+        storageKey="nestly-plan.v1"
+        searchText={(r) => r.name}
+        searchPlaceholder="Search items…"
+        filters={filters}
+        initialSort={[{ k: "source", dir: "asc" }, { k: "item", dir: "asc" }]}
+        csvFilename="shopping-plan"
+        rowStyle={(r) => (!r.include ? { opacity: 0.45 } : undefined)}
+        onView={(v) => { viewRef.current = v; }}
+        maxHeight="65vh"
+        rightToolbar={
+          canEdit ? (
+            <span className="inline-flex gap-1">
+              <button type="button" onClick={() => setVisible(true)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Tick every item currently shown">
+                ✓ shown
+              </button>
+              <button type="button" onClick={() => setVisible(false)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Untick every item currently shown">
+                ✕ shown
+              </button>
+            </span>
+          ) : undefined
+        }
+      />
 
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2">
@@ -565,9 +515,4 @@ export function ShoppingPlan({
       )}
     </div>
   );
-}
-
-/** Plain pass-through so grouped rows can share one key without an extra DOM node. */
-function FragmentGroup({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
 }

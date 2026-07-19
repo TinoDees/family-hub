@@ -93,3 +93,38 @@ export function parseIngredientLines(text: string): ParsedIngredient[] {
     .filter((i): i is ParsedIngredient => i !== null && i.name.length > 0)
     .slice(0, 60);
 }
+
+/**
+ * Clean an ingredient name for SHOPPING purposes (imported recipes are full of
+ * cookbook noise). Returns 0..2 shoppable names:
+ *   "option 2:" / "See notes"        → []           (not ingredients)
+ *   "pinch of salt"                  → ["salt"]     (a pinch is a measure)
+ *   "salt and pepper to taste"       → ["salt", "pepper"]
+ *   "olive oil, for serving"         → ["olive oil"]
+ * Used everywhere recipe ingredients become shopping rows (plan, list gen,
+ * week summary) — the single place this logic lives.
+ */
+export function normalizeIngredientNames(raw: string): string[] {
+  let s = raw.trim().replace(/^[-*•·]\s*/, "");
+  if (!s) return [];
+
+  // whole lines that are structure, not ingredients
+  if (/^option\s*\d*\s*:?\s*$/i.test(s)) return [];
+  if (/^(see\s+)?notes?\s*:?\s*$/i.test(s)) return [];
+  if (/^(for\s+(the\s+)?(serving|garnish|dressing|sauce|marinade|topping))\s*:?\s*$/i.test(s)) return [];
+
+  // strip measure-words that aren't quantities you can buy
+  s = s.replace(/^(a\s+)?(pinch(es)?|dash(es)?|splash(es)?|sprinkle)\s+of\s+/i, "");
+  // strip cookbook qualifiers
+  s = s.replace(/\s*\((optional|to taste|for serving|if desired|as needed)\)\s*/gi, " ");
+  s = s.replace(/,?\s+(to taste|to serve|for serving|for garnish|if desired|as needed|or more|to drizzle(\s+over\s+(the\s+)?top)?)\s*\.?$/i, "");
+  s = s.replace(/,?\s+(to taste|to serve|for serving|for garnish|if desired|as needed|or more|to drizzle(\s+over\s+(the\s+)?top)?)\s*\.?$/i, ""); // twice: "to drizzle over top if desired"
+  s = s.replace(/^extra\s+/i, "").replace(/\s+/g, " ").trim();
+  if (!s) return [];
+
+  // "salt and pepper" style pairs → two real items
+  const pair = s.toLowerCase().match(/^(salt)\s*(?:and|&|\+)\s*(pepper)$|^(pepper)\s*(?:and|&|\+)\s*(salt)$/);
+  if (pair) return ["salt", "pepper"];
+
+  return [s.slice(0, 200)];
+}

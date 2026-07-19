@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { MealCellPicker, type CellEntry } from "@/components/meal-cell-picker";
+import { normalizeIngredientNames } from "@/lib/ingredients";
 
 const SLOTS = ["breakfast", "lunch", "dinner"] as const;
 const SLOT_ICON: Record<string, string> = { breakfast: "🌅", lunch: "🥪", dinner: "🍽️", snack: "🍎" };
@@ -87,12 +88,14 @@ export default async function MealsPage({
     const base = rec?.servings ?? 4;
     const factor = e.servings && base ? e.servings / base : 1;
     for (const i of ingredientsByRecipe.get(e.recipe_id) ?? []) {
-      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
-      const cur = agg.get(key);
-      const scaledQty = i.qty !== null ? Number(i.qty) * factor : null;
-      if (cur && cur.qty !== null && scaledQty !== null) cur.qty += scaledQty;
-      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaledQty });
-      else cur.qty = null;
+      for (const name of normalizeIngredientNames(i.name)) {
+        const key = `${name.toLowerCase()}|${i.unit ?? ""}`;
+        const cur = agg.get(key);
+        const scaledQty = i.qty !== null ? Number(i.qty) * factor : null;
+        if (cur && cur.qty !== null && scaledQty !== null) cur.qty += scaledQty;
+        else if (!cur) agg.set(key, { name, unit: i.unit, qty: scaledQty });
+        else cur.qty = null;
+      }
     }
   }
 

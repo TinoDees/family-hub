@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { CATEGORY_ORDER, guessCategory } from "@/lib/groceries";
+import { normalizeIngredientNames } from "@/lib/ingredients";
 
 export async function createList(formData: FormData) {
   const { membership, userId } = await requireModule("shopping", "edit");
@@ -192,12 +193,14 @@ export async function addMealIngredientsToListInline(
     const base = (e.recipe as unknown as { servings: number } | null)?.servings ?? 4;
     const factor = e.servings && base ? e.servings / base : 1;
     for (const i of byRecipe.get(e.recipe_id!) ?? []) {
-      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
-      const scaled = i.qty !== null ? Number(i.qty) * factor : null;
-      const cur = agg.get(key);
-      if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
-      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaled });
-      else cur.qty = null;
+      for (const name of normalizeIngredientNames(i.name)) {
+        const key = `${name.toLowerCase()}|${i.unit ?? ""}`;
+        const scaled = i.qty !== null ? Number(i.qty) * factor : null;
+        const cur = agg.get(key);
+        if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
+        else if (!cur) agg.set(key, { name, unit: i.unit, qty: scaled });
+        else cur.qty = null;
+      }
     }
   }
 
@@ -263,12 +266,14 @@ export async function shoppingListFromWeek(formData: FormData) {
     const base = (e.recipe as unknown as { servings: number } | null)?.servings ?? 4;
     const factor = e.servings && base ? e.servings / base : 1;
     for (const i of byRecipe.get(e.recipe_id!) ?? []) {
-      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
-      const scaled = i.qty !== null ? Number(i.qty) * factor : null;
-      const cur = agg.get(key);
-      if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
-      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaled });
-      else cur.qty = null;
+      for (const name of normalizeIngredientNames(i.name)) {
+        const key = `${name.toLowerCase()}|${i.unit ?? ""}`;
+        const scaled = i.qty !== null ? Number(i.qty) * factor : null;
+        const cur = agg.get(key);
+        if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
+        else if (!cur) agg.set(key, { name, unit: i.unit, qty: scaled });
+        else cur.qty = null;
+      }
     }
   }
 

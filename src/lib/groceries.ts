@@ -30,6 +30,15 @@ export const GROCERY_CATEGORIES: GroceryCategory[] = [
 
 export const CATEGORY_ORDER: string[] = GROCERY_CATEGORIES.map((c) => c.id);
 
+/** Predefined units of measure for "To buy" quantities (plan + lists). */
+export const UOMS: string[] = [
+  "g", "kg", "ml", "l",
+  "pc", "pack", "box", "bag", "roll",
+  "tin", "can", "jar", "bottle", "tube",
+  "bunch", "head", "punnet", "tray", "dozen",
+  "tsp", "tbsp", "cup",
+];
+
 export function categoryById(id: string | null | undefined): GroceryCategory {
   return GROCERY_CATEGORIES.find((c) => c.id === id) ?? GROCERY_CATEGORIES[GROCERY_CATEGORIES.length - 1];
 }

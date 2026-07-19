@@ -11,6 +11,7 @@ import {
   renameRetailerInline,
   deleteRetailerInline,
 } from "@/lib/actions/grocery-admin";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 /** Manage the category tree (one sub-level) and the household's retailers. */
 
@@ -26,6 +27,10 @@ export function GroceryAdmin({
   const [newTop, setNewTop] = useState("");
   const [newSub, setNewSub] = useState<{ parentId: string; name: string } | null>(null);
   const [newRetailer, setNewRetailer] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<
+    { kind: "cat" | "ret"; id: string; name: string } | null
+  >(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const tops = categories.filter((c) => !c.parent_id);
   const kidsOf = (id: string) => categories.filter((c) => c.parent_id === id);
@@ -66,10 +71,7 @@ export function GroceryAdmin({
       )}
       <button
         type="button"
-        onClick={() => {
-          if (confirm(`Delete "${cat.name}"? Items keep their name and fall back to Uncategorised.`))
-            run(deleteGroceryCategoryInline(cat.id));
-        }}
+        onClick={() => setPendingDelete({ kind: "cat", id: cat.id, name: cat.name })}
         className="text-xs text-stone-300 hover:text-red-600"
         title="Delete"
       >
@@ -166,10 +168,7 @@ export function GroceryAdmin({
               />
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm(`Remove "${r.name}"? Items preferring it fall back to "anywhere".`))
-                    run(deleteRetailerInline(r.id));
-                }}
+                onClick={() => setPendingDelete({ kind: "ret", id: r.id, name: r.name })}
                 className="text-xs text-stone-300 hover:text-red-600"
                 title="Delete"
               >
@@ -209,6 +208,29 @@ export function GroceryAdmin({
         </div>
       </div>
       {error && <p className="text-xs text-red-600 md:col-span-2">{error}</p>}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        busy={deleteBusy}
+        title={pendingDelete?.kind === "cat" ? "Delete this category?" : "Remove this retailer?"}
+        message={
+          pendingDelete?.kind === "cat"
+            ? `"${pendingDelete.name}" (and its sub-categories) will be removed. Items keep their name and fall back to Uncategorised.`
+            : `"${pendingDelete?.name}" will be removed. Items preferring it fall back to "anywhere".`
+        }
+        confirmLabel={pendingDelete?.kind === "cat" ? "Delete category" : "Remove retailer"}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          setDeleteBusy(true);
+          await run(
+            pendingDelete.kind === "cat"
+              ? deleteGroceryCategoryInline(pendingDelete.id)
+              : deleteRetailerInline(pendingDelete.id)
+          );
+          setDeleteBusy(false);
+          setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

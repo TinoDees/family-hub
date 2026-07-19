@@ -42,7 +42,7 @@ export default async function ShoppingListPage({
       .maybeSingle(),
     supabase
       .from("shopping_list_items")
-      .select("id, name, qty, checked, category")
+      .select("id, name, qty, checked, category, note")
       .eq("list_id", id)
       .order("checked")
       .order("position"),
@@ -153,9 +153,12 @@ export default async function ShoppingListPage({
                   ) : (
                     <span className={`h-6 w-6 rounded-full border ${i.checked ? "border-emerald-500 bg-emerald-500" : "border-stone-300"}`} />
                   )}
-                  <span className={`flex-1 text-sm ${i.checked ? "text-stone-400 line-through" : ""}`}>
+                  <span className={`min-w-0 flex-1 text-sm ${i.checked ? "text-stone-400 line-through" : ""}`}>
                     {i.qty && <span className="mr-1.5 font-medium">{i.qty}</span>}
                     {i.name}
+                    {i.note && (
+                      <span className="ml-1.5 text-xs italic text-stone-400">— {i.note}</span>
+                    )}
                   </span>
                   {canEdit && (
                     <>

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { ensureGroceryCategories, getRetailers, legacySlugFor } from "@/lib/grocery-data";
 import { guessCategory } from "@/lib/groceries";
+import { normalizeIngredientNames } from "@/lib/ingredients";
 import { ShoppingPlan, type SeedRow, type PlanSource } from "@/components/shopping-plan";
 import { PlanRange } from "@/components/plan-range";
 
@@ -93,12 +94,15 @@ export default async function ShoppingPlanPage({
     const base = (e.recipe as unknown as { servings: number } | null)?.servings ?? 4;
     const factor = e.servings && base ? e.servings / base : 1;
     for (const i of byRecipe.get(e.recipe_id!) ?? []) {
-      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
-      const scaled = i.qty !== null ? Number(i.qty) * factor : null;
-      const cur = agg.get(key);
-      if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
-      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaled });
-      else cur.qty = null;
+      // cookbook noise → shoppable names ("pinch of salt" → salt; "option 2:" → dropped)
+      for (const name of normalizeIngredientNames(i.name)) {
+        const key = `${name.toLowerCase()}|${i.unit ?? ""}`;
+        const scaled = i.qty !== null ? Number(i.qty) * factor : null;
+        const cur = agg.get(key);
+        if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
+        else if (!cur) agg.set(key, { name, unit: i.unit, qty: scaled });
+        else cur.qty = null;
+      }
     }
   }
 
@@ -140,13 +144,14 @@ export default async function ShoppingPlanPage({
     });
   }
 
-  // 🧺 staples below min not already covered by a recipe row
+  // the whole pantry catalog: below-min items surface as 🧺 staples (ticked);
+  // everything else joins as 📦 pantry (unticked — tick what you need)
   for (const p of (pantry ?? []).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (matchedPantryIds.has(p.id) || !belowMin(p)) continue;
+    if (matchedPantryIds.has(p.id)) continue;
     pushRow({
-      key: `s-${p.id}`,
+      key: `p-${p.id}`,
       name: p.name,
-      sources: ["staple"],
+      sources: [belowMin(p) ? "staple" : "pantry"],
       noteIds: [],
       noteQty: null,
       neededQty: null,
