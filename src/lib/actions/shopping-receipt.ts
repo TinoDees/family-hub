@@ -45,7 +45,7 @@ export async function scanShoppingReceipt(
   if (!list) return { ok: false, error: "List not found" };
 
   if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mediaType))
-    return { ok: false, error: "That image format isn't readable (probably HEIC) — screenshot it and try again." };
+    return { ok: false, error: "That image format isn't readable (probably HEIC). Screenshot it and try again." };
   const bytes = Buffer.from(imageBase64, "base64");
   if (bytes.length > 5 * 1024 * 1024) return { ok: false, error: "Image too large (max 5MB)" };
 
@@ -96,7 +96,7 @@ export async function scanShoppingReceipt(
         ],
       }),
     });
-    if (!res.ok) return { ok: false, error: `AI reading failed (${res.status}) — try again.`, path };
+    if (!res.ok) return { ok: false, error: `AI reading failed (${res.status}). Try again.`, path };
     const data = await res.json();
     let text: string = data?.content?.[0]?.text ?? "";
     text = text.replace(/```(?:json)?/g, "").trim();
@@ -105,7 +105,7 @@ export async function scanShoppingReceipt(
     try {
       parsed = match ? JSON.parse(match[0]) : {};
     } catch {
-      return { ok: false, error: "The AI answer was garbled — try scanning again.", path };
+      return { ok: false, error: "The AI answer was garbled. Try scanning again.", path };
     }
 
     const lines: ReceiptLine[] = [];
@@ -130,7 +130,7 @@ export async function scanShoppingReceipt(
       lines,
     };
   } catch {
-    return { ok: false, error: "AI reading failed — try again.", path };
+    return { ok: false, error: "AI reading failed. Try again.", path };
   }
 }
 

@@ -37,7 +37,7 @@ export default async function InvitePage({
       return (
         <AuthCard
           title={`Welcome to ${membership.household.name}`}
-          message="You're already a member — no invite needed."
+          message="You're already a member, no invite needed."
         >
           <Link href="/dashboard" className={`${buttonCls} block text-center`}>
             Go to Nestly
@@ -96,7 +96,7 @@ export default async function InvitePage({
           <form action={acceptInvite}>
             <input type="hidden" name="token" value={token} />
             <button className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium hover:bg-stone-100">
-              No — add {user.email} to {invite.household_name} instead
+              No, add {user.email} to {invite.household_name} instead
             </button>
           </form>
         </div>

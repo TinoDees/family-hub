@@ -159,7 +159,7 @@ export default async function MealsPage({
 
       {canEdit && (
         <p className="text-xs text-stone-400">
-          Type any meal — it&apos;s remembered in your <Link href="/recipes" className="underline hover:text-stone-600">recipe book</Link> and
+          Type any meal. It&apos;s remembered in your <Link href="/recipes" className="underline hover:text-stone-600">recipe book</Link> and
           autocompletes next time. Ingredients are optional; add them whenever you like to power the shopping list.
         </p>
       )}

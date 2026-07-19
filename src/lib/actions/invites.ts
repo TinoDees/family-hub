@@ -220,10 +220,10 @@ export async function acceptInviteNewUser(formData: FormData) {
   });
   if (signUpError) {
     if (/already registered/i.test(signUpError.message))
-      fail("An account with this email already exists — use 'I already have an account' below");
+      fail("An account with this email already exists. Use 'I already have an account' below");
     fail(signUpError.message);
   }
-  if (!data.session) fail("Could not sign you in — please try again");
+  if (!data.session) fail("Could not sign you in. Please try again");
 
   const { error: acceptError } = await supabase.rpc("accept_invite", {
     p_token: token,

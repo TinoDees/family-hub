@@ -21,7 +21,7 @@ export default async function PantryPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-stone-500">
-        The master catalog of everything your household buys — ingredients and staples.
+        The master catalog of everything your household buys: ingredients and staples.
         Categories, retailer preferences and min/max targets are optional layers; a bare
         name is a complete entry.
       </p>

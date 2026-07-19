@@ -17,7 +17,7 @@ export function InviteShare({
   inviterName: string;
 }) {
   const url = `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${token}`;
-  const message = `${inviterName} invited you to join "${householdName}" on Nestly — tap to join: ${url}`;
+  const message = `${inviterName} invited you to join "${householdName}" on Nestly. Tap to join: ${url}`;
   const encoded = encodeURIComponent(message);
 
   const btn =

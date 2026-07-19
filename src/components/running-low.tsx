@@ -157,7 +157,7 @@ export function RunningLow({
           </>
         )}
         <span className="text-xs text-stone-400">
-          — it&apos;ll be waiting in the next shop&apos;s plan.
+          It&apos;ll be waiting in the next shop&apos;s plan.
         </span>
       </div>
       {notes.length > 0 && (

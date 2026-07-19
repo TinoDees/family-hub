@@ -39,7 +39,7 @@ export function ReceiptCapture({
   async function onFile(file: File) {
     setError(null);
     if (file.size > 5 * 1024 * 1024) {
-      setError("Photo too large (max 5MB) — most phone cameras have a smaller size option.");
+      setError("Photo too large (max 5MB). Most phone cameras have a smaller size option.");
       return;
     }
     setBusy("scan");
@@ -120,7 +120,7 @@ export function ReceiptCapture({
         disabled={busy !== null}
         onClick={() => fileRef.current?.click()}
         className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100 disabled:opacity-50"
-        title="Photograph the receipt — prices land on the items automatically"
+        title="Photograph the receipt. Prices land on the items automatically"
       >
         {busy === "scan" ? "Reading receipt…" : "📷 Scan receipt"}
       </button>
@@ -156,7 +156,7 @@ export function ReceiptCapture({
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
               {scan.lines.length === 0 ? (
                 <p className="py-6 text-center text-sm text-stone-400">
-                  No line items could be read — the total and receipt are still saved.
+                  No line items could be read. The total and receipt are still saved.
                 </p>
               ) : (
                 <ul className="divide-y divide-stone-100">

@@ -36,7 +36,8 @@ export function ShoppingSession({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [choice, setChoice] = useState("");
+  const [mode, setMode] = useState<null | "start" | "retro">(null);
+  const [showCustom, setShowCustom] = useState(false);
   const [customStore, setCustomStore] = useState("");
   const [retroVisit, setRetroVisit] = useState<ActiveVisit | null>(null);
   const [busy, setBusy] = useState<null | "start" | "retro" | "scan" | "apply" | "finish" | "cancel">(null);
@@ -50,40 +51,36 @@ export function ShoppingSession({
 
   if (!canEdit) return null;
 
-  async function start() {
-    if (busy) return;
-    const retailerId = choice && choice !== "__other" ? choice : null;
-    const label = choice === "__other" ? customStore : null;
-    if (!retailerId && !label?.trim()) {
-      setError("Pick a store first");
-      return;
-    }
-    setBusy("start");
-    setError(null);
-    const res = await startVisitInline(retailerId, label);
-    setBusy(null);
-    if (!res.ok) setError(res.error ?? "Could not start");
-    else router.refresh();
+  function resetPicker() {
+    setMode(null);
+    setShowCustom(false);
+    setCustomStore("");
   }
 
-  async function startRetro() {
-    if (busy) return;
-    const retailerId = choice && choice !== "__other" ? choice : null;
-    const label = choice === "__other" ? customStore : null;
-    if (!retailerId && !label?.trim()) {
-      setError("Pick which store the receipt is from first");
-      return;
-    }
-    setBusy("retro");
+  async function begin(retailerId: string | null, label: string | null) {
+    if (busy || (!retailerId && !label?.trim())) return;
     setError(null);
-    const res = await createRetroVisitInline(retailerId, label);
-    setBusy(null);
-    if (!res.ok || !res.visit) {
-      setError(res.error ?? "Could not create");
-      return;
+    if (mode === "retro") {
+      setBusy("retro");
+      const res = await createRetroVisitInline(retailerId, label);
+      setBusy(null);
+      if (!res.ok || !res.visit) {
+        setError(res.error ?? "Could not create");
+        return;
+      }
+      resetPicker();
+      setRetroVisit(res.visit);
+      fileRef.current?.click();
+    } else {
+      setBusy("start");
+      const res = await startVisitInline(retailerId, label);
+      setBusy(null);
+      if (!res.ok) setError(res.error ?? "Could not start");
+      else {
+        resetPicker();
+        router.refresh();
+      }
     }
-    setRetroVisit(res.visit);
-    fileRef.current?.click();
   }
 
   async function onFile(file: File) {
@@ -176,48 +173,86 @@ export function ShoppingSession({
       }`}
     >
       {!activeVisit ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">🛒 At the shops?</span>
-          <select
-            value={choice}
-            onChange={(e) => setChoice(e.target.value)}
-            className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm focus:outline-none"
-          >
-            <option value="">Start shopping at…</option>
-            {retailers.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-            <option value="__other">somewhere else…</option>
-          </select>
-          {choice === "__other" && (
-            <input
-              value={customStore}
-              onChange={(e) => setCustomStore(e.target.value)}
-              placeholder="Store name"
-              className="w-36 rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm focus:border-teal-500 focus:outline-none"
-            />
-          )}
-          <button
-            type="button"
-            disabled={busy !== null || !choice}
-            onClick={start}
-            className="rounded-lg bg-teal-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-600 disabled:opacity-40"
-          >
-            {busy === "start" ? "Starting…" : "▶ Start"}
-          </button>
-          <button
-            type="button"
-            disabled={busy !== null || !choice}
-            onClick={startRetro}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-stone-100 disabled:opacity-40"
-            title="Already shopped? Pick the store, then attach its receipt"
-          >
-            {busy === "retro" ? "…" : "📎 Add receipt afterwards"}
-          </button>
-          <span className="text-xs text-stone-400">
-            — start live and ticks tag to the stop, or attach receipts after the shop; either way prices are recorded.
-          </span>
-        </div>
+        mode === null ? (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => { setMode("start"); setError(null); }}
+              className="rounded-xl bg-teal-700 px-4 py-4 text-base font-semibold text-white shadow-sm hover:bg-teal-600"
+            >
+              🛒 Start shopping
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("retro"); setError(null); }}
+              className="rounded-xl border-2 border-stone-300 bg-white px-4 py-4 text-base font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-50"
+            >
+              🧾 Add a receipt
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">
+                {mode === "start" ? "🛒 Where are you shopping?" : "🧾 Which store is the receipt from?"}
+              </span>
+              <button
+                type="button"
+                onClick={() => { resetPicker(); setError(null); }}
+                className="rounded-lg px-2 py-1 text-lg leading-none text-stone-400 hover:text-stone-600"
+                aria-label="Back"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {retailers.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => begin(r.id, null)}
+                  className="rounded-xl border-2 border-teal-200 bg-teal-50 px-5 py-3 text-sm font-semibold text-teal-900 hover:border-teal-500 hover:bg-teal-100 disabled:opacity-40"
+                >
+                  🏪 {r.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => setShowCustom(true)}
+                className="rounded-xl border-2 border-dashed border-stone-300 bg-white px-5 py-3 text-sm font-semibold text-stone-500 hover:border-stone-400 disabled:opacity-40"
+              >
+                Somewhere else…
+              </button>
+            </div>
+            {showCustom && (
+              <div className="flex gap-2">
+                <input
+                  value={customStore}
+                  onChange={(e) => setCustomStore(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customStore.trim()) begin(null, customStore.trim());
+                  }}
+                  placeholder="Store name"
+                  autoFocus
+                  className="min-w-0 flex-1 rounded-xl border-2 border-stone-300 px-3 py-2.5 text-sm focus:border-teal-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={busy !== null || !customStore.trim()}
+                  onClick={() => begin(null, customStore.trim())}
+                  className="rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-600 disabled:opacity-40"
+                >
+                  Go
+                </button>
+              </div>
+            )}
+            {(busy === "start" || busy === "retro") && (
+              <p className="text-xs text-stone-400">{busy === "start" ? "Starting…" : "Getting ready…"}</p>
+            )}
+          </div>
+        )
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">
@@ -275,7 +310,7 @@ export function ShoppingSession({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={closeScanModal}>
           <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-stone-100 px-5 py-4">
-              <h3 className="text-sm font-semibold">🧾 {scan.store ?? "Receipt"} — finishing this stop</h3>
+              <h3 className="text-sm font-semibold">🧾 Receipt from {scan.store ?? (activeVisit ?? retroVisit)?.store_label ?? "the store"}</h3>
               <div className="mt-2 flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Total paid</span>
                 <span className="font-medium">$</span>
@@ -293,7 +328,7 @@ export function ShoppingSession({
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
               {scan.lines.length === 0 ? (
                 <p className="py-6 text-center text-sm text-stone-400">
-                  No line items could be read — the total and receipt are still recorded.
+                  No line items could be read. The total and receipt are still recorded.
                 </p>
               ) : (
                 <ul className="divide-y divide-stone-100">
@@ -359,7 +394,7 @@ export function ShoppingSession({
                   onClick={apply}
                   className="rounded-lg bg-teal-700 px-5 py-1.5 text-sm font-medium text-white hover:bg-teal-600 disabled:opacity-50"
                 >
-                  {busy === "apply" ? "Saving…" : `Finish stop${scan.total ? ` — $${scan.total}` : ""}`}
+                  {busy === "apply" ? "Saving…" : `Finish stop${scan.total ? ` · $${scan.total}` : ""}`}
                 </button>
               </div>
             </div>

@@ -363,9 +363,9 @@ export function MealCellPicker({
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => !busy && setModal(null)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold">New recipe — quick add</h3>
+            <h3 className="text-sm font-semibold">New recipe: quick add</h3>
             <p className="mt-0.5 text-xs text-stone-400">
-              Only the name is needed. Add ingredients from your head if you like — everything can be finished later.
+              Only the name is needed. Add ingredients from your head if you like. Everything can be finished later.
             </p>
             <label className="mt-3 block text-xs font-medium text-stone-500">Name</label>
             <input
@@ -375,7 +375,7 @@ export function MealCellPicker({
               autoFocus
             />
             <label className="mt-3 block text-xs font-medium text-stone-500">
-              Ingredients <span className="font-normal text-stone-400">(optional — one per line, e.g. “500g beef mince”)</span>
+              Ingredients <span className="font-normal text-stone-400">(optional, one per line, e.g. “500g beef mince”)</span>
             </label>
             <textarea
               value={modal.ingredients}
@@ -390,7 +390,7 @@ export function MealCellPicker({
                 value={modal.method}
                 onChange={(e) => setModal({ ...modal, method: e.target.value })}
                 rows={4}
-                placeholder="Steps — or leave for another day."
+                placeholder="Steps, or leave for another day."
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
               />
             </details>

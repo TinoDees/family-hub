@@ -97,8 +97,8 @@ export function CombinedList({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-stone-500">
-          Everything on your open lists in one place —{" "}
-          {remaining === 0 ? "all done! 🎉" : `${remaining} item${remaining === 1 ? "" : "s"} to go`}.
+          Everything on your open lists in one place.{" "}
+          {remaining === 0 ? "All done! 🎉" : `${remaining} item${remaining === 1 ? "" : "s"} to go.`}{" "}
           Ticking here ticks the store list too.
         </p>
         <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function CombinedList({
 
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
-          No open lists — <Link href="/shopping/plan" className="underline">plan the shop</Link> to create some.
+          No open lists. <Link href="/shopping/plan" className="underline">Plan the shop</Link> to create some.
         </p>
       ) : (
         groups.map((g) => {
@@ -156,7 +156,7 @@ export function CombinedList({
                     <span className={`min-w-0 flex-1 text-sm ${i.checked ? "text-stone-400 line-through" : ""}`}>
                       {i.qty && <span className="mr-1.5 font-medium">{i.qty}</span>}
                       {i.name}
-                      {i.note && <span className="ml-1.5 text-xs italic text-stone-400">— {i.note}</span>}
+                      {i.note && <span className="ml-1.5 text-xs italic text-stone-400">· {i.note}</span>}
                     </span>
                     <span className="shrink-0 text-xs text-stone-400" title={i.listName}>
                       {g.sub(i)}

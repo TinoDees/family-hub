@@ -98,7 +98,7 @@ export function PlanRange({ from, to }: { from: string; to: string }) {
         </div>
       </div>
       <p className="mt-1.5 text-xs text-stone-400">
-        Meals planned in this date range set the ingredients — notes and low staples are
+        Meals planned in this date range set the ingredients. Notes and low staples are
         always included.
       </p>
     </div>

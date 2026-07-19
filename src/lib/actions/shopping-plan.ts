@@ -47,7 +47,7 @@ export async function createShoppingRunInline(
     }))
     .filter((r) => r.name)
     .slice(0, 300);
-  if (cleanRows.length === 0) return { ok: false, error: "Nothing to buy — tick at least one item" };
+  if (cleanRows.length === 0) return { ok: false, error: "Nothing to buy. Tick at least one item" };
 
   // resolve retailer names (household-scoped; unknown ids fall back to Anywhere)
   const { data: retailers } = await supabase
@@ -65,8 +65,8 @@ export async function createShoppingRunInline(
   const created: { id: string; name: string }[] = [];
   for (const [key, groupRows] of groups) {
     const listName = key
-      ? `${retailerName.get(key)} — ${cleanLabel}`
-      : `Groceries — ${cleanLabel}`;
+      ? `${retailerName.get(key)} · ${cleanLabel}`
+      : `Groceries · ${cleanLabel}`;
     const { data: list, error } = await supabase
       .from("shopping_lists")
       .insert({

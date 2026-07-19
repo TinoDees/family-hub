@@ -50,10 +50,10 @@ export default async function InvitesPage({
       {created && (
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           {emailed === "1"
-            ? "Invite sent — an email is on its way."
+            ? "Invite sent. An email is on its way."
             : share
-              ? "Invite created — hit WhatsApp or SMS below to send it from your phone."
-              : "Invite created — share the link via WhatsApp, SMS or however you like."}
+              ? "Invite created. Hit WhatsApp or SMS below to send it from your phone."
+              : "Invite created. Share the link via WhatsApp, SMS or however you like."}
         </p>
       )}
 
@@ -86,7 +86,7 @@ export default async function InvitesPage({
         </div>
         <p className="mt-2 text-xs text-stone-400">
           Email sends automatically. A mobile number opens WhatsApp (or SMS) on your
-          device with the invite ready to send — nothing leaves Nestly without you.
+          device with the invite ready to send. Nothing leaves Nestly without you.
         </p>
       </form>
 

@@ -169,7 +169,7 @@ export function PantryManager({
                 onChange={(e) => setCatChoice(e.target.value)}
                 className="rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm focus:border-teal-500 focus:outline-none"
               >
-                <option value="">— auto —</option>
+                <option value="">auto</option>
                 <CatOptions />
               </select>
             </div>
@@ -199,7 +199,7 @@ export function PantryManager({
 
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
-          The pantry is your household&apos;s master item list — staples, ingredients,
+          The pantry is your household&apos;s master item list: staples, ingredients,
           anything you buy. Add items here (or let shopping build it up over time) and
           set categories, retailer preferences and min/max targets as much or as little
           as you like.
@@ -250,7 +250,7 @@ export function PantryManager({
                             className="max-w-36 rounded-lg border border-transparent bg-transparent px-1 py-0.5 text-xs text-stone-400 hover:border-stone-200"
                             title="Category"
                           >
-                            <option value="">— none —</option>
+                            <option value="">none</option>
                             <CatOptions />
                           </select>
                           <select
@@ -287,7 +287,7 @@ export function PantryManager({
                     </div>
                     {canEdit && targetsOpen && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-stone-500">
-                        <span title="Stock on hand — how many you have right now">in stock</span>
+                        <span title="Stock on hand: how many you have right now">in stock</span>
                         <input
                           defaultValue={i.soh ?? ""}
                           onBlur={(e) => {
@@ -327,7 +327,7 @@ export function PantryManager({
                           className="w-20 rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm focus:border-teal-500 focus:outline-none"
                           placeholder="rolls, L…"
                         />
-                        <span className="text-stone-300">optional — stock + min/max power the suggested order quantities</span>
+                        <span className="text-stone-300">optional. Stock + min/max power the suggested order quantities</span>
                       </div>
                     )}
                   </li>

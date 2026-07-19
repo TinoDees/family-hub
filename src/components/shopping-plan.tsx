@@ -409,7 +409,7 @@ export function ShoppingPlan({
           onChange={(e) => setSoh(r.key, e.target.value)}
           inputMode="decimal"
           placeholder={r.pantryItemId ? "—" : ""}
-          title={r.pantryItemId ? "Stock on hand — remembered in the pantry" : "Not in the pantry yet"}
+          title={r.pantryItemId ? "Stock on hand, remembered in the pantry" : "Not in the pantry yet"}
           className={`${cellInput} text-right`}
         />
       ),
@@ -462,10 +462,10 @@ export function ShoppingPlan({
   return (
     <div className="space-y-4">
       <p className="text-sm font-medium">
-        Here&apos;s what we think you need to buy — untick what you don&apos;t, adjust{" "}
+        Here&apos;s what we think you need to buy. Untick what you don&apos;t, adjust{" "}
         <span className="text-teal-700">To buy</span>, then create your lists.{" "}
         <span className="font-normal text-stone-400">
-          📝 noted · 🧺 staples low · 🍽️ meals · 📦 pantry catalog (unticked — tick what you need)
+          📝 noted · 🧺 staples low · 🍽️ meals · 📦 pantry catalog (unticked, tick what you need)
         </span>
       </p>
 
@@ -523,7 +523,7 @@ export function ShoppingPlan({
             >
               {busy
                 ? "Creating…"
-                : `🛒 Create my shopping list${retailerCount > 1 ? `s (${retailerCount})` : ""} — ${includedCount} item${includedCount === 1 ? "" : "s"}`}
+                : `🛒 Create my shopping list${retailerCount > 1 ? `s (${retailerCount})` : ""} · ${includedCount} item${includedCount === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>

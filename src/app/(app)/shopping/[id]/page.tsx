@@ -138,7 +138,7 @@ export default async function ShoppingListPage({
                     {i.qty && <span className="mr-1.5 font-medium">{i.qty}</span>}
                     {i.name}
                     {i.note && (
-                      <span className="ml-1.5 text-xs italic text-stone-400">— {i.note}</span>
+                      <span className="ml-1.5 text-xs italic text-stone-400">· {i.note}</span>
                     )}
                     {i.price !== null && (
                       <span className="ml-1.5 text-xs font-medium text-emerald-700">

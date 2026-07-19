@@ -305,7 +305,7 @@ export async function shoppingListFromWeek(formData: FormData) {
     .from("shopping_lists")
     .insert({
       household_id: membership.household_id,
-      name: `Groceries — week of ${label}`,
+      name: `Groceries · week of ${label}`,
       created_by: userId,
     })
     .select("id")

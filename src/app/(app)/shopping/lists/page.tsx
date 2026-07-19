@@ -66,7 +66,7 @@ export default async function ShoppingListsPage({
           className="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50/60 px-4 py-3 hover:border-teal-300"
         >
           <span className="text-sm font-medium">
-            🧾 The whole shop — all {open.length} lists in one view
+            🧾 The whole shop: all {open.length} lists in one view
           </span>
           <span className="text-xs text-teal-700">by retailer or by category →</span>
         </Link>

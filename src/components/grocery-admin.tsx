@@ -151,7 +151,7 @@ export function GroceryAdmin({
       <div className="rounded-xl border border-stone-200 bg-white p-4">
         <h3 className="text-sm font-semibold">Retailers</h3>
         <p className="mt-0.5 text-xs text-stone-400">
-          Where you shop — Woolies, Aldi, the butcher… Items can prefer a retailer, and
+          Where you shop: Woolies, Aldi, the butcher… Items can prefer a retailer, and
           shopping lists split per retailer when you plan the shop.
         </p>
         <div className="mt-2 divide-y divide-stone-50">

@@ -40,7 +40,7 @@ export default async function ShoppingOverviewPage() {
       href: "/shopping/plan",
       emoji: "🧮",
       title: "Plan the shop",
-      text: "The week's recipe ingredients plus low staples in one worksheet — check stock, adjust quantities, split per retailer, create the lists.",
+      text: "The week's recipe ingredients plus low staples in one worksheet. Check stock, adjust quantities, split per retailer, create the lists.",
     },
     {
       href: "/shopping/lists",
@@ -111,7 +111,7 @@ export default async function ShoppingOverviewPage() {
       {(pantryCount ?? 0) === 0 && (
         <p className="rounded-xl border border-dashed border-stone-300 bg-white p-6 text-center text-sm text-stone-400">
           Tip: start the <Link href="/shopping/pantry" className="underline hover:text-stone-600">pantry</Link> with
-          a handful of staples — the things you always need — and pull them onto any list
+          a handful of staples, the things you always need, and pull them onto any list
           with one tap.
         </p>
       )}
