@@ -55,6 +55,18 @@ export default async function ShoppingListsPage({
     <div className="mx-auto max-w-3xl space-y-6">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      {open.length > 1 && (
+        <Link
+          href="/shopping/combined"
+          className="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50/60 px-4 py-3 hover:border-teal-300"
+        >
+          <span className="text-sm font-medium">
+            🧾 The whole shop — all {open.length} lists in one view
+          </span>
+          <span className="text-xs text-teal-700">by retailer or by category →</span>
+        </Link>
+      )}
+
       {canEdit && (
         <details className="rounded-xl border border-stone-200 bg-white">
           <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-600 hover:text-stone-900">
