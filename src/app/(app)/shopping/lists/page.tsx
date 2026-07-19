@@ -2,7 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { createList, setListStatus } from "@/lib/actions/shopping";
-import { inputCls, buttonCls } from "@/components/auth-card";
+import { inputCls } from "@/components/auth-card";
+import { DeleteListButton } from "@/components/delete-list-button";
 
 export default async function ShoppingListsPage({
   searchParams,
@@ -35,13 +36,16 @@ export default async function ShoppingListsPage({
           </div>
         </Link>
         {canEdit && (
-          <form action={setListStatus}>
-            <input type="hidden" name="list_id" value={l.id} />
-            <input type="hidden" name="status" value={l.status === "open" ? "done" : "open"} />
-            <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
-              {l.status === "open" ? "Mark done" : "Reopen"}
-            </button>
-          </form>
+          <div className="flex items-center gap-1.5">
+            <form action={setListStatus}>
+              <input type="hidden" name="list_id" value={l.id} />
+              <input type="hidden" name="status" value={l.status === "open" ? "done" : "open"} />
+              <button className="rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100">
+                {l.status === "open" ? "Mark done" : "Reopen"}
+              </button>
+            </form>
+            <DeleteListButton listId={l.id} listName={l.name} itemCount={count} />
+          </div>
         )}
       </div>
     );
@@ -52,13 +56,25 @@ export default async function ShoppingListsPage({
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {canEdit && (
-        <form action={createList} className="flex items-end gap-3 rounded-xl border border-stone-200 bg-white p-5">
-          <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium">New list</label>
-            <input name="name" placeholder="e.g. Weekend groceries" className={inputCls} />
-          </div>
-          <button className={`${buttonCls} w-auto px-6`}>Create</button>
-        </form>
+        <details className="rounded-xl border border-stone-200 bg-white">
+          <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-stone-600 hover:text-stone-900">
+            ＋ New empty list
+            <span className="ml-2 text-xs font-normal text-stone-400">
+              (tip: <Link href="/shopping/plan" className="underline">Plan</Link> builds them for you)
+            </span>
+          </summary>
+          <form action={createList} className="flex items-center gap-2 border-t border-stone-100 px-5 py-4">
+            <input
+              name="name"
+              required
+              placeholder="List name, e.g. Weekend BBQ"
+              className={`${inputCls} flex-1`}
+            />
+            <button className="rounded-lg bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700">
+              Create
+            </button>
+          </form>
+        </details>
       )}
 
       <div className="space-y-2">

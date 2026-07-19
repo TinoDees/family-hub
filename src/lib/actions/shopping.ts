@@ -8,7 +8,8 @@ import { CATEGORY_ORDER, guessCategory } from "@/lib/groceries";
 
 export async function createList(formData: FormData) {
   const { membership, userId } = await requireModule("shopping", "edit");
-  const name = String(formData.get("name") ?? "").trim() || "Shopping list";
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) redirect("/shopping/lists?error=Give+the+list+a+name+first");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("shopping_lists")
@@ -73,6 +74,22 @@ export async function setListStatus(formData: FormData) {
     .eq("household_id", membership.household_id);
   revalidatePath("/shopping");
   redirect("/shopping/lists");
+}
+
+/** Delete a list (and its items, via cascade) — confirmed client-side. */
+export async function deleteListInline(
+  listId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { membership } = await requireModule("shopping", "edit");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("shopping_lists")
+    .delete()
+    .eq("id", listId)
+    .eq("household_id", membership.household_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/shopping");
+  return { ok: true };
 }
 
 /** Quietly recategorise an item (the guesser is best-effort). */

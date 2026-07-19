@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GROCERY_CATEGORIES, guessCategory } from "@/lib/groceries";
+import { GROCERY_CATEGORIES, categoryById, guessCategory } from "@/lib/groceries";
 import type { Retailer } from "@/lib/grocery-data";
 import {
   createShoppingRunInline,
@@ -11,13 +11,9 @@ import {
 } from "@/lib/actions/shopping-plan";
 
 /**
- * The Plan step — where the three streams meet and reconcile:
- *   📝 noted during the week (Kati's jot list)
- *   🧺 staples running low (min/max automation)
- *   🍽️ this week's meals (recipe ingredients)
- * One row per item regardless of how many streams want it. Simple checklist
- * by default (Needed / Suggested / To buy / Retailer); the stock columns
- * (Category / SOH / Min-Max) live behind the "stock details" toggle.
+ * The Plan step — three streams (📝 noted / 🧺 staples / 🍽️ meals), one
+ * deduped worksheet. Simple checklist by default; stock columns behind a
+ * toggle; search + filters + bulk tick in the toolbar; card layout on phones.
  */
 
 export type PlanSource = "noted" | "staple" | "recipes";
@@ -28,7 +24,7 @@ export type SeedRow = {
   sources: PlanSource[];
   noteIds: string[];
   noteQty: string | null;
-  neededQty: number | null; // from recipes; null = needed but unquantified
+  neededQty: number | null;
   unit: string | null;
   category: string;
   pantryItemId: string | null;
@@ -75,7 +71,7 @@ function suggestedFor(r: {
     const target = r.maxQty ?? r.minQty;
     if (target !== null) return round(Math.max(target - (r.soh ?? 0), 0));
   }
-  return null; // noted / unquantified — just buy it
+  return null;
 }
 
 function defaultQtyText(r: SeedRow): string {
@@ -83,6 +79,9 @@ function defaultQtyText(r: SeedRow): string {
   if (s !== null && s > 0) return `${s}${r.unit ? ` ${r.unit}` : ""}`;
   return r.noteQty ?? "";
 }
+
+const fmtQty = (q: number | null, unit: string | null) =>
+  q === null ? "✓" : `${q}${unit ? ` ${unit}` : ""}`;
 
 export function ShoppingPlan({
   seed,
@@ -110,6 +109,11 @@ export function ShoppingPlan({
     })
   );
   const [details, setDetails] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<PlanSource | "all">("all");
+  const [catFilter, setCatFilter] = useState("");
+  const [retFilter, setRetFilter] = useState("");
+  const [sort, setSort] = useState<"source" | "name" | "category">("source");
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +164,42 @@ export function ShoppingPlan({
     setNewName("");
   }
 
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = rows.filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (sourceFilter !== "all" && !r.sources.includes(sourceFilter)) return false;
+      if (catFilter && r.category !== catFilter) return false;
+      if (retFilter === "none" ? r.retailerId !== null : retFilter && r.retailerId !== retFilter)
+        return false;
+      return true;
+    });
+    if (sort === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === "category")
+      list = [...list].sort(
+        (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
+      );
+    return list;
+  }, [rows, search, sourceFilter, catFilter, retFilter, sort]);
+
+  const visibleKeys = useMemo(() => new Set(visible.map((r) => r.key)), [visible]);
+  const setAllVisible = (include: boolean) =>
+    setRows((rs) => rs.map((r) => (visibleKeys.has(r.key) ? { ...r, include } : r)));
+
+  const grouped = useMemo(() => {
+    if (sort !== "source") return [{ group: null as PlanSource | null, rows: visible }];
+    return GROUP_ORDER.map((g) => ({
+      group: g as PlanSource | null,
+      rows: visible.filter((r) => primaryGroup(r.sources) === g),
+    })).filter((g) => g.rows.length > 0);
+  }, [visible, sort]);
+
+  const sourceCounts = useMemo(() => {
+    const c: Record<PlanSource, number> = { noted: 0, staple: 0, recipes: 0 };
+    for (const r of rows) for (const s of r.sources) c[s]++;
+    return c;
+  }, [rows]);
+
   async function create() {
     if (busy) return;
     const included = rows.filter((r) => r.include);
@@ -190,30 +230,101 @@ export function ShoppingPlan({
     router.refresh();
   }
 
-  const grouped = useMemo(() => {
-    return GROUP_ORDER.map((g) => ({
-      group: g,
-      rows: rows.filter((r) => primaryGroup(r.sources) === g),
-    })).filter((g) => g.rows.length > 0);
-  }, [rows]);
-
   const includedCount = rows.filter((r) => r.include).length;
-  const retailerCount = new Set(
-    rows.filter((r) => r.include).map((r) => r.retailerId ?? "")
-  ).size;
+  const retailerCount = new Set(rows.filter((r) => r.include).map((r) => r.retailerId ?? "")).size;
+  const retailerName = (id: string | null) =>
+    id ? retailers.find((r) => r.id === id)?.name ?? "anywhere" : "anywhere";
 
   const cellInput =
     "w-full rounded border border-stone-200 bg-white px-1.5 py-1 text-xs focus:border-teal-500 focus:outline-none disabled:bg-stone-50";
+  const pill = (active: boolean) =>
+    `rounded-full border px-2.5 py-1 text-xs font-medium ${
+      active
+        ? "border-stone-900 bg-stone-900 text-white"
+        : "border-stone-300 text-stone-500 hover:bg-stone-100"
+    }`;
   const cols = details ? 9 : 6;
+
+  const RowBadges = ({ r }: { r: Row }) => {
+    const extra =
+      sort === "source" ? r.sources.filter((s) => s !== primaryGroup(r.sources)) : r.sources;
+    if (extra.length === 0) return null;
+    return (
+      <span className="ml-1.5 text-xs" title={extra.join(", ")}>
+        {extra.map((s) => SOURCE_EMOJI[s]).join(" ")}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">
-          Here&apos;s what we think you need to buy — untick what you don&apos;t,
-          adjust the <span className="text-teal-700">To buy</span> amounts, then create your lists.
-        </p>
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-stone-500">
+      <p className="text-sm font-medium">
+        Here&apos;s what we think you need to buy — untick what you don&apos;t, adjust
+        the <span className="text-teal-700">To buy</span> amounts, then create your lists.
+      </p>
+
+      {/* toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="🔍 Search items…"
+          className="w-40 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs focus:border-teal-500 focus:outline-none"
+        />
+        <div className="flex gap-1">
+          <button type="button" onClick={() => setSourceFilter("all")} className={pill(sourceFilter === "all")}>
+            All {rows.length}
+          </button>
+          {GROUP_ORDER.map((s) => (
+            <button key={s} type="button" onClick={() => setSourceFilter(s)} className={pill(sourceFilter === s)}>
+              {SOURCE_EMOJI[s]} {sourceCounts[s]}
+            </button>
+          ))}
+        </div>
+        <select
+          value={catFilter}
+          onChange={(e) => setCatFilter(e.target.value)}
+          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
+          title="Filter by category"
+        >
+          <option value="">All categories</option>
+          {GROCERY_CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+          ))}
+        </select>
+        <select
+          value={retFilter}
+          onChange={(e) => setRetFilter(e.target.value)}
+          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
+          title="Filter by retailer"
+        >
+          <option value="">All retailers</option>
+          <option value="none">🏪 anywhere only</option>
+          {retailers.map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs focus:outline-none"
+          title="Sort"
+        >
+          <option value="source">Group by source</option>
+          <option value="name">Name A–Z</option>
+          <option value="category">By category</option>
+        </select>
+        {canEdit && (
+          <div className="flex gap-1">
+            <button type="button" onClick={() => setAllVisible(true)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Tick every item currently shown">
+              ✓ all shown
+            </button>
+            <button type="button" onClick={() => setAllVisible(false)} className="rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-500 hover:bg-stone-100" title="Untick every item currently shown">
+              ✕ all shown
+            </button>
+          </div>
+        )}
+        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-stone-500">
           <input
             type="checkbox"
             checked={details}
@@ -224,7 +335,81 @@ export function ShoppingPlan({
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+      {/* phone: cards */}
+      <div className="space-y-4 md:hidden">
+        {grouped.map(({ group, rows: groupRows }) => (
+          <div key={group ?? "flat"} className="space-y-2">
+            {group && (
+              <p className="text-xs font-semibold text-stone-500">
+                {GROUP_META[group].title}
+                <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
+              </p>
+            )}
+            {groupRows.map((r) => {
+              const suggested = suggestedFor(r);
+              return (
+                <div
+                  key={r.key}
+                  className={`rounded-xl border bg-white p-3 ${r.include ? "border-stone-200" : "border-stone-100 opacity-45"}`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={r.include}
+                      disabled={!canEdit}
+                      onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
+                      className="mt-0.5 h-5 w-5 accent-teal-700"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        {r.name}
+                        <RowBadges r={r} />
+                      </p>
+                      <p className="mt-0.5 text-xs text-stone-400">
+                        {r.sources.includes("recipes") && (
+                          <>meals need {fmtQty(r.neededQty, r.unit)} · </>
+                        )}
+                        suggested {suggested === null ? "✓" : fmtQty(suggested, r.unit)}
+                        {" · "}{categoryById(r.category).emoji} {categoryById(r.category).label}
+                      </p>
+                    </div>
+                  </div>
+                  {r.include && canEdit && (
+                    <div className="mt-2 flex gap-2 pl-7">
+                      <input
+                        value={r.qtyText}
+                        onChange={(e) => patch(r.key, (x) => ({ ...x, qtyText: e.target.value, qtyDirty: true }))}
+                        placeholder="how much?"
+                        className="w-28 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-teal-500 focus:outline-none"
+                      />
+                      <select
+                        value={r.retailerId ?? ""}
+                        onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
+                        className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
+                      >
+                        <option value="">🏪 anywhere</option>
+                        {retailers.map((rt) => (
+                          <option key={rt.id} value={rt.id}>{rt.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {visible.length === 0 && (
+          <p className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
+            {rows.length === 0
+              ? "Nothing to plan yet — jot down what you're running low on, or plan some meals."
+              : "No items match the filters."}
+          </p>
+        )}
+      </div>
+
+      {/* desktop: table */}
+      <div className="hidden overflow-x-auto rounded-xl border border-stone-200 bg-white md:block">
         <table className={`w-full text-sm ${details ? "min-w-[56rem]" : "min-w-[38rem]"}`}>
           <thead>
             <tr className="border-b border-stone-200 bg-stone-900 text-left text-xs text-white">
@@ -241,16 +426,17 @@ export function ShoppingPlan({
           </thead>
           <tbody>
             {grouped.map(({ group, rows: groupRows }) => (
-              <FragmentGroup key={group}>
-                <tr className="border-b border-stone-100 bg-stone-50">
-                  <td colSpan={cols} className="px-3 py-1.5 text-xs font-semibold text-stone-500">
-                    {GROUP_META[group].title}
-                    <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
-                  </td>
-                </tr>
+              <FragmentGroup key={group ?? "flat"}>
+                {group && (
+                  <tr className="border-b border-stone-100 bg-stone-50">
+                    <td colSpan={cols} className="px-3 py-1.5 text-xs font-semibold text-stone-500">
+                      {GROUP_META[group].title}
+                      <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
+                    </td>
+                  </tr>
+                )}
                 {groupRows.map((r) => {
                   const suggested = suggestedFor(r);
-                  const extraSources = r.sources.filter((s) => s !== primaryGroup(r.sources));
                   return (
                     <tr key={r.key} className={`border-b border-stone-100 ${r.include ? "" : "opacity-40"}`}>
                       <td className="px-2 py-1.5 text-center">
@@ -264,11 +450,7 @@ export function ShoppingPlan({
                       </td>
                       <td className="px-2 py-1.5">
                         {r.name}
-                        {extraSources.length > 0 && (
-                          <span className="ml-1.5 text-xs" title={`Also: ${extraSources.join(", ")}`}>
-                            {extraSources.map((s) => SOURCE_EMOJI[s]).join(" ")}
-                          </span>
-                        )}
+                        <RowBadges r={r} />
                       </td>
                       {details && (
                         <td className="px-2 py-1.5">
@@ -285,11 +467,7 @@ export function ShoppingPlan({
                         </td>
                       )}
                       <td className="px-2 py-1.5 text-right text-xs text-stone-500">
-                        {!r.sources.includes("recipes")
-                          ? "—"
-                          : r.neededQty === null
-                            ? "✓"
-                            : `${r.neededQty}${r.unit ? ` ${r.unit}` : ""}`}
+                        {!r.sources.includes("recipes") ? "—" : fmtQty(r.neededQty, r.unit)}
                       </td>
                       {details && (
                         <td className="px-2 py-1.5">
@@ -310,7 +488,7 @@ export function ShoppingPlan({
                         </td>
                       )}
                       <td className="px-2 py-1.5 text-right text-xs font-medium text-stone-600">
-                        {suggested === null ? "✓" : `${suggested}${r.unit ? ` ${r.unit}` : ""}`}
+                        {suggested === null ? "✓" : fmtQty(suggested, r.unit)}
                       </td>
                       <td className="px-2 py-1.5">
                         <input
@@ -327,6 +505,7 @@ export function ShoppingPlan({
                           disabled={!canEdit}
                           onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
                           className={cellInput}
+                          title={retailerName(r.retailerId)}
                         >
                           <option value="">🏪 anywhere</option>
                           {retailers.map((rt) => (
@@ -339,11 +518,12 @@ export function ShoppingPlan({
                 })}
               </FragmentGroup>
             ))}
-            {rows.length === 0 && (
+            {visible.length === 0 && (
               <tr>
                 <td colSpan={cols} className="px-4 py-10 text-center text-sm text-stone-400">
-                  Nothing to plan yet — jot down what you&apos;re running low on, plan
-                  some meals, or add items below.
+                  {rows.length === 0
+                    ? "Nothing to plan yet — jot down what you're running low on, plan some meals, or add items below."
+                    : "No items match the filters."}
                 </td>
               </tr>
             )}
@@ -358,7 +538,7 @@ export function ShoppingPlan({
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addManualRow()}
             placeholder="Add another item…"
-            className="w-64 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
+            className="w-56 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
           />
           <button
             type="button"
