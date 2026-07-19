@@ -48,9 +48,14 @@ export async function toggleItem(formData: FormData) {
   const listId = String(formData.get("list_id"));
   const supabase = await createClient();
   const checked = formData.get("checked") === "1";
+  const visitId = formData.get("visit_id"); // active trip, if any: ticks tag to the stop
   await supabase
     .from("shopping_list_items")
-    .update({ checked, checked_by: checked ? userId : null })
+    .update({
+      checked,
+      checked_by: checked ? userId : null,
+      visit_id: checked && visitId ? String(visitId) : null,
+    })
     .eq("id", String(formData.get("item_id")));
   revalidatePath(`/shopping/${listId}`);
   redirect(`/shopping/${listId}`);

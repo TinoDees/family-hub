@@ -7,6 +7,9 @@ import { inputCls } from "@/components/auth-card";
 import { ItemCategorySelect } from "@/components/item-category-select";
 import { ReceiptCapture } from "@/components/receipt-capture";
 import { CATEGORY_ORDER, categoryById } from "@/lib/groceries";
+import { ShoppingSession } from "@/components/shopping-session";
+import { getRetailers } from "@/lib/grocery-data";
+import type { ActiveVisit } from "@/lib/actions/store-visits";
 
 export default async function ShoppingListPage({
   params,
@@ -21,7 +24,7 @@ export default async function ShoppingListPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const [{ data: list }, { data: items }] = await Promise.all([
+  const [{ data: list }, { data: items }, { data: activeVisit }, retailers] = await Promise.all([
     supabase
       .from("shopping_lists")
       .select("id, name, status, receipt_store, receipt_total")
@@ -30,12 +33,25 @@ export default async function ShoppingListPage({
       .maybeSingle(),
     supabase
       .from("shopping_list_items")
-      .select("id, name, qty, checked, category, note, price")
+      .select("id, name, qty, checked, category, note, price, visit_id")
       .eq("list_id", id)
       .order("checked")
       .order("position"),
+    supabase
+      .from("store_visits")
+      .select("id, retailer_id, store_label, started_at")
+      .eq("household_id", membership.household_id)
+      .is("finished_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    getRetailers(membership.household_id),
   ]);
   if (!list) notFound();
+
+  const tickedThisStop = activeVisit
+    ? (items ?? []).filter((i) => i.visit_id === activeVisit.id).length
+    : 0;
 
   const remaining = (items ?? []).filter((i) => !i.checked).length;
 
@@ -87,6 +103,16 @@ export default async function ShoppingListPage({
 
       {info && <p className="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-600">{info}</p>}
 
+      {list.status === "open" && (
+        <ShoppingSession
+          activeVisit={(activeVisit as ActiveVisit | null) ?? null}
+          retailers={retailers}
+          tickedThisStop={tickedThisStop}
+          items={(items ?? []).map((i) => ({ id: i.id, name: i.name }))}
+          canEdit={canEdit}
+        />
+      )}
+
       {canEdit && (
         <form action={addItem} className="flex items-end gap-2 rounded-xl border border-stone-200 bg-white p-4">
           <input type="hidden" name="list_id" value={list.id} />
@@ -123,6 +149,9 @@ export default async function ShoppingListPage({
                       <input type="hidden" name="item_id" value={i.id} />
                       <input type="hidden" name="list_id" value={list.id} />
                       <input type="hidden" name="checked" value={i.checked ? "0" : "1"} />
+                      {activeVisit && !i.checked && (
+                        <input type="hidden" name="visit_id" value={activeVisit.id} />
+                      )}
                       <button
                         className={`flex h-6 w-6 items-center justify-center rounded-full border text-sm ${
                           i.checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-stone-300 text-transparent hover:border-stone-500"

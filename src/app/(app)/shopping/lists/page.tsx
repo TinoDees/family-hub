@@ -4,6 +4,9 @@ import { requireModule } from "@/lib/module-guard";
 import { createList, setListStatus } from "@/lib/actions/shopping";
 import { inputCls } from "@/components/auth-card";
 import { DeleteListButton } from "@/components/delete-list-button";
+import { ShoppingSession } from "@/components/shopping-session";
+import { getRetailers } from "@/lib/grocery-data";
+import type { ActiveVisit } from "@/lib/actions/store-visits";
 
 export default async function ShoppingListsPage({
   searchParams,
@@ -15,15 +18,37 @@ export default async function ShoppingListsPage({
   const canEdit = access === "edit";
 
   const supabase = await createClient();
-  const { data: lists } = await supabase
-    .from("shopping_lists")
-    .select("id, name, status, created_at, receipt_total, shopping_list_items(count)")
-    .eq("household_id", membership.household_id)
-    .order("created_at", { ascending: false })
-    .limit(30);
+  const [{ data: lists }, { data: activeVisit }, retailers] = await Promise.all([
+    supabase
+      .from("shopping_lists")
+      .select("id, name, status, created_at, receipt_total, shopping_list_items(count)")
+      .eq("household_id", membership.household_id)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("store_visits")
+      .select("id, retailer_id, store_label, started_at")
+      .eq("household_id", membership.household_id)
+      .is("finished_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    getRetailers(membership.household_id),
+  ]);
 
   const open = (lists ?? []).filter((l) => l.status === "open");
   const done = (lists ?? []).filter((l) => l.status === "done");
+
+  const openIds = open.map((l) => l.id);
+  const { data: openItems } = openIds.length
+    ? await supabase
+        .from("shopping_list_items")
+        .select("id, name, visit_id")
+        .in("list_id", openIds)
+    : { data: [] as { id: string; name: string; visit_id: string | null }[] };
+  const tickedThisStop = activeVisit
+    ? (openItems ?? []).filter((i) => i.visit_id === activeVisit.id).length
+    : 0;
 
   const ListRow = ({ l }: { l: NonNullable<typeof lists>[number] }) => {
     const count = (l.shopping_list_items as unknown as { count: number }[])?.[0]?.count ?? 0;
@@ -59,6 +84,14 @@ export default async function ShoppingListsPage({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <ShoppingSession
+        activeVisit={(activeVisit as ActiveVisit | null) ?? null}
+        retailers={retailers}
+        tickedThisStop={tickedThisStop}
+        items={(openItems ?? []).map((i) => ({ id: i.id, name: i.name }))}
+        canEdit={canEdit}
+      />
 
       {open.length > 1 && (
         <Link
