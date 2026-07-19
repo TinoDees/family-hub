@@ -23,6 +23,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#2bb3a6",
+  // Kitchen screens / tablets: when the on-screen keyboard opens, shrink the
+  // layout viewport so centred forms (login) stay visible above the keyboard.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

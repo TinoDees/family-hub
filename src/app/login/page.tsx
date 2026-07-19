@@ -15,7 +15,7 @@ export default async function LoginPage({
       <form action={login} className="space-y-3">
         {next && <input type="hidden" name="next" value={next} />}
         <input name="email" type="text" required placeholder="Email or username" autoComplete="username" className={inputCls} />
-        <input name="password" type="password" required placeholder="Password" className={inputCls} />
+        <input name="password" type="password" required placeholder="Password" autoComplete="current-password" className={inputCls} />
         <button className="w-full rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700">
           Sign in
         </button>
