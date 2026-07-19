@@ -219,10 +219,19 @@ export function ShoppingPlan({
     const sohUpdates: SohUpdate[] = rows
       .filter((r) => r.sohDirty && r.pantryItemId)
       .map((r) => ({ pantryItemId: r.pantryItemId!, soh: r.soh }));
+    // remember the chosen unit on the pantry item — first suggestion next time
+    const unitUpdates = included
+      .filter(
+        (r) =>
+          r.pantryItemId &&
+          r.qtyUom.trim() &&
+          r.qtyUom.trim().toLowerCase() !== (r.unit ?? "").trim().toLowerCase()
+      )
+      .map((r) => ({ pantryItemId: r.pantryItemId!, unit: r.qtyUom.trim() }));
     const usedNoteIds = included.flatMap((r) => r.noteIds);
     setBusy(true);
     setError(null);
-    const res = await createShoppingRunInline(weekLabel, toBuy, sohUpdates, usedNoteIds);
+    const res = await createShoppingRunInline(weekLabel, toBuy, sohUpdates, usedNoteIds, unitUpdates);
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? "Could not create the lists");
@@ -311,7 +320,8 @@ export function ShoppingPlan({
           disabled={!canEdit}
           onChange={(e) => {
             const v = cleanNumeric(e.target.value);
-            patch(r.key, (x) => ({ ...x, qtyValue: v, qtyDirty: true }));
+            // typing a quantity means you want it — auto-tick (still untickable)
+            patch(r.key, (x) => ({ ...x, qtyValue: v, qtyDirty: true, include: v ? true : x.include }));
           }}
           inputMode="decimal"
           placeholder="—"
@@ -328,7 +338,9 @@ export function ShoppingPlan({
           <select
             value={r.qtyUom}
             disabled={!canEdit}
-            onChange={(e) => patch(r.key, (x) => ({ ...x, qtyUom: e.target.value, qtyDirty: true }))}
+            onChange={(e) =>
+              patch(r.key, (x) => ({ ...x, qtyUom: e.target.value, qtyDirty: true, include: e.target.value ? true : x.include }))
+            }
             className={cellInput}
           >
             <option value="">—</option>
@@ -345,7 +357,10 @@ export function ShoppingPlan({
         <input
           value={r.comment}
           disabled={!canEdit}
-          onChange={(e) => patch(r.key, (x) => ({ ...x, comment: e.target.value.slice(0, 120) }))}
+          onChange={(e) => {
+            const v = e.target.value.slice(0, 120);
+            patch(r.key, (x) => ({ ...x, comment: v, include: v.trim() ? true : x.include }));
+          }}
           placeholder="—"
           title="Goes onto the list with the item"
           className={cellInput}

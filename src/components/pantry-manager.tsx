@@ -213,7 +213,11 @@ export function PantryManager({
             <ul className="divide-y divide-stone-100">
               {rows.map((i) => {
                 const targetsOpen =
-                  openTargets.has(i.id) || i.min_qty !== null || i.max_qty !== null || !!i.unit;
+                  openTargets.has(i.id) ||
+                  i.min_qty !== null ||
+                  i.max_qty !== null ||
+                  i.soh !== null ||
+                  !!i.unit;
                 const cat = i.category_id ? byId.get(i.category_id) : null;
                 return (
                   <li key={i.id} className="px-4 py-2.5">
@@ -223,6 +227,18 @@ export function PantryManager({
                         {cat?.parent_id && (
                           <span className="ml-1.5 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500">
                             {cat.name}
+                          </span>
+                        )}
+                        {i.soh !== null && (
+                          <span
+                            className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] ${
+                              i.min_qty !== null && i.soh < i.min_qty
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
+                            title="Stock on hand"
+                          >
+                            {i.soh}{i.unit ? ` ${i.unit}` : ""} in stock
                           </span>
                         )}
                       </span>
@@ -253,9 +269,9 @@ export function PantryManager({
                               type="button"
                               onClick={() => setOpenTargets((s) => new Set(s).add(i.id))}
                               className="rounded px-1.5 py-0.5 text-xs text-stone-300 hover:bg-stone-100 hover:text-stone-500"
-                              title="Set a min/max target (optional)"
+                              title="Track stock and set a min/max target (optional)"
                             >
-                              + target
+                              + stock
                             </button>
                           )}
                           <button
@@ -271,6 +287,17 @@ export function PantryManager({
                     </div>
                     {canEdit && targetsOpen && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                        <span title="Stock on hand — how many you have right now">in stock</span>
+                        <input
+                          defaultValue={i.soh ?? ""}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            patch(i.id, { soh: v === "" ? null : parseFloat(v) });
+                          }}
+                          inputMode="decimal"
+                          className={numCls}
+                          placeholder="—"
+                        />
                         <span>min</span>
                         <input
                           defaultValue={i.min_qty ?? ""}
@@ -300,7 +327,7 @@ export function PantryManager({
                           className="w-20 rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm focus:border-teal-500 focus:outline-none"
                           placeholder="rolls, L…"
                         />
-                        <span className="text-stone-300">optional — powers suggested order quantities</span>
+                        <span className="text-stone-300">optional — stock + min/max power the suggested order quantities</span>
                       </div>
                     )}
                   </li>

@@ -20,6 +20,7 @@ export type PantryItem = {
   unit: string | null;
   min_qty: number | null;
   max_qty: number | null;
+  soh: number | null;
 };
 
 export type PantryPatch = {
@@ -29,9 +30,10 @@ export type PantryPatch = {
   unit?: string | null;
   min_qty?: number | null;
   max_qty?: number | null;
+  soh?: number | null;
 };
 
-const SELECT = "id, name, category_id, retailer_id, unit, min_qty, max_qty";
+const SELECT = "id, name, category_id, retailer_id, unit, min_qty, max_qty, soh";
 
 function cleanQty(v: number | null | undefined): number | null {
   return typeof v === "number" && !isNaN(v) && v >= 0 ? Math.round(v * 100) / 100 : null;
@@ -106,6 +108,10 @@ export async function updatePantryItemInline(
   if (patch.unit !== undefined) update.unit = patch.unit?.trim().slice(0, 20) || null;
   if (patch.min_qty !== undefined) update.min_qty = cleanQty(patch.min_qty);
   if (patch.max_qty !== undefined) update.max_qty = cleanQty(patch.max_qty);
+  if (patch.soh !== undefined) {
+    update.soh = cleanQty(patch.soh);
+    update.soh_updated_at = new Date().toISOString();
+  }
   if (
     update.min_qty !== undefined &&
     update.max_qty !== undefined &&

@@ -14,7 +14,7 @@ export default async function PantryPage() {
   const supabase = await createClient();
   const { data: items } = await supabase
     .from("pantry_items")
-    .select("id, name, category_id, retailer_id, unit, min_qty, max_qty")
+    .select("id, name, category_id, retailer_id, unit, min_qty, max_qty, soh")
     .eq("household_id", membership.household_id)
     .order("name");
 

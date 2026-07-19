@@ -23,11 +23,14 @@ export type PlanRowInput = {
 
 export type SohUpdate = { pantryItemId: string; soh: number | null };
 
+export type UnitUpdate = { pantryItemId: string; unit: string };
+
 export async function createShoppingRunInline(
   label: string,
   rows: PlanRowInput[],
   sohUpdates: SohUpdate[],
-  usedNoteIds: string[] = []
+  usedNoteIds: string[] = [],
+  unitUpdates: UnitUpdate[] = []
 ): Promise<{ ok: boolean; error?: string; lists?: { id: string; name: string }[] }> {
   const { membership, userId } = await requireModule("shopping", "edit");
   const supabase = await createClient();
@@ -101,6 +104,16 @@ export async function createShoppingRunInline(
     await supabase
       .from("pantry_items")
       .update({ soh, soh_updated_at: now })
+      .eq("id", u.pantryItemId)
+      .eq("household_id", membership.household_id);
+  }
+
+  // remember chosen units on their pantry items (first suggestion next time)
+  for (const u of unitUpdates.slice(0, 300)) {
+    if (!u.pantryItemId || !u.unit?.trim()) continue;
+    await supabase
+      .from("pantry_items")
+      .update({ unit: u.unit.trim().slice(0, 20) })
       .eq("id", u.pantryItemId)
       .eq("household_id", membership.household_id);
   }
