@@ -145,6 +145,92 @@ export async function addStaplesToList(formData: FormData) {
   redirect(`/shopping/${listId}${missing.length === 0 ? "?info=All+staples+already+on+the+list" : ""}`);
 }
 
+/**
+ * Pull the ingredients for meals planned in a date range onto an existing
+ * list (deduped by name against what's already on it). Lets a blank list
+ * catch up with the meal plan without going through the full Plan step.
+ */
+export async function addMealIngredientsToListInline(
+  listId: string,
+  from: string,
+  to: string
+): Promise<{ ok: boolean; error?: string; added?: number; skipped?: number }> {
+  const { membership } = await requireModule("shopping", "edit");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from)
+    return { ok: false, error: "Pick a valid date range" };
+
+  const supabase = await createClient();
+  const { data: list } = await supabase
+    .from("shopping_lists")
+    .select("id")
+    .eq("id", listId)
+    .eq("household_id", membership.household_id)
+    .maybeSingle();
+  if (!list) return { ok: false, error: "List not found" };
+
+  const { data: entries } = await supabase
+    .from("meal_plan_entries")
+    .select("recipe_id, servings, recipe:recipes!meal_plan_entries_recipe_id_fkey(servings)")
+    .eq("household_id", membership.household_id)
+    .gte("entry_date", from)
+    .lte("entry_date", to)
+    .not("recipe_id", "is", null);
+  const recipeIds = [...new Set((entries ?? []).map((e) => e.recipe_id))] as string[];
+  if (recipeIds.length === 0)
+    return { ok: false, error: "No meals with recipes planned in that range" };
+
+  const { data: ingredients } = await supabase
+    .from("recipe_ingredients")
+    .select("recipe_id, name, qty, unit")
+    .in("recipe_id", recipeIds);
+
+  const byRecipe = new Map<string, NonNullable<typeof ingredients>>();
+  for (const i of ingredients ?? []) byRecipe.set(i.recipe_id, [...(byRecipe.get(i.recipe_id) ?? []), i]);
+
+  const agg = new Map<string, { name: string; unit: string | null; qty: number | null }>();
+  for (const e of entries ?? []) {
+    const base = (e.recipe as unknown as { servings: number } | null)?.servings ?? 4;
+    const factor = e.servings && base ? e.servings / base : 1;
+    for (const i of byRecipe.get(e.recipe_id!) ?? []) {
+      const key = `${i.name.toLowerCase()}|${i.unit ?? ""}`;
+      const scaled = i.qty !== null ? Number(i.qty) * factor : null;
+      const cur = agg.get(key);
+      if (cur && cur.qty !== null && scaled !== null) cur.qty += scaled;
+      else if (!cur) agg.set(key, { name: i.name, unit: i.unit, qty: scaled });
+      else cur.qty = null;
+    }
+  }
+
+  const [{ data: existing }, { count }] = await Promise.all([
+    supabase.from("shopping_list_items").select("name").eq("list_id", listId),
+    supabase
+      .from("shopping_list_items")
+      .select("id", { count: "exact", head: true })
+      .eq("list_id", listId),
+  ]);
+  const have = new Set((existing ?? []).map((i) => i.name.toLowerCase().trim()));
+
+  const toAdd = [...agg.values()]
+    .filter((i) => !have.has(i.name.toLowerCase().trim()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (toAdd.length > 0) {
+    const { error } = await supabase.from("shopping_list_items").insert(
+      toAdd.map((i, idx) => ({
+        list_id: listId,
+        household_id: membership.household_id,
+        position: (count ?? 0) + 1 + idx,
+        name: i.name,
+        qty: i.qty !== null ? `${Math.round(i.qty * 100) / 100}${i.unit ? ` ${i.unit}` : ""}` : null,
+        category: guessCategory(i.name),
+      }))
+    );
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/shopping/${listId}`);
+  return { ok: true, added: toAdd.length, skipped: agg.size - toAdd.length };
+}
+
 /** Build a shopping list from the meal plan week's scaled ingredients. */
 export async function shoppingListFromWeek(formData: FormData) {
   const { membership, userId } = await requireModule("shopping", "edit");

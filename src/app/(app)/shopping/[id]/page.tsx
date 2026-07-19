@@ -5,7 +5,20 @@ import { requireModule } from "@/lib/module-guard";
 import { addItem, toggleItem, deleteItem, setListStatus, addStaplesToList } from "@/lib/actions/shopping";
 import { inputCls } from "@/components/auth-card";
 import { ItemCategorySelect } from "@/components/item-category-select";
+import { AddMealsToList } from "@/components/add-meals-to-list";
 import { CATEGORY_ORDER, categoryById } from "@/lib/groceries";
+
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function mondayOf(d: Date): Date {
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const m = new Date(d);
+  m.setDate(d.getDate() + diff);
+  m.setHours(0, 0, 0, 0);
+  return m;
+}
 
 export default async function ShoppingListPage({
   params,
@@ -60,17 +73,24 @@ export default async function ShoppingListPage({
             {remaining === 0 ? "All done! 🎉" : `${remaining} item${remaining === 1 ? "" : "s"} to go`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {canEdit && list.status === "open" && (
-            <form action={addStaplesToList}>
-              <input type="hidden" name="list_id" value={list.id} />
-              <button
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
-                title="Add every staple that isn't on the list yet"
-              >
-                🧺 Add staples
-              </button>
-            </form>
+            <>
+              <AddMealsToList
+                listId={list.id}
+                defaultFrom={iso(mondayOf(new Date()))}
+                defaultTo={iso(new Date(mondayOf(new Date()).getTime() + 6 * 864e5))}
+              />
+              <form action={addStaplesToList}>
+                <input type="hidden" name="list_id" value={list.id} />
+                <button
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
+                  title="Add every staple that isn't on the list yet"
+                >
+                  🧺 Add staples
+                </button>
+              </form>
+            </>
           )}
           {canEdit && (
             <form action={setListStatus}>

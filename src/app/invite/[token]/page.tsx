@@ -64,27 +64,34 @@ export default async function InvitePage({
     data: { user },
   } = await supabase.auth.getUser();
   const nextPath = `/invite/${token}`;
+  const inviteEmail: string | null = invite.email ?? null;
 
   return (
     <AuthCard
       title={`Join ${invite.household_name}`}
-      subtitle={`${invite.inviter_name} invited you (${invite.email}) to join as ${invite.role}.`}
+      subtitle={
+        inviteEmail
+          ? `${invite.inviter_name} invited you (${inviteEmail}) to join as ${invite.role}.`
+          : `${invite.inviter_name} invited you to join as ${invite.role}.`
+      }
       error={error}
     >
-      {user && user.email?.toLowerCase() === invite.email.toLowerCase() ? (
+      {user && (!inviteEmail || user.email?.toLowerCase() === inviteEmail.toLowerCase()) ? (
         <form action={acceptInvite}>
           <input type="hidden" name="token" value={token} />
-          <button className={buttonCls}>Join {invite.household_name}</button>
+          <button className={buttonCls}>
+            Join {invite.household_name} as {user.email}
+          </button>
         </form>
       ) : user ? (
         <div className="space-y-3">
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            This invite is for <strong>{invite.email}</strong>, but you&apos;re signed in as{" "}
+            This invite is for <strong>{inviteEmail}</strong>, but you&apos;re signed in as{" "}
             <strong>{user.email}</strong>.
           </p>
           <form action={signOutToInvite}>
             <input type="hidden" name="token" value={token} />
-            <button className={buttonCls}>Sign out & accept as {invite.email}</button>
+            <button className={buttonCls}>Sign out & accept as {inviteEmail}</button>
           </form>
           <form action={acceptInvite}>
             <input type="hidden" name="token" value={token} />
@@ -97,11 +104,21 @@ export default async function InvitePage({
         <div className="space-y-3">
           <form action={acceptInviteNewUser} className="space-y-3">
             <input type="hidden" name="token" value={token} />
-            <input
-              value={invite.email}
-              disabled
-              className={`${inputCls} bg-stone-50 text-stone-400`}
-            />
+            {inviteEmail ? (
+              <input
+                value={inviteEmail}
+                disabled
+                className={`${inputCls} bg-stone-50 text-stone-400`}
+              />
+            ) : (
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="Your email address"
+                className={inputCls}
+              />
+            )}
             <input name="name" type="text" required placeholder="Your name" className={inputCls} />
             <input
               name="password"

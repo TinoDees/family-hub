@@ -15,6 +15,17 @@ async function baseUrl() {
   return `${proto}://${host}`;
 }
 
+/** Normalise a phone number for wa.me / sms: links (AU default country code). */
+function normalizePhone(raw: string): string | null {
+  const s = raw.replace(/[^\d+]/g, "");
+  if (!s) return null;
+  let digits = s;
+  if (digits.startsWith("+")) digits = digits.slice(1);
+  else if (digits.startsWith("00")) digits = digits.slice(2);
+  else if (digits.startsWith("0")) digits = "61" + digits.slice(1);
+  return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
 async function requireInviteManager(errBack: string) {
   const membership = await getMembership();
   if (!membership) redirect(errBack);
@@ -34,23 +45,40 @@ export async function createInvite(formData: FormData) {
   );
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
   const role = String(formData.get("role") ?? "adult") as MemberRole;
-  if (!email) redirect("/settings/invites?error=Please+enter+an+email");
+
+  if (!email && !phoneRaw)
+    redirect("/settings/invites?error=Enter+an+email+or+a+mobile+number");
+  const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
+  if (phoneRaw && !phone)
+    redirect("/settings/invites?error=That+mobile+number+doesn%27t+look+right");
 
   const supabase = await createClient();
-  // one live invite per email — replace any previous unaccepted invite
-  await supabase
-    .from("invites")
-    .delete()
-    .eq("household_id", membership.household_id)
-    .eq("email", email)
-    .is("accepted_at", null);
+  // one live invite per contact — replace any previous unaccepted invite
+  if (email) {
+    await supabase
+      .from("invites")
+      .delete()
+      .eq("household_id", membership.household_id)
+      .eq("email", email)
+      .is("accepted_at", null);
+  }
+  if (phone) {
+    await supabase
+      .from("invites")
+      .delete()
+      .eq("household_id", membership.household_id)
+      .eq("phone", phone)
+      .is("accepted_at", null);
+  }
 
   const { data, error } = await supabase
     .from("invites")
     .insert({
       household_id: membership.household_id,
-      email,
+      email: email || null,
+      phone,
       role,
     })
     .select("token")
@@ -60,17 +88,23 @@ export async function createInvite(formData: FormData) {
       `/settings/invites?error=${encodeURIComponent(error?.message ?? "Could not create invite")}`
     );
 
-  const inviteUrl = `${await baseUrl()}/invite/${data.token}`;
-  const result = await sendInviteEmail({
-    to: email,
-    householdName: membership.household.name,
-    inviterName: membership.display_name ?? "A family member",
-    role,
-    inviteUrl,
-  });
+  let emailed = false;
+  if (email) {
+    const inviteUrl = `${await baseUrl()}/invite/${data.token}`;
+    const result = await sendInviteEmail({
+      to: email,
+      householdName: membership.household.name,
+      inviterName: membership.display_name ?? "A family member",
+      role,
+      inviteUrl,
+    });
+    emailed = result.sent;
+  }
 
   revalidatePath("/settings/invites");
-  redirect(`/settings/invites?created=1&emailed=${result.sent ? 1 : 0}`);
+  redirect(
+    `/settings/invites?created=1&emailed=${emailed ? 1 : 0}${!email ? `&share=${data.token}` : ""}`
+  );
 }
 
 export async function resendInvite(formData: FormData) {
@@ -79,39 +113,58 @@ export async function resendInvite(formData: FormData) {
   const supabase = await createClient();
   const { data: old } = await supabase
     .from("invites")
-    .select("id, email, role, accepted_at, revoked_at, expires_at")
+    .select("id, email, phone, role, accepted_at, revoked_at, expires_at")
     .eq("id", String(formData.get("invite_id")))
     .eq("household_id", membership.household_id)
     .maybeSingle();
   if (!old) redirect("/settings/invites?error=Invite+not+found");
 
-  // one live invite per email — remove all previous unaccepted invites
-  await supabase
-    .from("invites")
-    .delete()
-    .eq("household_id", membership.household_id)
-    .eq("email", old.email)
-    .is("accepted_at", null);
+  // one live invite per contact — remove all previous unaccepted invites
+  if (old.email) {
+    await supabase
+      .from("invites")
+      .delete()
+      .eq("household_id", membership.household_id)
+      .eq("email", old.email)
+      .is("accepted_at", null);
+  } else {
+    await supabase
+      .from("invites")
+      .delete()
+      .eq("id", old.id)
+      .is("accepted_at", null);
+  }
 
   const { data, error } = await supabase
     .from("invites")
-    .insert({ household_id: membership.household_id, email: old.email, role: old.role })
+    .insert({
+      household_id: membership.household_id,
+      email: old.email,
+      phone: old.phone,
+      role: old.role,
+    })
     .select("token")
     .single();
   if (error || !data)
     redirect(`/settings/invites?error=${encodeURIComponent(error?.message ?? "Could not create invite")}`);
 
-  const inviteUrl = `${await baseUrl()}/invite/${data.token}`;
-  const result = await sendInviteEmail({
-    to: old.email,
-    householdName: membership.household.name,
-    inviterName: membership.display_name ?? "A family member",
-    role: old.role,
-    inviteUrl,
-  });
+  let emailed = false;
+  if (old.email) {
+    const inviteUrl = `${await baseUrl()}/invite/${data.token}`;
+    const result = await sendInviteEmail({
+      to: old.email,
+      householdName: membership.household.name,
+      inviterName: membership.display_name ?? "A family member",
+      role: old.role,
+      inviteUrl,
+    });
+    emailed = result.sent;
+  }
 
   revalidatePath("/settings/invites");
-  redirect(`/settings/invites?created=1&emailed=${result.sent ? 1 : 0}`);
+  redirect(
+    `/settings/invites?created=1&emailed=${emailed ? 1 : 0}${!old.email ? `&share=${data.token}` : ""}`
+  );
 }
 
 export async function deleteInvite(formData: FormData) {
@@ -130,8 +183,8 @@ export async function deleteInvite(formData: FormData) {
 
 /**
  * Tracey-style onboarding: the invite link doubles as account setup.
- * Creates the account with the invited email + chosen password, signs in,
- * and joins the household — one step, no separate signup form.
+ * Email invites carry the address; phone/link invites ask the person for
+ * their own email here (the invite itself stays channel-agnostic).
  */
 export async function acceptInviteNewUser(formData: FormData) {
   const token = String(formData.get("token") ?? "");
@@ -154,8 +207,14 @@ export async function acceptInviteNewUser(formData: FormData) {
   if (!invite || invite.status !== "pending")
     fail("This invite is no longer valid");
 
+  const email = (invite.email ?? String(formData.get("email") ?? ""))
+    .trim()
+    .toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    fail("Please enter a valid email address");
+
   const { data, error: signUpError } = await supabase.auth.signUp({
-    email: invite.email,
+    email,
     password,
     options: { data: { display_name: name } },
   });

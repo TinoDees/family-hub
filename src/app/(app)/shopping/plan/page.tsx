@@ -4,6 +4,7 @@ import { requireModule } from "@/lib/module-guard";
 import { ensureGroceryCategories, getRetailers, legacySlugFor } from "@/lib/grocery-data";
 import { guessCategory } from "@/lib/groceries";
 import { ShoppingPlan, type SeedRow, type PlanSource } from "@/components/shopping-plan";
+import { PlanRange } from "@/components/plan-range";
 
 /**
  * Plan the shop — merges the three streams into one deduped worksheet:
@@ -32,14 +33,25 @@ export default async function ShoppingPlanPage({
   const canEdit = access === "edit";
   const { from, to } = await searchParams;
 
-  const monday = from && /^\d{4}-\d{2}-\d{2}$/.test(from)
-    ? mondayOf(new Date(`${from}T00:00:00`))
-    : mondayOf(new Date());
+  // arbitrary date range; defaults to the current Monday–Sunday week
+  const validDate = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
+  const monday = mondayOf(new Date());
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const weekStart = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : iso(monday);
-  const weekEnd = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : iso(sunday);
-  const weekLabel = `week of ${new Date(`${weekStart}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`;
+  const weekStart = validDate(from) ?? iso(monday);
+  let weekEnd = validDate(to) ?? (validDate(from)
+    ? iso(new Date(new Date(`${weekStart}T00:00:00`).getTime() + 6 * 864e5))
+    : iso(sunday));
+  if (weekEnd < weekStart) weekEnd = weekStart;
+
+  const fmtShort = (s: string) =>
+    new Date(`${s}T00:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+  const isStandardWeek =
+    new Date(`${weekStart}T00:00:00`).getDay() === 1 &&
+    weekEnd === iso(new Date(new Date(`${weekStart}T00:00:00`).getTime() + 6 * 864e5));
+  const weekLabel = isStandardWeek
+    ? `week of ${fmtShort(weekStart)}`
+    : `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
 
   const cats = await ensureGroceryCategories(membership.household_id);
   const retailers = await getRetailers(membership.household_id);
@@ -177,29 +189,12 @@ export default async function ShoppingPlanPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-stone-500">
-          Planning the shop for the{" "}
-          <Link href={`/meals?w=${weekStart}`} className="underline hover:text-stone-700">
-            {weekLabel}
-          </Link>
-          .
-        </p>
-        <div className="flex gap-2 text-sm">
-          <Link
-            href={`/shopping/plan?from=${iso(new Date(monday.getTime() - 7 * 864e5))}`}
-            className="rounded-lg border border-stone-300 px-2.5 py-1 hover:bg-stone-100"
-          >
-            ← prev week
-          </Link>
-          <Link
-            href={`/shopping/plan?from=${iso(new Date(monday.getTime() + 7 * 864e5))}`}
-            className="rounded-lg border border-stone-300 px-2.5 py-1 hover:bg-stone-100"
-          >
-            next week →
-          </Link>
-        </div>
-      </div>
+      <PlanRange from={weekStart} to={weekEnd} />
+      <p className="text-xs text-stone-400">
+        <Link href={`/meals?w=${weekStart}`} className="underline hover:text-stone-600">
+          → see the meal planner for this period
+        </Link>
+      </p>
       <ShoppingPlan seed={seed} retailers={retailers} weekLabel={weekLabel} canEdit={canEdit} />
     </div>
   );

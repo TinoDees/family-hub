@@ -4,20 +4,21 @@ import { getMembership } from "@/lib/household";
 import { createInvite, deleteInvite, resendInvite } from "@/lib/actions/invites";
 import { inputCls, buttonCls } from "@/components/auth-card";
 import { CopyButton } from "@/components/copy-button";
+import { InviteShare } from "@/components/invite-share";
 
 export default async function InvitesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; created?: string; emailed?: string }>;
+  searchParams: Promise<{ error?: string; created?: string; emailed?: string; share?: string }>;
 }) {
   const membership = await getMembership();
   if (!membership) redirect("/onboarding");
-  const { error, created, emailed } = await searchParams;
+  const { error, created, emailed, share } = await searchParams;
 
   const supabase = await createClient();
   const { data: invites } = await supabase
     .from("invites")
-    .select("id, email, role, token, created_at, expires_at")
+    .select("id, email, phone, role, token, created_at, expires_at")
     .eq("household_id", membership.household_id)
     .is("accepted_at", null)
     .is("revoked_at", null)
@@ -30,6 +31,17 @@ export default async function InvitesPage({
     (i) => new Date(i.expires_at) <= new Date()
   );
 
+  const inviterName = membership.display_name ?? "A family member";
+
+  const Contact = ({ inv }: { inv: { email: string | null; phone: string | null } }) => (
+    <span>
+      {inv.email && <span className="font-medium">{inv.email}</span>}
+      {inv.email && inv.phone && <span className="text-stone-300"> · </span>}
+      {inv.phone && <span className="font-medium">📱 +{inv.phone}</span>}
+      {!inv.email && !inv.phone && <span className="text-stone-400">link invite</span>}
+    </span>
+  );
+
   return (
     <div className="space-y-6">
       {error && (
@@ -39,31 +51,43 @@ export default async function InvitesPage({
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           {emailed === "1"
             ? "Invite sent — an email is on its way."
-            : "Invite created — copy the link and send it via WhatsApp, SMS or however you like."}
+            : share
+              ? "Invite created — hit WhatsApp or SMS below to send it from your phone."
+              : "Invite created — share the link via WhatsApp, SMS or however you like."}
         </p>
       )}
 
       <form
         action={createInvite}
-        className="flex flex-wrap items-end gap-3 rounded-xl border border-stone-200 bg-white p-6"
+        className="rounded-xl border border-stone-200 bg-white p-6"
       >
-        <div className="min-w-64 flex-1">
-          <label className="mb-1 block text-sm font-medium">Email</label>
-          <input name="email" type="email" required placeholder="family.member@example.com" className={inputCls} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-56 flex-1">
+            <label className="mb-1 block text-sm font-medium">Email</label>
+            <input name="email" type="email" placeholder="family.member@example.com" className={inputCls} />
+          </div>
+          <div className="min-w-44">
+            <label className="mb-1 block text-sm font-medium">or mobile number</label>
+            <input name="phone" type="tel" placeholder="04xx xxx xxx" className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Role</label>
+            <select
+              name="role"
+              defaultValue="adult"
+              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm capitalize"
+            >
+              <option value="adult">adult</option>
+              <option value="child">child</option>
+              <option value="owner">owner</option>
+            </select>
+          </div>
+          <button className={`${buttonCls} w-auto px-6`}>Invite</button>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Role</label>
-          <select
-            name="role"
-            defaultValue="adult"
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm capitalize"
-          >
-            <option value="adult">adult</option>
-            <option value="child">child</option>
-            <option value="owner">owner</option>
-          </select>
-        </div>
-        <button className={`${buttonCls} w-auto px-6`}>Invite</button>
+        <p className="mt-2 text-xs text-stone-400">
+          Email sends automatically. A mobile number opens WhatsApp (or SMS) on your
+          device with the invite ready to send — nothing leaves Nestly without you.
+        </p>
       </form>
 
       <div>
@@ -77,25 +101,33 @@ export default async function InvitesPage({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-900 text-left text-white">
-                  <th className="px-4 py-2.5 font-medium">Email</th>
+                  <th className="px-4 py-2.5 font-medium">Invitee</th>
                   <th className="px-4 py-2.5 font-medium">Role</th>
                   <th className="px-4 py-2.5 font-medium">Expires</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Actions</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Send / manage</th>
                 </tr>
               </thead>
               <tbody>
                 {pending.map((inv, i) => (
                   <tr
                     key={inv.id}
-                    className={`border-b border-stone-100 ${i % 2 ? "bg-stone-50" : ""}`}
+                    className={`border-b border-stone-100 ${
+                      share === inv.token ? "bg-emerald-50/60" : i % 2 ? "bg-stone-50" : ""
+                    }`}
                   >
-                    <td className="px-4 py-2.5 font-medium">{inv.email}</td>
+                    <td className="px-4 py-2.5"><Contact inv={inv} /></td>
                     <td className="px-4 py-2.5 capitalize">{inv.role}</td>
                     <td className="px-4 py-2.5 text-stone-500">
                       {new Date(inv.expires_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <div className="inline-flex items-center gap-2">
+                      <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <InviteShare
+                          token={inv.token}
+                          phone={inv.phone}
+                          householdName={membership.household.name}
+                          inviterName={inviterName}
+                        />
                         <CopyButton path={`/invite/${inv.token}`} label="Copy link" />
                         <form action={resendInvite}>
                           <input type="hidden" name="invite_id" value={inv.id} />
@@ -127,7 +159,7 @@ export default async function InvitesPage({
               <tbody>
                 {expired.map((inv) => (
                   <tr key={inv.id} className="border-b border-stone-100 text-stone-400">
-                    <td className="px-4 py-2.5">{inv.email}</td>
+                    <td className="px-4 py-2.5"><Contact inv={inv} /></td>
                     <td className="px-4 py-2.5 capitalize">{inv.role}</td>
                     <td className="px-4 py-2.5 text-right">
                       <div className="inline-flex items-center gap-2">
