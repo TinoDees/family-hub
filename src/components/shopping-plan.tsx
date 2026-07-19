@@ -11,19 +11,26 @@ import {
 } from "@/lib/actions/shopping-plan";
 
 /**
- * The planning worksheet — the step between the meal planner and the lists.
- * Every column is auto-filled; everything is overridable; untouched + Create
- * gives the simple one-tap outcome (the Kati rule). "Create" makes one list
- * per retailer plus a Groceries list for retailer-less items.
+ * The Plan step — where the three streams meet and reconcile:
+ *   📝 noted during the week (Kati's jot list)
+ *   🧺 staples running low (min/max automation)
+ *   🍽️ this week's meals (recipe ingredients)
+ * One row per item regardless of how many streams want it. Simple checklist
+ * by default (Needed / Suggested / To buy / Retailer); the stock columns
+ * (Category / SOH / Min-Max) live behind the "stock details" toggle.
  */
+
+export type PlanSource = "noted" | "staple" | "recipes";
 
 export type SeedRow = {
   key: string;
   name: string;
-  source: "recipes" | "staple";
-  neededQty: number | null; // null = needed but unquantified
+  sources: PlanSource[];
+  noteIds: string[];
+  noteQty: string | null;
+  neededQty: number | null; // from recipes; null = needed but unquantified
   unit: string | null;
-  category: string; // legacy slug
+  category: string;
   pantryItemId: string | null;
   soh: number | null;
   minQty: number | null;
@@ -39,27 +46,42 @@ type Row = SeedRow & {
   sohDirty: boolean;
 };
 
+const GROUP_META: Record<PlanSource, { title: string; hint: string }> = {
+  noted: { title: "📝 Noted during the week", hint: "things someone jotted down" },
+  staple: { title: "🧺 Staples running low", hint: "below their pantry minimum" },
+  recipes: { title: "🍽️ For this week's meals", hint: "from the planned recipes" },
+};
+const SOURCE_EMOJI: Record<PlanSource, string> = { noted: "📝", staple: "🧺", recipes: "🍽️" };
+const GROUP_ORDER: PlanSource[] = ["noted", "staple", "recipes"];
+
+function primaryGroup(sources: PlanSource[]): PlanSource {
+  for (const g of GROUP_ORDER) if (sources.includes(g)) return g;
+  return "recipes";
+}
+
 function suggestedFor(r: {
-  source: "recipes" | "staple";
+  sources: PlanSource[];
   neededQty: number | null;
   soh: number | null;
   minQty: number | null;
   maxQty: number | null;
 }): number | null {
   const round = (n: number) => Math.round(n * 100) / 100;
-  if (r.source === "staple") {
-    const target = r.maxQty ?? r.minQty;
-    if (target === null) return null;
-    return round(Math.max(target - (r.soh ?? 0), 0));
+  if (r.sources.includes("recipes") && r.neededQty !== null) {
+    if (r.soh === null) return round(r.neededQty);
+    return round(Math.max(r.neededQty - r.soh, 0));
   }
-  if (r.neededQty === null) return null; // needed, just unquantified
-  if (r.soh === null) return round(r.neededQty);
-  return round(Math.max(r.neededQty - r.soh, 0));
+  if (r.sources.includes("staple")) {
+    const target = r.maxQty ?? r.minQty;
+    if (target !== null) return round(Math.max(target - (r.soh ?? 0), 0));
+  }
+  return null; // noted / unquantified — just buy it
 }
 
-function defaultQtyText(suggested: number | null, unit: string | null): string {
-  if (suggested === null || suggested === 0) return "";
-  return `${suggested}${unit ? ` ${unit}` : ""}`;
+function defaultQtyText(r: SeedRow): string {
+  const s = suggestedFor(r);
+  if (s !== null && s > 0) return `${s}${r.unit ? ` ${r.unit}` : ""}`;
+  return r.noteQty ?? "";
 }
 
 export function ShoppingPlan({
@@ -80,13 +102,14 @@ export function ShoppingPlan({
       return {
         ...s,
         include: suggested === null ? true : suggested > 0,
-        qtyText: defaultQtyText(suggested, s.unit),
+        qtyText: defaultQtyText(s),
         qtyDirty: false,
         sohText: s.soh === null ? "" : String(s.soh),
         sohDirty: false,
       };
     })
   );
+  const [details, setDetails] = useState(false);
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,8 +124,8 @@ export function ShoppingPlan({
       const next: Row = { ...r, sohText: text, sohDirty: true, soh };
       if (!r.qtyDirty) {
         const s = suggestedFor(next);
-        next.qtyText = defaultQtyText(s, r.unit);
-        next.include = s === null ? r.include : s > 0;
+        next.qtyText = defaultQtyText(next);
+        if (s !== null) next.include = s > 0;
       }
       return next;
     });
@@ -111,13 +134,14 @@ export function ShoppingPlan({
   function addManualRow() {
     const name = newName.trim();
     if (!name) return;
-    const key = `manual-${name.toLowerCase()}-${rows.length}`;
     setRows((rs) => [
       ...rs,
       {
-        key,
+        key: `manual-${name.toLowerCase()}-${rs.length}`,
         name,
-        source: "recipes",
+        sources: ["noted"],
+        noteIds: [],
+        noteQty: null,
         neededQty: null,
         unit: null,
         category: guessCategory(name),
@@ -138,25 +162,25 @@ export function ShoppingPlan({
 
   async function create() {
     if (busy) return;
-    const toBuy: PlanRowInput[] = rows
-      .filter((r) => r.include)
-      .map((r) => ({
-        name: r.name,
-        category: r.category,
-        qtyText: r.qtyText,
-        retailerId: r.retailerId,
-        pantryItemId: r.pantryItemId,
-      }));
-    if (toBuy.length === 0) {
+    const included = rows.filter((r) => r.include);
+    if (included.length === 0) {
       setError("Tick at least one item to buy");
       return;
     }
+    const toBuy: PlanRowInput[] = included.map((r) => ({
+      name: r.name,
+      category: r.category,
+      qtyText: r.qtyText,
+      retailerId: r.retailerId,
+      pantryItemId: r.pantryItemId,
+    }));
     const sohUpdates: SohUpdate[] = rows
       .filter((r) => r.sohDirty && r.pantryItemId)
       .map((r) => ({ pantryItemId: r.pantryItemId!, soh: r.soh }));
+    const usedNoteIds = included.flatMap((r) => r.noteIds);
     setBusy(true);
     setError(null);
-    const res = await createShoppingRunInline(weekLabel, toBuy, sohUpdates);
+    const res = await createShoppingRunInline(weekLabel, toBuy, sohUpdates, usedNoteIds);
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? "Could not create the lists");
@@ -166,132 +190,160 @@ export function ShoppingPlan({
     router.refresh();
   }
 
+  const grouped = useMemo(() => {
+    return GROUP_ORDER.map((g) => ({
+      group: g,
+      rows: rows.filter((r) => primaryGroup(r.sources) === g),
+    })).filter((g) => g.rows.length > 0);
+  }, [rows]);
+
   const includedCount = rows.filter((r) => r.include).length;
   const retailerCount = new Set(
     rows.filter((r) => r.include).map((r) => r.retailerId ?? "")
   ).size;
 
-  const catLabel = useMemo(
-    () => new Map(GROCERY_CATEGORIES.map((c) => [c.id, `${c.emoji} ${c.label}`])),
-    []
-  );
-
   const cellInput =
     "w-full rounded border border-stone-200 bg-white px-1.5 py-1 text-xs focus:border-teal-500 focus:outline-none disabled:bg-stone-50";
+  const cols = details ? 9 : 6;
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">
+          Here&apos;s what we think you need to buy — untick what you don&apos;t,
+          adjust the <span className="text-teal-700">To buy</span> amounts, then create your lists.
+        </p>
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-stone-500">
+          <input
+            type="checkbox"
+            checked={details}
+            onChange={(e) => setDetails(e.target.checked)}
+            className="h-3.5 w-3.5 accent-stone-600"
+          />
+          Show stock details
+        </label>
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[52rem] text-sm">
+        <table className={`w-full text-sm ${details ? "min-w-[56rem]" : "min-w-[38rem]"}`}>
           <thead>
             <tr className="border-b border-stone-200 bg-stone-900 text-left text-xs text-white">
               <th className="w-10 px-2 py-2.5 text-center" title="Buy it?">🛒</th>
               <th className="px-2 py-2.5 font-medium">Item</th>
-              <th className="w-36 px-2 py-2.5 font-medium">Category</th>
-              <th className="w-20 px-2 py-2.5 text-right font-medium" title="From the week's recipes">Needed</th>
-              <th className="w-16 px-2 py-2.5 text-right font-medium" title="Stock on hand — optional, remembered in the pantry">SOH</th>
-              <th className="w-20 px-2 py-2.5 text-right font-medium" title="Pantry min/max target">Min/Max</th>
-              <th className="w-20 px-2 py-2.5 text-right font-medium">Suggested</th>
+              {details && <th className="w-36 px-2 py-2.5 font-medium">Category</th>}
+              <th className="w-24 px-2 py-2.5 text-right font-medium" title="What this week's meals need">Needed for meals</th>
+              {details && <th className="w-16 px-2 py-2.5 text-right font-medium" title="Stock on hand — remembered in the pantry">SOH</th>}
+              {details && <th className="w-20 px-2 py-2.5 text-right font-medium" title="Pantry min/max target">Min/Max</th>}
+              <th className="w-24 px-2 py-2.5 text-right font-medium" title="Our suggestion — overwrite in To buy">Suggested</th>
               <th className="w-24 px-2 py-2.5 font-medium">To buy</th>
               <th className="w-32 px-2 py-2.5 font-medium">Retailer</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
-              const suggested = suggestedFor(r);
-              return (
-                <tr
-                  key={r.key}
-                  className={`border-b border-stone-100 ${r.include ? "" : "opacity-45"}`}
-                >
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={r.include}
-                      disabled={!canEdit}
-                      onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
-                      className="h-4 w-4 accent-teal-700"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    {r.name}
-                    {r.source === "staple" && (
-                      <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800" title="Below its pantry minimum">
-                        staple
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <select
-                      value={r.category}
-                      disabled={!canEdit}
-                      onChange={(e) => patch(r.key, (x) => ({ ...x, category: e.target.value }))}
-                      className={cellInput}
-                    >
-                      {GROCERY_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>{catLabel.get(c.id)}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-xs text-stone-500">
-                    {r.source === "staple"
-                      ? "—"
-                      : r.neededQty === null
-                        ? "✓"
-                        : `${r.neededQty}${r.unit ? ` ${r.unit}` : ""}`}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      value={r.sohText}
-                      disabled={!canEdit || !r.pantryItemId}
-                      onChange={(e) => setSoh(r.key, e.target.value)}
-                      inputMode="decimal"
-                      placeholder={r.pantryItemId ? "—" : ""}
-                      title={r.pantryItemId ? "Stock on hand (remembered in the pantry)" : "Not in the pantry yet"}
-                      className={`${cellInput} text-right`}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-xs text-stone-500">
-                    {r.minQty !== null || r.maxQty !== null
-                      ? `${r.minQty ?? "—"}/${r.maxQty ?? "—"}`
-                      : "—"}
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-xs font-medium text-stone-600">
-                    {suggested === null ? (r.source === "staple" ? "—" : "✓") : `${suggested}${r.unit ? ` ${r.unit}` : ""}`}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      value={r.qtyText}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        patch(r.key, (x) => ({ ...x, qtyText: e.target.value, qtyDirty: true }))
-                      }
-                      placeholder="—"
-                      className={cellInput}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <select
-                      value={r.retailerId ?? ""}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))
-                      }
-                      className={cellInput}
-                    >
-                      <option value="">🏪 anywhere</option>
-                      {retailers.map((rt) => (
-                        <option key={rt.id} value={rt.id}>{rt.name}</option>
-                      ))}
-                    </select>
+            {grouped.map(({ group, rows: groupRows }) => (
+              <FragmentGroup key={group}>
+                <tr className="border-b border-stone-100 bg-stone-50">
+                  <td colSpan={cols} className="px-3 py-1.5 text-xs font-semibold text-stone-500">
+                    {GROUP_META[group].title}
+                    <span className="ml-2 font-normal text-stone-400">{GROUP_META[group].hint}</span>
                   </td>
                 </tr>
-              );
-            })}
+                {groupRows.map((r) => {
+                  const suggested = suggestedFor(r);
+                  const extraSources = r.sources.filter((s) => s !== primaryGroup(r.sources));
+                  return (
+                    <tr key={r.key} className={`border-b border-stone-100 ${r.include ? "" : "opacity-40"}`}>
+                      <td className="px-2 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={r.include}
+                          disabled={!canEdit}
+                          onChange={(e) => patch(r.key, (x) => ({ ...x, include: e.target.checked }))}
+                          className="h-4 w-4 accent-teal-700"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {r.name}
+                        {extraSources.length > 0 && (
+                          <span className="ml-1.5 text-xs" title={`Also: ${extraSources.join(", ")}`}>
+                            {extraSources.map((s) => SOURCE_EMOJI[s]).join(" ")}
+                          </span>
+                        )}
+                      </td>
+                      {details && (
+                        <td className="px-2 py-1.5">
+                          <select
+                            value={r.category}
+                            disabled={!canEdit}
+                            onChange={(e) => patch(r.key, (x) => ({ ...x, category: e.target.value }))}
+                            className={cellInput}
+                          >
+                            {GROCERY_CATEGORIES.map((c) => (
+                              <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                      )}
+                      <td className="px-2 py-1.5 text-right text-xs text-stone-500">
+                        {!r.sources.includes("recipes")
+                          ? "—"
+                          : r.neededQty === null
+                            ? "✓"
+                            : `${r.neededQty}${r.unit ? ` ${r.unit}` : ""}`}
+                      </td>
+                      {details && (
+                        <td className="px-2 py-1.5">
+                          <input
+                            value={r.sohText}
+                            disabled={!canEdit || !r.pantryItemId}
+                            onChange={(e) => setSoh(r.key, e.target.value)}
+                            inputMode="decimal"
+                            placeholder={r.pantryItemId ? "—" : ""}
+                            title={r.pantryItemId ? "Stock on hand (remembered in the pantry)" : "Not in the pantry yet"}
+                            className={`${cellInput} text-right`}
+                          />
+                        </td>
+                      )}
+                      {details && (
+                        <td className="px-2 py-1.5 text-right text-xs text-stone-500">
+                          {r.minQty !== null || r.maxQty !== null ? `${r.minQty ?? "—"}/${r.maxQty ?? "—"}` : "—"}
+                        </td>
+                      )}
+                      <td className="px-2 py-1.5 text-right text-xs font-medium text-stone-600">
+                        {suggested === null ? "✓" : `${suggested}${r.unit ? ` ${r.unit}` : ""}`}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          value={r.qtyText}
+                          disabled={!canEdit}
+                          onChange={(e) => patch(r.key, (x) => ({ ...x, qtyText: e.target.value, qtyDirty: true }))}
+                          placeholder="—"
+                          className={cellInput}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select
+                          value={r.retailerId ?? ""}
+                          disabled={!canEdit}
+                          onChange={(e) => patch(r.key, (x) => ({ ...x, retailerId: e.target.value || null }))}
+                          className={cellInput}
+                        >
+                          <option value="">🏪 anywhere</option>
+                          {retailers.map((rt) => (
+                            <option key={rt.id} value={rt.id}>{rt.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </FragmentGroup>
+            ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-stone-400">
-                  Nothing to plan yet — plan some meals for the week, or add items below.
+                <td colSpan={cols} className="px-4 py-10 text-center text-sm text-stone-400">
+                  Nothing to plan yet — jot down what you&apos;re running low on, plan
+                  some meals, or add items below.
                 </td>
               </tr>
             )}
@@ -322,20 +374,20 @@ export function ShoppingPlan({
               type="button"
               onClick={create}
               disabled={busy || includedCount === 0}
-              className="rounded-lg bg-teal-700 px-5 py-2 text-sm font-medium text-white hover:bg-teal-600 disabled:opacity-50"
+              className="rounded-lg bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-600 disabled:opacity-50"
             >
               {busy
                 ? "Creating…"
-                : `🛒 Create ${retailerCount > 1 ? `${retailerCount} lists` : "shopping list"} (${includedCount} item${includedCount === 1 ? "" : "s"})`}
+                : `🛒 Create my shopping list${retailerCount > 1 ? `s (${retailerCount})` : ""} — ${includedCount} item${includedCount === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>
       )}
-      <p className="text-xs text-stone-400">
-        Everything is pre-filled — you can hit Create without touching a thing. SOH you
-        enter here is remembered in the pantry for next time. Items with a retailer get
-        their own list per retailer; the rest land on a Groceries list.
-      </p>
     </div>
   );
+}
+
+/** Plain pass-through so grouped rows can share one key without an extra DOM node. */
+function FragmentGroup({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

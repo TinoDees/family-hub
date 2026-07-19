@@ -3,11 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
 import { ensureGroceryCategories, getRetailers, legacySlugFor } from "@/lib/grocery-data";
 import { guessCategory } from "@/lib/groceries";
-import { ShoppingPlan, type SeedRow } from "@/components/shopping-plan";
+import { ShoppingPlan, type SeedRow, type PlanSource } from "@/components/shopping-plan";
 
 /**
- * Plan the shop — seeds the worksheet from the week's planned recipes
- * (aggregated, scaled by servings) plus every pantry staple below its min.
+ * Plan the shop — merges the three streams into one deduped worksheet:
+ * notes jotted during the week, staples below their min, and the week's
+ * recipe ingredients (aggregated, scaled by servings).
  */
 
 function mondayOf(d: Date): Date {
@@ -44,7 +45,7 @@ export default async function ShoppingPlanPage({
   const retailers = await getRetailers(membership.household_id);
   const supabase = await createClient();
 
-  const [{ data: entries }, { data: pantry }] = await Promise.all([
+  const [{ data: entries }, { data: pantry }, { data: notes }] = await Promise.all([
     supabase
       .from("meal_plan_entries")
       .select("recipe_id, servings, recipe:recipes!meal_plan_entries_recipe_id_fkey(servings)")
@@ -56,6 +57,11 @@ export default async function ShoppingPlanPage({
       .from("pantry_items")
       .select("id, name, category_id, retailer_id, unit, min_qty, max_qty, soh")
       .eq("household_id", membership.household_id),
+    supabase
+      .from("shopping_notes")
+      .select("id, name, qty")
+      .eq("household_id", membership.household_id)
+      .order("created_at"),
   ]);
 
   // aggregate the week's ingredients, scaled by planned servings
@@ -84,47 +90,88 @@ export default async function ShoppingPlanPage({
     }
   }
 
-  const pantryByName = new Map(
-    (pantry ?? []).map((p) => [p.name.toLowerCase().trim(), p])
-  );
+  const pantryByName = new Map((pantry ?? []).map((p) => [p.name.toLowerCase().trim(), p]));
+  type PantryRow = NonNullable<typeof pantry>[number];
+  const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+  const belowMin = (p: PantryRow) =>
+    p.min_qty !== null && (num(p.soh) ?? 0) < Number(p.min_qty);
 
   const seed: SeedRow[] = [];
+  const byName = new Map<string, SeedRow>();
   const matchedPantryIds = new Set<string>();
+
+  const pushRow = (row: SeedRow) => {
+    seed.push(row);
+    byName.set(row.name.toLowerCase().trim(), row);
+  };
+
+  // 🍽️ recipe stream
   for (const ing of [...agg.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     const match = pantryByName.get(ing.name.toLowerCase().trim()) ?? null;
     if (match) matchedPantryIds.add(match.id);
-    seed.push({
+    const sources: PlanSource[] = ["recipes"];
+    if (match && belowMin(match)) sources.push("staple");
+    pushRow({
       key: `r-${ing.name.toLowerCase()}|${ing.unit ?? ""}`,
       name: ing.name,
-      source: "recipes",
+      sources,
+      noteIds: [],
+      noteQty: null,
       neededQty: ing.qty !== null ? Math.round(ing.qty * 100) / 100 : null,
       unit: ing.unit ?? match?.unit ?? null,
       category: match ? legacySlugFor(cats, match.category_id) : guessCategory(ing.name),
       pantryItemId: match?.id ?? null,
-      soh: match?.soh !== null && match?.soh !== undefined ? Number(match.soh) : null,
-      minQty: match?.min_qty !== null && match?.min_qty !== undefined ? Number(match.min_qty) : null,
-      maxQty: match?.max_qty !== null && match?.max_qty !== undefined ? Number(match.max_qty) : null,
+      soh: num(match?.soh),
+      minQty: num(match?.min_qty),
+      maxQty: num(match?.max_qty),
       retailerId: match?.retailer_id ?? null,
     });
   }
 
-  // staples below their min (and not already covered by a recipe row)
+  // 🧺 staples below min not already covered by a recipe row
   for (const p of (pantry ?? []).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (matchedPantryIds.has(p.id)) continue;
-    if (p.min_qty === null) continue;
-    if ((p.soh !== null ? Number(p.soh) : 0) >= Number(p.min_qty)) continue;
-    seed.push({
+    if (matchedPantryIds.has(p.id) || !belowMin(p)) continue;
+    pushRow({
       key: `s-${p.id}`,
       name: p.name,
-      source: "staple",
+      sources: ["staple"],
+      noteIds: [],
+      noteQty: null,
       neededQty: null,
       unit: p.unit,
       category: legacySlugFor(cats, p.category_id),
       pantryItemId: p.id,
-      soh: p.soh !== null ? Number(p.soh) : null,
-      minQty: Number(p.min_qty),
-      maxQty: p.max_qty !== null ? Number(p.max_qty) : null,
+      soh: num(p.soh),
+      minQty: num(p.min_qty),
+      maxQty: num(p.max_qty),
       retailerId: p.retailer_id,
+    });
+  }
+
+  // 📝 the jot list — merge into existing rows by name, else own row
+  for (const n of notes ?? []) {
+    const existing = byName.get(n.name.toLowerCase().trim());
+    if (existing) {
+      if (!existing.sources.includes("noted")) existing.sources.push("noted");
+      existing.noteIds.push(n.id);
+      if (!existing.noteQty && n.qty) existing.noteQty = n.qty;
+      continue;
+    }
+    const match = pantryByName.get(n.name.toLowerCase().trim()) ?? null;
+    pushRow({
+      key: `n-${n.id}`,
+      name: n.name,
+      sources: match && belowMin(match) ? ["noted", "staple"] : ["noted"],
+      noteIds: [n.id],
+      noteQty: n.qty,
+      neededQty: null,
+      unit: match?.unit ?? null,
+      category: match ? legacySlugFor(cats, match.category_id) : guessCategory(n.name),
+      pantryItemId: match?.id ?? null,
+      soh: num(match?.soh),
+      minQty: num(match?.min_qty),
+      maxQty: num(match?.max_qty),
+      retailerId: match?.retailer_id ?? null,
     });
   }
 
@@ -135,8 +182,8 @@ export default async function ShoppingPlanPage({
           Planning the shop for the{" "}
           <Link href={`/meals?w=${weekStart}`} className="underline hover:text-stone-700">
             {weekLabel}
-          </Link>{" "}
-          — the week&apos;s recipe ingredients plus staples running low.
+          </Link>
+          .
         </p>
         <div className="flex gap-2 text-sm">
           <Link

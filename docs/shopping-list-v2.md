@@ -122,5 +122,26 @@ match pantry items by case-insensitive name to prefill SOH/min-max/retailer; SOH
 in the worksheet writes back to `pantry_items.soh` on Create. A per-user "skip the
 worksheet" preference is still open (small; add if Kati finds even one click too many).
 
+## S2.5 — three streams, one plan (built 19 Jul 2026)
+
+Kati's real-world habit (jot down what's running low during the week, add it before the
+shop) resolved the "staples first vs menu first" order debate: there IS no order — there
+are three continuous input streams that the Plan step merges and dedupes:
+
+1. **📝 Noted during the week** — `shopping_notes` (mig 054), captured via the
+   "Running low? Jot it down" card on the Shopping overview. Cleared automatically when
+   a note lands on a created list.
+2. **🧺 Staples running low** — min/max automation (the same habit, automated).
+3. **🍽️ This week's meals** — recipe ingredients.
+
+Dedupe: one row per item name regardless of streams; secondary sources show as small
+emoji badges. The Plan page defaults to a **simple checklist** (Buy? / Item / Needed for
+meals / Suggested / To buy (overwrite) / Retailer) grouped under the three plain-language
+stream headings, with a one-line instruction instead of explainer prose; Category, SOH
+and Min/Max sit behind the **"Show stock details"** toggle (Tino's purchasing view,
+opt-in). The meals page's raw ingredient dump became a compact summary card
+("needs N ingredients across M recipes") with a prominent Plan-the-shop button and the
+full list behind a disclosure.
+
 Meal-planner chunks still open (library dashboard, views, voting) queue behind S2 —
 shopping is the reward end of the ladder, voting can wait.

@@ -162,33 +162,38 @@ export default async function MealsPage({
       )}
 
       {agg.size > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">This week&apos;s ingredients</h2>
-            {access === "edit" && (
-              <Link
-                href={`/shopping/plan?from=${iso(days[0])}&to=${iso(days[6])}`}
-                className="rounded-lg bg-stone-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-stone-700"
-              >
-                🛒 Plan the shop
-              </Link>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/50 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium">
+              This week&apos;s cooking needs <span className="text-teal-700">{agg.size} ingredient{agg.size === 1 ? "" : "s"}</span>{" "}
+              across {plannedRecipeIds.length} recipe{plannedRecipeIds.length === 1 ? "" : "s"}.
+            </p>
+            <details className="mt-0.5">
+              <summary className="cursor-pointer text-xs text-stone-400 hover:text-stone-600">
+                see the ingredients
+              </summary>
+              <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                {[...agg.values()]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((i) => (
+                    <li key={`${i.name}|${i.unit}`} className="flex gap-2">
+                      <span className="min-w-16 text-right font-medium text-stone-600">
+                        {i.qty !== null ? `${Math.round(i.qty * 100) / 100}${i.unit ? ` ${i.unit}` : ""}` : ""}
+                      </span>
+                      <span>{i.name}</span>
+                    </li>
+                  ))}
+              </ul>
+            </details>
           </div>
-          <p className="mt-1 text-xs text-stone-400">
-            Aggregated from planned recipes that have ingredients, scaled by planned servings.
-          </p>
-          <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            {[...agg.values()]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((i) => (
-                <li key={`${i.name}|${i.unit}`} className="flex gap-2">
-                  <span className="min-w-16 text-right font-medium text-stone-600">
-                    {i.qty !== null ? `${Math.round(i.qty * 100) / 100}${i.unit ? ` ${i.unit}` : ""}` : ""}
-                  </span>
-                  <span>{i.name}</span>
-                </li>
-              ))}
-          </ul>
+          {access === "edit" && (
+            <Link
+              href={`/shopping/plan?from=${iso(days[0])}&to=${iso(days[6])}`}
+              className="rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-600"
+            >
+              🛒 Plan the shop
+            </Link>
+          )}
         </div>
       )}
     </div>

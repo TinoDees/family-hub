@@ -25,7 +25,8 @@ export type SohUpdate = { pantryItemId: string; soh: number | null };
 export async function createShoppingRunInline(
   label: string,
   rows: PlanRowInput[],
-  sohUpdates: SohUpdate[]
+  sohUpdates: SohUpdate[],
+  usedNoteIds: string[] = []
 ): Promise<{ ok: boolean; error?: string; lists?: { id: string; name: string }[] }> {
   const { membership, userId } = await requireModule("shopping", "edit");
   const supabase = await createClient();
@@ -98,6 +99,16 @@ export async function createShoppingRunInline(
       .from("pantry_items")
       .update({ soh, soh_updated_at: now })
       .eq("id", u.pantryItemId)
+      .eq("household_id", membership.household_id);
+  }
+
+  // clear the jot-list notes that made it onto a list (Kati's loop closes)
+  const noteIds = usedNoteIds.filter((id) => typeof id === "string" && id).slice(0, 300);
+  if (noteIds.length > 0) {
+    await supabase
+      .from("shopping_notes")
+      .delete()
+      .in("id", noteIds)
       .eq("household_id", membership.household_id);
   }
 

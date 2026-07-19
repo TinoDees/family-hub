@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireModule } from "@/lib/module-guard";
+import { RunningLow } from "@/components/running-low";
+import type { ShoppingNote } from "@/lib/actions/notes";
 
 /** The shopping dashboard — overview of lists, pantry and the week's plan. */
 export default async function ShoppingOverviewPage() {
-  const { membership } = await requireModule("shopping", "view");
+  const { membership, access } = await requireModule("shopping", "view");
 
   const supabase = await createClient();
-  const [{ data: openLists }, { count: pantryCount }, { count: retailerCount }] =
+  const [{ data: openLists }, { count: pantryCount }, { count: retailerCount }, { data: notes }] =
     await Promise.all([
       supabase
         .from("shopping_lists")
@@ -24,6 +26,11 @@ export default async function ShoppingOverviewPage() {
         .from("retailers")
         .select("id", { count: "exact", head: true })
         .eq("household_id", membership.household_id),
+      supabase
+        .from("shopping_notes")
+        .select("id, name, qty, created_at")
+        .eq("household_id", membership.household_id)
+        .order("created_at"),
     ]);
 
   const cards = [
@@ -52,6 +59,7 @@ export default async function ShoppingOverviewPage() {
 
   return (
     <div className="space-y-6">
+      <RunningLow initial={(notes ?? []) as ShoppingNote[]} canEdit={access === "edit"} />
       <div className="grid gap-3 sm:grid-cols-3">
         {cards.map((c) => (
           <Link

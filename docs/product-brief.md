@@ -130,13 +130,17 @@ row). They power the Finance overview's budget bars and the monthly review.
   the week's ingredient summary and the shopping-list button only draw from recipes that
   have ingredients.
 - **Shopping** — its own hub with tabs: **Overview** (dashboard), **Plan**, **Lists**,
-  and **Pantry**. **Plan** is the worksheet between the meal planner and the lists
-  (the planner's 🛒 button lands here): the week's recipe ingredients plus any staples
-  below their pantry minimum, with Needed / SOH / Min-Max / Suggested / To-buy /
-  Retailer columns — everything pre-filled and overridable, and hitting Create without
-  touching anything gives the simple one-tap outcome. SOH entered here is remembered in
-  the pantry. **Create makes one list per retailer** (PO-style — "Butcher — week of 20
-  Jul") plus a Groceries list for items without a retailer. The Pantry is the master
+  and **Pantry**. The Overview opens with **"Running low? Jot it down"** — a two-second
+  note ("milk", "bin bags") that collects during the week, exactly like the paper note
+  on the fridge. **Plan** merges three streams into one deduped checklist: 📝 what was
+  noted during the week, 🧺 staples below their pantry minimum, and 🍽️ the week's
+  recipe ingredients (the planner's 🛒 button lands here). Default view is simple —
+  Buy? / Item / **Needed for meals** / **Suggested** / **To buy** (overwrite freely) /
+  Retailer — grouped under those three headings; the stock columns (Category, SOH,
+  Min/Max) appear via the "Show stock details" toggle, and SOH entered there is
+  remembered in the pantry. Hitting Create without touching anything gives the simple
+  one-tap outcome; used notes clear themselves. **Create makes one list per retailer**
+  (PO-style — "Butcher — week of 20 Jul") plus a Groceries list for the rest. The Pantry is the master
   catalog of everything the household buys — a bare name is a complete entry, with
   optional layers on top: categories & sub-categories (seeded defaults, fully editable
   via ⚙️ Categories & retailers), a **preferred retailer** per item ("mince → the
