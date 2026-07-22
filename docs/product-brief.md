@@ -22,7 +22,7 @@ section per module, blurred live screenshots and getting-started steps — is se
 quick tour", footer). Each section carries a "Video coming soon" chip for future
 walkthrough videos.
 
-Modules today: **Dashboard · Finance · Documents · Library · Recipes & Meals · Meal
+Modules today: **Dashboard · Finance · Documents · Books · Recipes & Meals · Meal
 planner · Shopping lists · Photos · Messages/Chat · Holidays & Trips · Parental controls ·
 Settings/Members**. Navigation is customisable per household (Settings → the nav builder).
 
@@ -157,7 +157,8 @@ row). They power the Finance overview's budget bars and the monthly review.
   staples** pulls pantry items onto any open list. See `docs/shopping-list-v2.md` for
   what's next (the planning table with per-retailer list splitting, aisle order,
   nearby specials).
-- **Library** — the family bookshelf, two shelves in one page. **Our shelf**: upload
+- **Books** (module slug `library`, route `/library`) — the family bookshelf, two
+  shelves in one page. **Our shelf**: upload
   DRM-free e-books (.epub), PDFs or audiobooks (MP3/M4A/M4B, up to 200 MB) you own —
   upload is gated behind an "I own this book" confirmation, files live in a private
   household-only bucket, and EPUBs get their title, author and cover read out

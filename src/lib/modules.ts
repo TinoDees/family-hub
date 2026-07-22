@@ -126,7 +126,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     slug: "library",
-    name: "Library",
+    name: "Books",
     icon: "📚",
     description: "The family bookshelf — uploaded e-books and audiobooks, plus everyone's Google Play Books.",
     planned: [],

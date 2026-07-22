@@ -72,7 +72,7 @@ export default async function LibraryBookPage({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link href="/library" className="text-sm text-stone-400 hover:text-stone-600">
-        ← Library
+        ← Books
       </Link>
 
       <div className="rounded-xl border border-stone-200 bg-white p-6">

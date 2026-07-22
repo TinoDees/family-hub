@@ -9,7 +9,7 @@ export default async function LibraryUploadPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <Link href="/library" className="text-sm text-stone-400 hover:text-stone-600">
-          ← Library
+          ← Books
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">📚 Add a book</h1>
         <p className="mt-1 text-sm text-stone-500">
