@@ -105,12 +105,13 @@ export function GoogleShelfControls({
               </button>
             </>
           ) : (
-            <a
-              href="/api/google-books/connect"
-              className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-700"
+            <button
+              onClick={() => window.location.assign("/api/google-books/connect")}
+              disabled={busy}
+              className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50"
             >
               Connect Google
-            </a>
+            </button>
           )}
         </div>
       </div>
