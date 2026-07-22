@@ -162,9 +162,10 @@ export async function fetchLibraryVolumes(token: string): Promise<GoogleVolume[]
   const out = new Map<string, GoogleVolume>();
   for (const shelf of shelves) {
     if (typeof shelf.id !== "number" || SKIP_SHELVES.has(shelf.id)) continue;
-    if (!shelf.volumeCount) continue;
+    // NB: don't trust shelf.volumeCount — Google often reports 0 for shelves
+    // that do hold books (esp. "My Google eBooks"). Always page until empty.
     let start = 0;
-    while (start < shelf.volumeCount && out.size < MAX_VOLUMES) {
+    while (start < MAX_VOLUMES && out.size < MAX_VOLUMES) {
       const res = await fetch(
         `${BOOKS_API}/mylibrary/bookshelves/${shelf.id}/volumes?maxResults=40&startIndex=${start}`,
         { headers, cache: "no-store" }
@@ -184,6 +185,7 @@ export async function fetchLibraryVolumes(token: string): Promise<GoogleVolume[]
           info_link: info.canonicalVolumeLink ?? info.infoLink ?? null,
         });
       }
+      if (items.length < 40) break;
       start += items.length;
     }
   }
