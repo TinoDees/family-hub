@@ -125,6 +125,15 @@ export const MODULES: ModuleDef[] = [
     defaults: { owner: "edit", adult: "edit", child: "none" },
   },
   {
+    slug: "library",
+    name: "Library",
+    icon: "📚",
+    description: "The family bookshelf — uploaded e-books and audiobooks, plus everyone's Google Play Books.",
+    planned: [],
+    status: "live",
+    defaults: { owner: "edit", adult: "edit", child: "view" },
+  },
+  {
     slug: "parental",
     name: "Parental Controls",
     icon: "🛡️",

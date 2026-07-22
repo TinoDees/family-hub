@@ -3,7 +3,7 @@
 *A living document. Every session that changes user-facing behaviour updates the matching
 section here (see CLAUDE.md). Written so it can later become the in-app help / user manual.*
 
-*Last updated: 18 Jul 2026.*
+*Last updated: 22 Jul 2026.*
 
 ---
 
@@ -22,8 +22,8 @@ section per module, blurred live screenshots and getting-started steps — is se
 quick tour", footer). Each section carries a "Video coming soon" chip for future
 walkthrough videos.
 
-Modules today: **Dashboard · Finance · Documents · Recipes & Meals · Meal planner ·
-Shopping lists · Photos · Messages/Chat · Holidays & Trips · Parental controls ·
+Modules today: **Dashboard · Finance · Documents · Library · Recipes & Meals · Meal
+planner · Shopping lists · Photos · Messages/Chat · Holidays & Trips · Parental controls ·
 Settings/Members**. Navigation is customisable per household (Settings → the nav builder).
 
 ---
@@ -157,7 +157,20 @@ row). They power the Finance overview's budget bars and the monthly review.
   staples** pulls pantry items onto any open list. See `docs/shopping-list-v2.md` for
   what's next (the planning table with per-retailer list splitting, aisle order,
   nearby specials).
-- **Photos** — family albums with per-photo visibility, sections and a chat under each.
+- **Library** — the family bookshelf, two shelves in one page. **Our shelf**: upload
+  DRM-free e-books (.epub), PDFs or audiobooks (MP3/M4A/M4B, up to 200 MB) you own —
+  upload is gated behind an "I own this book" confirmation, files live in a private
+  household-only bucket, and EPUBs get their title, author and cover read out
+  automatically. E-books open in the built-in reader (page turns, contents menu, text
+  size, keyboard arrows); audiobooks play in-app with 30-second skips and speed control;
+  PDFs open in the browser. **Every member keeps their own reading/listening position**
+  — it saves automatically and resumes on any device. **Google Play Books**: each member
+  connects their own Google account (Settings not needed — right on the Library page) and
+  their Play Books shelves — including Family Library shares — appear as one combined
+  family shelf; titles deep-link out to Play Books, so files and DRM stay with Google.
+  Requires a one-time (free) Google Cloud registration — `docs/google-books-setup.md`;
+  until then the Google section shows a "not set up yet" card. Children default to
+  view-only (they can read, not upload).
 - **Messages** — family chat rooms and DMs with push notifications.
 - **Holidays & Trips** — trip planning with shared expenses, split/settlement maths,
   guest access for non-members and multi-currency support.
